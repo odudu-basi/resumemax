@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { FileText, Zap, DollarSign, Info, BarChart3 } from "lucide-react";
+import { FileText, Zap, DollarSign, Info, BarChart3, User, LogOut } from "lucide-react";
 import { motion } from "framer-motion";
+import { useAuth } from "@/src/contexts/AuthContext";
 
 const navigation = [
   { name: "Rate Resume", href: "/rate-resume", icon: BarChart3 },
@@ -15,6 +16,7 @@ const navigation = [
 
 export function Navbar() {
   const pathname = usePathname();
+  const { user, signOut, loading } = useAuth();
 
   return (
     <motion.nav
@@ -63,22 +65,39 @@ export function Navbar() {
             </div>
           </div>
 
-          <div className="md:hidden">
-            <Button variant="ghost" size="sm">
-              <svg
-                className="h-6 w-6"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 6h16M4 12h16M4 18h16"
-                />
-              </svg>
-            </Button>
+          {/* Auth Section */}
+          <div className="flex items-center gap-4">
+            {!loading && (
+              <>
+                {user ? (
+                  <div className="flex items-center gap-2">
+                    <Link href="/dashboard">
+                      <Button variant="ghost" className="flex items-center gap-2">
+                        <User className="h-4 w-4" />
+                        <span className="hidden sm:inline">Dashboard</span>
+                      </Button>
+                    </Link>
+                    <Button
+                      variant="ghost"
+                      onClick={() => signOut()}
+                      className="flex items-center gap-2"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      <span className="hidden sm:inline">Sign Out</span>
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Link href="/auth/login">
+                      <Button variant="ghost">Sign In</Button>
+                    </Link>
+                    <Link href="/auth/signup">
+                      <Button>Sign Up</Button>
+                    </Link>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       </div>

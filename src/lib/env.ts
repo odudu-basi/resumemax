@@ -16,6 +16,11 @@ const envSchema = z.object({
   OPENAI_MAX_TOKENS: z.coerce.number().default(4000),
   OPENAI_TEMPERATURE: z.coerce.number().min(0).max(2).default(0.1),
   
+  // Supabase Configuration
+  NEXT_PUBLIC_SUPABASE_URL: z.string().url("Supabase URL is required"),
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1, "Supabase anon key is required"),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1, "Supabase service role key is required"),
+  
   // Stripe Configuration
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_PUBLISHABLE_KEY: z.string().optional(),
@@ -74,6 +79,8 @@ const envSchema = z.object({
 const clientEnvSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().url(),
   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().optional(),
+  NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
   NODE_ENV: z.enum(["development", "production", "test"]),
 });
 
@@ -122,6 +129,8 @@ function validateClientEnv() {
   const clientEnv = {
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY,
+    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     NODE_ENV: process.env.NODE_ENV,
   };
 
@@ -159,6 +168,13 @@ export function getConfig() {
       model: env.OPENAI_MODEL,
       maxTokens: env.OPENAI_MAX_TOKENS,
       temperature: env.OPENAI_TEMPERATURE,
+    },
+    
+    // Supabase
+    supabase: {
+      url: env.NEXT_PUBLIC_SUPABASE_URL,
+      anonKey: env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
     },
     
     // Stripe
@@ -243,6 +259,10 @@ export function getClientConfig() {
     },
     stripe: {
       publishableKey: env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY,
+    },
+    supabase: {
+      url: env.NEXT_PUBLIC_SUPABASE_URL,
+      anonKey: env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     },
   };
 }
