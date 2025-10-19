@@ -67,7 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (event === 'SIGNED_IN' && session?.user) {
           MixpanelService.trackUserSignIn({
             user_id: session.user.id,
-            login_method: session.user.app_metadata?.provider || 'email',
+            login_method: session.user.app_metadata?.provider === 'google' ? 'google' : 'email',
           });
           
           // Set user properties for Mixpanel
@@ -100,7 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           full_name: user.user_metadata?.full_name || null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-        });
+        } as any);
 
       if (error) {
         console.error('Error creating user profile:', error);

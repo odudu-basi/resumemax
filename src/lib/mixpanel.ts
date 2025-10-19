@@ -150,6 +150,8 @@ export const MixpanelService = {
   trackPageView: (properties: {
     page_name: string;
     user_id?: string;
+    from_onboarding?: boolean;
+    [key: string]: any; // Allow additional properties
   }) => {
     trackEvent(MIXPANEL_EVENTS.PAGE_VIEWED, properties);
   },
