@@ -1,9 +1,23 @@
 import { createClient } from '@supabase/supabase-js';
 import { createBrowserClient } from '@supabase/ssr';
-import { getConfig } from './env';
+import { getConfig, getClientConfig } from './env';
 
 // Get configuration
-const config = getConfig();
+const isServer = typeof window === 'undefined';
+let config: any;
+try {
+  config = isServer ? getConfig() : getClientConfig();
+} catch (error) {
+  console.warn('Supabase configuration not available:', error);
+  // Provide default values for development
+  config = {
+    supabase: {
+      url: 'https://placeholder.supabase.co',
+      anonKey: 'placeholder-key',
+      serviceRoleKey: 'placeholder-service-key',
+    }
+  } as any;
+}
 
 // Types for our database schema
 export interface Database {
@@ -93,50 +107,30 @@ export interface Database {
           created_at?: string;
         };
       };
-      user_subscriptions: {
-        Row: {
-          id: string;
-          user_id: string;
-          plan: string;
-          status: string;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          user_id: string;
-          plan?: string;
-          status?: string;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          id?: string;
-          user_id?: string;
-          plan?: string;
-          status?: string;
-          created_at?: string;
-          updated_at?: string;
-        };
-      };
+      // user_subscriptions removed
     };
   };
 }
 
-// Create Supabase client for server-side operations
-export const supabase = createClient<Database>(
-  config.supabase.url,
-  config.supabase.serviceRoleKey,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  }
-);
+// Create Supabase client for server-side operations (never expose to client)
+export const supabase = isServer
+  ? createClient<Database>(
+      config.supabase.url,
+      config.supabase.serviceRoleKey,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    )
+  : (null as any);
 
 // Create Supabase client for client-side operations
 export function createSupabaseClient() {
+  if (!config?.supabase?.url || !config?.supabase?.anonKey) {
+    throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY');
+  }
   return createBrowserClient<Database>(
     config.supabase.url,
     config.supabase.anonKey
@@ -147,4 +141,4 @@ export function createSupabaseClient() {
 export type UserProfile = Database['public']['Tables']['user_profiles']['Row'];
 export type Resume = Database['public']['Tables']['resumes']['Row'];
 export type ResumeAnalysis = Database['public']['Tables']['resume_analyses']['Row'];
-export type UserSubscription = Database['public']['Tables']['user_subscriptions']['Row'];
+// UserSubscription type removed

@@ -6,6 +6,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { FileText, BarChart3, Zap, CheckCircle, Star, Users } from "lucide-react";
 import { motion } from "framer-motion";
+import { useAuth } from "@/src/contexts/AuthContext";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+import MixpanelService from "@/src/lib/mixpanel";
+import MixpanelTest from "@/src/components/MixpanelTest";
 
 const features = [
   {
@@ -33,6 +38,42 @@ const stats = [
 ];
 
 export default function Home() {
+  const { user } = useAuth();
+  const router = useRouter();
+
+  // Track page view
+  useEffect(() => {
+    MixpanelService.trackPageView({
+      page_name: 'homepage',
+      user_id: user?.id,
+    });
+    
+    // Track session start
+    MixpanelService.trackSessionStarted({
+      user_id: user?.id,
+      is_new_user: !user,
+    });
+  }, [user?.id]);
+
+  const handleFeatureClick = (targetPath: string) => {
+    const featureName = targetPath.replace('/', '');
+    
+    // Track feature button click
+    MixpanelService.trackFeatureButtonClick({
+      button_name: `${featureName}_button`,
+      feature_name: featureName,
+      user_authenticated: !!user,
+      user_id: user?.id,
+    });
+    
+    if (user) {
+      // User is authenticated, go directly to the feature
+      router.push(targetPath);
+    } else {
+      // User is not authenticated, redirect to sign up with return path
+      router.push(`/auth/signup?returnTo=${encodeURIComponent(targetPath)}`);
+    }
+  };
   return (
     <div className="flex flex-col">
       {/* Hero Section */}
@@ -59,33 +100,41 @@ export default function Home() {
                 and optimize your resume to land more interviews.
               </p>
               <div className="mt-10 flex items-center justify-center gap-x-6 flex-wrap">
-                <Link href="/create-resume">
-                  <motion.div
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
+                <motion.div
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <Button 
+                    size="lg" 
+                    className="text-lg px-8 py-3 bg-gradient-to-r from-blue-600 to-purple-600"
+                    onClick={() => handleFeatureClick('/create-resume')}
                   >
-                    <Button size="lg" className="text-lg px-8 py-3 bg-gradient-to-r from-blue-600 to-purple-600">
-                      <FileText className="mr-2 h-5 w-5" />
-                      Create Resume
-                    </Button>
-                  </motion.div>
-                </Link>
-                <Link href="/analyze">
-                  <motion.div
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                  >
-                    <Button variant="outline" size="lg" className="text-lg px-8 py-3">
-                      <BarChart3 className="mr-2 h-5 w-5" />
-                      Analyze Resume
-                    </Button>
-                  </motion.div>
-                </Link>
-                <Link href="/pricing">
-                  <Button variant="ghost" size="lg" className="text-lg px-8 py-3">
-                    View Pricing
+                    <FileText className="mr-2 h-5 w-5" />
+                    Create Resume
                   </Button>
-                </Link>
+                </motion.div>
+                <motion.div
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <Button 
+                    variant="outline" 
+                    size="lg" 
+                    className="text-lg px-8 py-3"
+                    onClick={() => handleFeatureClick('/rate-resume')}
+                  >
+                    <BarChart3 className="mr-2 h-5 w-5" />
+                    Rate Resume
+                  </Button>
+                </motion.div>
+                <Button 
+                  variant="ghost" 
+                  size="lg" 
+                  className="text-lg px-8 py-3"
+                  onClick={() => handleFeatureClick('/tailor-resume')}
+                >
+                  Tailor Resume
+                </Button>
               </div>
             </motion.div>
           </div>
@@ -203,11 +252,13 @@ export default function Home() {
                     <li>• ATS-optimized formatting</li>
                     <li>• Real-time preview</li>
                   </ul>
-                  <Link href="/create-resume">
-                    <Button size="lg" className="w-full">
-                      Start Building
-                    </Button>
-                  </Link>
+                  <Button 
+                    size="lg" 
+                    className="w-full"
+                    onClick={() => handleFeatureClick('/create-resume')}
+                  >
+                    Start Building
+                  </Button>
                 </CardContent>
               </Card>
             </motion.div>
@@ -234,11 +285,14 @@ export default function Home() {
                     <li>• Strengths & improvements</li>
                     <li>• Percentile ranking</li>
                   </ul>
-                  <Link href="/rate-resume">
-                    <Button size="lg" variant="outline" className="w-full border-purple-600 text-purple-600 hover:bg-purple-50">
-                      Rate Now
-                    </Button>
-                  </Link>
+                  <Button 
+                    size="lg" 
+                    variant="outline" 
+                    className="w-full border-purple-600 text-purple-600 hover:bg-purple-50"
+                    onClick={() => handleFeatureClick('/rate-resume')}
+                  >
+                    Rate Now
+                  </Button>
                 </CardContent>
               </Card>
             </motion.div>
@@ -265,17 +319,29 @@ export default function Home() {
                     <li>• ATS compatibility check</li>
                     <li>• Performance scoring</li>
                   </ul>
-                  <Link href="/tailor-resume">
-                    <Button size="lg" variant="outline" className="w-full border-green-600 text-green-600 hover:bg-green-50">
-                      Optimize Now
-                    </Button>
-                  </Link>
+                  <Button 
+                    size="lg" 
+                    variant="outline" 
+                    className="w-full border-green-600 text-green-600 hover:bg-green-50"
+                    onClick={() => handleFeatureClick('/tailor-resume')}
+                  >
+                    Optimize Now
+                  </Button>
                 </CardContent>
               </Card>
             </motion.div>
           </div>
         </div>
       </section>
+
+      {/* Mixpanel Test Component (Remove in production) */}
+      {process.env.NODE_ENV === 'development' && (
+        <section className="py-8 bg-gray-100">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+            <MixpanelTest />
+          </div>
+        </section>
+      )}
 
       {/* CTA Section */}
       <section className="py-20 bg-gradient-to-r from-blue-600 to-purple-600">
@@ -294,17 +360,20 @@ export default function Home() {
               Get started today and land your dream job faster.
             </p>
             <div className="mt-8">
-              <Link href="/analyze">
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
+              <motion.div
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <Button 
+                  size="lg" 
+                  variant="secondary" 
+                  className="text-lg px-8 py-3"
+                  onClick={() => handleFeatureClick('/rate-resume')}
                 >
-                  <Button size="lg" variant="secondary" className="text-lg px-8 py-3">
-                    <Users className="mr-2 h-5 w-5" />
-                    Start Free Analysis
-                  </Button>
-                </motion.div>
-              </Link>
+                  <Users className="mr-2 h-5 w-5" />
+                  Start Free Analysis
+                </Button>
+              </motion.div>
             </div>
           </motion.div>
         </div>

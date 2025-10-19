@@ -21,6 +21,7 @@ import {
 import { motion } from 'framer-motion';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { createSupabaseClient, Resume, ResumeAnalysis } from '@/src/lib/supabase';
+import MixpanelService from '@/src/lib/mixpanel';
 
 export default function DashboardPage() {
   const { user, loading } = useAuth();
@@ -29,6 +30,17 @@ export default function DashboardPage() {
   const [loadingData, setLoadingData] = useState(true);
   const router = useRouter();
   const supabase = createSupabaseClient();
+
+  // Track dashboard visit
+  useEffect(() => {
+    if (user) {
+      MixpanelService.trackDashboardVisited({
+        user_id: user.id,
+        resumes_count: resumes.length,
+        analyses_count: analyses.length,
+      });
+    }
+  }, [user, resumes.length, analyses.length]);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -42,19 +54,21 @@ export default function DashboardPage() {
   }, [user, loading, router]);
 
   const loadUserData = async () => {
+    if (!user?.id) return;
+    
     try {
       // Load user's resumes
       const { data: resumesData } = await supabase
         .from('resumes')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
       // Load user's analyses
       const { data: analysesData } = await supabase
         .from('resume_analyses')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
       setResumes(resumesData || []);

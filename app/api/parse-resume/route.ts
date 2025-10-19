@@ -82,6 +82,7 @@ CRITICAL INSTRUCTIONS:
 5. Split multi-line descriptions into bullet points separated by newlines
 6. Extract skills as individual items in an array
 7. Create a professional summary if one exists, otherwise leave empty
+8. Output ONLY valid JSON - no markdown code blocks, no explanatory text, start directly with { and end with }
 
 JSON Schema to follow:
 {

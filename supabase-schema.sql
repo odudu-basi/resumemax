@@ -4,6 +4,7 @@
 
 -- Enable necessary extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- =============================================
 -- User Profiles Table
@@ -88,31 +89,7 @@ CREATE POLICY "Users can update own analyses" ON resume_analyses
 CREATE POLICY "Users can delete own analyses" ON resume_analyses
   FOR DELETE USING (auth.uid() = user_id);
 
--- =============================================
--- User Subscriptions Table (for future premium features)
--- =============================================
-CREATE TABLE user_subscriptions (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-  plan TEXT DEFAULT 'free' CHECK (plan IN ('free', 'pro', 'enterprise')),
-  status TEXT DEFAULT 'active' CHECK (status IN ('active', 'cancelled', 'expired')),
-  stripe_customer_id TEXT,
-  stripe_subscription_id TEXT,
-  current_period_start TIMESTAMP WITH TIME ZONE,
-  current_period_end TIMESTAMP WITH TIME ZONE,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Enable RLS
-ALTER TABLE user_subscriptions ENABLE ROW LEVEL SECURITY;
-
--- RLS Policies for user_subscriptions
-CREATE POLICY "Users can view own subscription" ON user_subscriptions
-  FOR SELECT USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can update own subscription" ON user_subscriptions
-  FOR UPDATE USING (auth.uid() = user_id);
+-- User subscriptions removed for now
 
 -- =============================================
 -- Indexes for Performance
@@ -122,7 +99,7 @@ CREATE INDEX idx_resumes_created_at ON resumes(created_at DESC);
 CREATE INDEX idx_resume_analyses_user_id ON resume_analyses(user_id);
 CREATE INDEX idx_resume_analyses_resume_id ON resume_analyses(resume_id);
 CREATE INDEX idx_resume_analyses_created_at ON resume_analyses(created_at DESC);
-CREATE INDEX idx_user_subscriptions_user_id ON user_subscriptions(user_id);
+-- (No indexes for user_subscriptions; table removed)
 
 -- =============================================
 -- Functions and Triggers
@@ -146,38 +123,29 @@ CREATE TRIGGER update_resumes_updated_at
   BEFORE UPDATE ON resumes 
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_user_subscriptions_updated_at 
-  BEFORE UPDATE ON user_subscriptions 
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- (No trigger for user_subscriptions; table removed)
 
 -- =============================================
 -- Sample Data (Optional - for testing)
 -- =============================================
 
--- Insert a default subscription for new users
-CREATE OR REPLACE FUNCTION handle_new_user()
-RETURNS TRIGGER AS $$
-BEGIN
-  INSERT INTO user_subscriptions (user_id, plan, status)
-  VALUES (NEW.id, 'free', 'active');
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Trigger to create subscription for new users
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION handle_new_user();
+-- (No default subscription logic for now)
 
 -- =============================================
 -- Storage Bucket for Resume Files (Optional)
 -- =============================================
 
--- Create storage bucket for resume files
+-- Create storage bucket for resume files (only if it doesn't exist)
 INSERT INTO storage.buckets (id, name, public)
-VALUES ('resumes', 'resumes', false);
+VALUES ('resumes', 'resumes', false)
+ON CONFLICT (id) DO NOTHING;
 
--- Storage policies
+-- Storage policies (drop existing ones first to avoid conflicts)
+DROP POLICY IF EXISTS "Users can upload own resume files" ON storage.objects;
+DROP POLICY IF EXISTS "Users can view own resume files" ON storage.objects;
+DROP POLICY IF EXISTS "Users can update own resume files" ON storage.objects;
+DROP POLICY IF EXISTS "Users can delete own resume files" ON storage.objects;
+
 CREATE POLICY "Users can upload own resume files" ON storage.objects
   FOR INSERT WITH CHECK (
     bucket_id = 'resumes' AND 

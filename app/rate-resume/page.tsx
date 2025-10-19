@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import React from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -16,13 +18,39 @@ import {
   AlertCircle,
   Loader2,
   ArrowRight,
+  ArrowLeft,
   BarChart3,
   Lightbulb,
   Star
 } from "lucide-react";
 import { motion } from "framer-motion";
+import { useAuth } from "@/src/contexts/AuthContext";
+import MixpanelService from "@/src/lib/mixpanel";
 
 export default function RateResumePage() {
+  const { session, user } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const isFromOnboarding = searchParams.get('from') === 'onboarding';
+  
+  // Track page view
+  React.useEffect(() => {
+    MixpanelService.trackPageView({
+      page_name: 'rate_resume',
+      user_id: user?.id,
+      from_onboarding: isFromOnboarding,
+    });
+  }, [user?.id, isFromOnboarding]);
+
+  // Handle back to onboarding
+  const handleBackToOnboarding = () => {
+    MixpanelService.track('rate_resume_back_to_onboarding', {
+      user_id: user?.id,
+      current_step: step,
+    });
+    router.push('/onboarding');
+  };
+
   const [step, setStep] = useState(1);
   const [file, setFile] = useState<File | null>(null);
   const [jobTitle, setJobTitle] = useState("");
@@ -37,10 +65,22 @@ export default function RateResumePage() {
   const [analysisResults, setAnalysisResults] = useState<any>(null);
   const [analysisError, setAnalysisError] = useState("");
 
+  // Save states
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
     if (selectedFile) {
       setFile(selectedFile);
+      
+      // Track resume upload
+      MixpanelService.trackResumeUploaded({
+        file_type: selectedFile.type,
+        file_size: selectedFile.size,
+        user_id: user?.id,
+      });
     }
   };
 
@@ -48,28 +88,36 @@ export default function RateResumePage() {
   const analyzeResume = async () => {
     if (!file) return;
     
+    const analysisStartTime = Date.now();
     setIsAnalyzing(true);
     setAnalysisError("");
     
+    // Track analysis step completion
+    MixpanelService.trackAnalysisStepCompleted({
+      step_name: 'analysis_started',
+      step_number: 1,
+      user_id: user?.id,
+    });
+    
     try {
-      // First parse the resume to get text
+      // First extract text from the resume file
       const formData = new FormData();
       formData.append('file', file);
       
-      const parseResponse = await fetch('/api/parse-resume', {
+      const extractResponse = await fetch('/api/extract-text', {
         method: 'POST',
         body: formData,
       });
       
-      if (!parseResponse.ok) {
-        const errorData = await parseResponse.json();
-        throw new Error(errorData.error || 'Failed to parse resume');
+      if (!extractResponse.ok) {
+        const errorData = await extractResponse.json();
+        throw new Error(errorData.error || 'Failed to extract text from resume');
       }
       
-      const parseResult = await parseResponse.json();
+      const extractResult = await extractResponse.json();
       
-      // Use the raw text for analysis
-      const resumeText = parseResult.rawText;
+      // Use the extracted text for analysis
+      const resumeText = extractResult.text;
       
       // Now analyze the resume
       const analysisResponse = await fetch('/api/analyze-resume', {
@@ -90,14 +138,128 @@ export default function RateResumePage() {
       }
       
       const result = await analysisResponse.json();
+      console.log('=== ANALYSIS RESPONSE ===');
+      console.log('Full result:', result);
+      console.log('Analysis data:', result.analysis);
+      console.log('========================');
+      
+      const analysisEndTime = Date.now();
+      const analysisDuration = analysisEndTime - analysisStartTime;
+      
+      // Track successful analysis
+      MixpanelService.trackResumeAnalyzed({
+        analysis_score: result.analysis?.scores?.overall || 0,
+        job_title: jobTitle,
+        analysis_duration_ms: analysisDuration,
+        user_id: user?.id,
+      });
+      
+      // Track analysis step completion
+      MixpanelService.trackAnalysisStepCompleted({
+        step_name: 'analysis_completed',
+        step_number: 2,
+        user_id: user?.id,
+      });
+      
       setAnalysisResults(result.analysis);
       setStep(3); // Move to analysis results step
       
     } catch (error) {
       console.error('Resume analysis error:', error);
       setAnalysisError(error instanceof Error ? error.message : 'Failed to analyze resume');
+      
+      // Track analysis error
+      MixpanelService.trackError({
+        error_type: 'analysis_failed',
+        error_message: error instanceof Error ? error.message : 'Failed to analyze resume',
+        page_name: 'rate_resume',
+        user_id: user?.id,
+      });
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  // Save analysis function
+  const saveAnalysis = async () => {
+    if (!analysisResults || !file) return;
+    
+    setIsSaving(true);
+    setSaveError("");
+    setSaveSuccess(false);
+    
+    try {
+      // First, we need to get the resume text again for saving
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const extractResponse = await fetch('/api/extract-text', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!extractResponse.ok) {
+        throw new Error('Failed to extract resume text');
+      }
+      
+      const extractResult = await extractResponse.json();
+      
+      // Save the analysis to the database
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      
+      // Add authorization header if user is authenticated
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+      
+      const saveResponse = await fetch('/api/save-analysis', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          jobTitle: jobTitle,
+          jobDescription: jobDescription || null,
+          resumeText: extractResult.text,
+          analysisResults: analysisResults,
+          fileName: file.name,
+        }),
+      });
+      
+      const saveResult = await saveResponse.json();
+      
+      if (!saveResponse.ok) {
+        throw new Error(saveResult.error || 'Failed to save analysis');
+      }
+      
+      // Handle different response types
+      if (saveResult.requiresAuth) {
+        setSaveError("Please sign up or log in to save your analysis results.");
+      } else {
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 3000); // Hide success message after 3 seconds
+        
+        // Track successful analysis save
+        MixpanelService.trackAnalysisSaved({
+          analysis_score: analysisResults?.scores?.overall || 0,
+          job_title: jobTitle,
+          user_id: user?.id,
+        });
+      }
+      
+    } catch (error) {
+      console.error('Save analysis error:', error);
+      setSaveError(error instanceof Error ? error.message : 'Failed to save analysis');
+      
+      // Track save error
+      MixpanelService.trackError({
+        error_type: 'save_analysis_failed',
+        error_message: error instanceof Error ? error.message : 'Failed to save analysis',
+        page_name: 'rate_resume',
+        user_id: user?.id,
+      });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -110,6 +272,25 @@ export default function RateResumePage() {
   return (
     <div className="container mx-auto px-4 py-8 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-4xl">
+        {/* Back to Onboarding Button - Only show if coming from onboarding */}
+        {isFromOnboarding && (
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5 }}
+            className="mb-8"
+          >
+            <Button
+              variant="ghost"
+              onClick={handleBackToOnboarding}
+              className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Onboarding
+            </Button>
+          </motion.div>
+        )}
+
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -206,7 +387,17 @@ export default function RateResumePage() {
                 
                 {file && (
                   <div className="mt-6 flex justify-end">
-                    <Button onClick={() => setStep(2)} className="flex items-center gap-2">
+                    <Button 
+                      onClick={() => {
+                        setStep(2);
+                        MixpanelService.trackAnalysisStepCompleted({
+                          step_name: 'file_uploaded',
+                          step_number: 1,
+                          user_id: user?.id,
+                        });
+                      }} 
+                      className="flex items-center gap-2"
+                    >
                       Continue
                       <ArrowRight className="h-4 w-4" />
                     </Button>
@@ -254,7 +445,16 @@ export default function RateResumePage() {
                     placeholder="Paste the job description here for more accurate analysis..."
                     rows={8}
                     value={jobDescription}
-                    onChange={(e) => setJobDescription(e.target.value)}
+                    onChange={(e) => {
+                      setJobDescription(e.target.value);
+                      if (e.target.value.length > 50) { // Track when substantial job description is added
+                        MixpanelService.trackJobDescriptionAdded({
+                          job_title: jobTitle,
+                          description_length: e.target.value.length,
+                          user_id: user?.id,
+                        });
+                      }
+                    }}
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     Including the job description helps us provide more accurate scoring and feedback.
@@ -508,10 +708,48 @@ export default function RateResumePage() {
                   </CardContent>
                 </Card>
 
+                {/* Save/Error Messages */}
+                {saveError && (
+                  <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-sm text-red-600">{saveError}</p>
+                  </div>
+                )}
+                
+                {saveSuccess && (
+                  <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-sm text-green-600">✅ Analysis saved successfully!</p>
+                  </div>
+                )}
+                
+                {!session && (
+                  <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-blue-600">
+                      💡 <strong>Sign up to save your results!</strong> Create an account to save your analysis and access it later.
+                    </p>
+                  </div>
+                )}
+
                 {/* Action Buttons */}
                 <div className="flex justify-center gap-4">
                   <Button variant="outline" onClick={() => { setStep(1); setAnalysisResults(null); }}>
                     Analyze Another Resume
+                  </Button>
+                  <Button 
+                    onClick={saveAnalysis}
+                    disabled={isSaving}
+                    className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white"
+                  >
+                    {isSaving ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="h-4 w-4" />
+                        {session ? 'Save Analysis' : 'Try to Save (Sign up required)'}
+                      </>
+                    )}
                   </Button>
                   <Button 
                     onClick={() => window.location.href = '/tailor-resume'}

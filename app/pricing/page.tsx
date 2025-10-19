@@ -5,6 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Check, Star, Zap, Crown, Users } from "lucide-react";
 import { motion } from "framer-motion";
+import { useEffect } from "react";
+import { useAuth } from "@/src/contexts/AuthContext";
+import MixpanelService from "@/src/lib/mixpanel";
 
 const plans = [
   {
@@ -90,6 +93,15 @@ const faqs = [
 ];
 
 export default function PricingPage() {
+  const { user } = useAuth();
+
+  // Track pricing page view
+  useEffect(() => {
+    MixpanelService.trackPricingPageViewed({
+      user_id: user?.id,
+      referrer_page: document.referrer || 'direct',
+    });
+  }, [user?.id]);
   return (
     <div className="py-16">
       {/* Header */}

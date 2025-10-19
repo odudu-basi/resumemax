@@ -115,8 +115,11 @@ CONTEXT & RULES
        40–59: "Average"
        <40: "Needs Improvement"
 
-8. Output strictly as JSON. 
-   No prose outside the JSON object.
+8. Output ONLY valid JSON. 
+   - No markdown code blocks
+   - No explanatory text before or after the JSON
+   - No comments within the JSON
+   - Start directly with { and end with }
 
 ---
 
@@ -178,9 +181,12 @@ Analyze this resume and provide scores and recommendations.`;
 
     // Clean and parse the JSON response
     let analysisData;
+    let cleanedResponse = '';
     try {
+      console.log('Raw OpenAI response:', analysisResponse);
+      
       // Remove markdown code blocks if present
-      let cleanedResponse = analysisResponse.trim();
+      cleanedResponse = analysisResponse.trim();
       
       // Remove ```json and ``` markers if they exist
       if (cleanedResponse.startsWith('```json')) {
@@ -189,12 +195,28 @@ Analyze this resume and provide scores and recommendations.`;
         cleanedResponse = cleanedResponse.replace(/^```\s*/, '').replace(/\s*```$/, '');
       }
       
+      // Remove any leading/trailing text that's not JSON
+      const jsonMatch = cleanedResponse.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        cleanedResponse = jsonMatch[0];
+      }
+      
+      console.log('Cleaned response for parsing:', cleanedResponse);
+      
       // Parse the cleaned JSON
       analysisData = JSON.parse(cleanedResponse.trim());
     } catch (error) {
-      console.error('Failed to parse OpenAI response as JSON:', analysisResponse);
+      console.error('Failed to parse OpenAI response as JSON');
+      console.error('Raw response:', analysisResponse);
+      console.error('Cleaned response:', cleanedResponse);
       console.error('Parse error:', error);
-      throw new Error('Invalid JSON response from AI');
+      
+      // Return a fallback response instead of throwing
+      return NextResponse.json({
+        error: 'AI response parsing failed',
+        details: 'The AI returned an invalid response format. Please try again.',
+        rawResponse: analysisResponse?.substring(0, 500) + '...' // Truncate for debugging
+      }, { status: 500 });
     }
 
     // Validate against schema

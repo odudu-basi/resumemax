@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -20,6 +21,7 @@ import {
   Download,
   Loader2,
   ArrowRight,
+  ArrowLeft,
   User,
   Briefcase,
   GraduationCap,
@@ -161,6 +163,15 @@ interface ResumeData {
 }
 
 export default function TailorResumePage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const isFromOnboarding = searchParams.get('from') === 'onboarding';
+
+  // Handle back to onboarding
+  const handleBackToOnboarding = () => {
+    router.push('/onboarding');
+  };
+
   const [step, setStep] = useState(1);
   const [file, setFile] = useState<File | null>(null);
   const [jobTitle, setJobTitle] = useState("");
@@ -851,6 +862,25 @@ export default function TailorResumePage() {
   return (
     <div className="container mx-auto px-4 py-8 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-4xl">
+        {/* Back to Onboarding Button - Only show if coming from onboarding */}
+        {isFromOnboarding && (
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5 }}
+            className="mb-8"
+          >
+            <Button
+              variant="ghost"
+              onClick={handleBackToOnboarding}
+              className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Onboarding
+            </Button>
+          </motion.div>
+        )}
+
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -2236,14 +2266,6 @@ export default function TailorResumePage() {
                       {isGeneratingPDF ? 'Generating...' : 'Download PDF'}
                       </Button>
 
-                    {/* Continue Button */}
-                    <Button 
-                      onClick={handleAnalyze}
-                      className="flex items-center gap-2"
-                    >
-                      <Zap className="h-4 w-4" />
-                      Continue to Analysis
-                      </Button>
                   </div>
                     </div>
                   </CardContent>

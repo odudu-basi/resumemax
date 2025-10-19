@@ -17,9 +17,9 @@ const envSchema = z.object({
   OPENAI_TEMPERATURE: z.coerce.number().min(0).max(2).default(0.1),
   
   // Supabase Configuration
-  NEXT_PUBLIC_SUPABASE_URL: z.string().url("Supabase URL is required"),
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1, "Supabase anon key is required"),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1, "Supabase service role key is required"),
+  NEXT_PUBLIC_SUPABASE_URL: z.string().url("Supabase URL is required").optional(),
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1, "Supabase anon key is required").optional(),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1, "Supabase service role key is required").optional(),
   
   // Stripe Configuration
   STRIPE_SECRET_KEY: z.string().optional(),
@@ -79,8 +79,8 @@ const envSchema = z.object({
 const clientEnvSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().url(),
   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().optional(),
-  NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
+  NEXT_PUBLIC_SUPABASE_URL: z.string().url().optional(),
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1).optional(),
   NODE_ENV: z.enum(["development", "production", "test"]),
 });
 
@@ -98,12 +98,12 @@ function validateEnv() {
     return parsed;
   } catch (error) {
     if (error instanceof z.ZodError) {
-      const missingVars = error.errors
-        .filter((err) => err.code === "invalid_type" && err.received === "undefined")
+      const missingVars = error.issues
+        .filter((err) => err.code === "invalid_type" && (err as any).received === "undefined")
         .map((err) => err.path.join("."));
       
-      const invalidVars = error.errors
-        .filter((err) => err.code !== "invalid_type" || err.received !== "undefined")
+      const invalidVars = error.issues
+        .filter((err) => err.code !== "invalid_type" || (err as any).received !== "undefined")
         .map((err) => `${err.path.join(".")}: ${err.message}`);
 
       let errorMessage = "❌ Invalid environment variables:\n";
@@ -116,8 +116,11 @@ function validateEnv() {
         errorMessage += `\nInvalid variables:\n${invalidVars.map(v => `  - ${v}`).join("\n")}`;
       }
 
+      console.error(errorMessage);
       throw new Error(errorMessage);
     }
+    
+    console.error('Environment validation error:', error);
     throw error;
   }
 }
@@ -139,7 +142,7 @@ function validateClientEnv() {
   } catch (error) {
     if (error instanceof z.ZodError) {
       throw new Error(
-        `❌ Invalid client environment variables: ${error.errors
+        `❌ Invalid client environment variables: ${error.issues
           .map((err) => `${err.path.join(".")}: ${err.message}`)
           .join(", ")}`
       );
@@ -152,7 +155,8 @@ function validateClientEnv() {
  * Get environment-specific configuration
  */
 export function getConfig() {
-  const env = validateEnv();
+  // Only validate on server side
+  const env = typeof window === 'undefined' ? validateEnv() : ({} as any);
   
   return {
     // App
@@ -250,7 +254,8 @@ export function getConfig() {
  * Get client-side configuration
  */
 export function getClientConfig() {
-  const env = validateClientEnv();
+  // Only validate on client side
+  const env = typeof window !== 'undefined' ? validateClientEnv() : ({} as any);
   
   return {
     app: {
@@ -308,9 +313,10 @@ export function getOptionalEnv(key: string, defaultValue: string): string {
 
 /**
  * Validate environment on module load
+ * Only validate server env on server, client env on client
  */
-const env = validateEnv();
-const clientEnv = validateClientEnv();
+const env = typeof window === 'undefined' ? validateEnv() : ({} as any);
+const clientEnv = typeof window !== 'undefined' ? validateClientEnv() : ({} as any);
 
 // Export validated environment variables
 export { env, clientEnv };
