@@ -39,7 +39,7 @@ export default function RateResumePage() {
       page_name: 'rate_resume',
       user_id: user?.id,
       from_onboarding: isFromOnboarding,
-    } as any);
+    });
   }, [user?.id, isFromOnboarding]);
 
   // Handle back to onboarding

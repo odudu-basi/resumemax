@@ -74,6 +74,14 @@ export const trackEvent = (eventName: string, properties?: Record<string, any>) 
   mixpanel.track(eventName, eventProperties);
 };
 
+// Type definitions for events
+export interface PageEvent {
+  page_name: string;
+  user_id?: string;
+  from_onboarding?: boolean;
+  [key: string]: any; // Allow additional properties
+}
+
 // Specific tracking functions for common events
 export const MixpanelService = {
   // Resume Events
@@ -147,7 +155,7 @@ export const MixpanelService = {
   },
 
   // Navigation Events
-  trackPageView: (properties: Record<string, any>) => {
+  trackPageView: (properties: PageEvent) => {
     trackEvent(MIXPANEL_EVENTS.PAGE_VIEWED, properties);
   },
 
