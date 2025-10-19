@@ -147,12 +147,7 @@ export const MixpanelService = {
   },
 
   // Navigation Events
-  trackPageView: (properties: {
-    page_name: string;
-    user_id?: string;
-    from_onboarding?: boolean;
-    [key: string]: any; // Allow additional properties
-  }) => {
+  trackPageView: (properties: Record<string, any>) => {
     trackEvent(MIXPANEL_EVENTS.PAGE_VIEWED, properties);
   },
 
