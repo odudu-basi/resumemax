@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -66,13 +65,8 @@ export default function Home() {
       user_id: user?.id,
     });
     
-    if (user) {
-      // User is authenticated, go directly to the feature
-      router.push(targetPath);
-    } else {
-      // User is not authenticated, redirect to sign up with return path
-      router.push(`/auth/signup?returnTo=${encodeURIComponent(targetPath)}`);
-    }
+    // Always redirect to onboarding page first
+    router.push('/onboarding');
   };
   return (
     <div className="flex flex-col">

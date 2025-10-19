@@ -3,14 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { FileText, Zap, DollarSign, Info, User, LogOut, Sparkles } from "lucide-react";
+import { FileText, Zap, DollarSign, Info, User, LogOut } from "lucide-react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useEffect } from "react";
 import MixpanelService from "@/src/lib/mixpanel";
 
 const navigation = [
-  { name: "Onboarding", href: "/onboarding", icon: Sparkles },
   { name: "Features", href: "/#features", icon: Zap },
   { name: "Pricing", href: "/pricing", icon: DollarSign },
   { name: "About", href: "/about", icon: Info },
@@ -67,7 +66,7 @@ export function Navbar() {
             </Link>
             
             <div className="flex items-center gap-6">
-              {navigation.slice(1).map((item) => {
+              {navigation.map((item) => {
                 const Icon = item.icon;
                 return (
                   <Link key={item.name} href={item.href}>
