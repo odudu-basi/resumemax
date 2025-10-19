@@ -107,7 +107,82 @@ export interface Database {
           created_at?: string;
         };
       };
-      // user_subscriptions removed
+      user_subscriptions: {
+        Row: {
+          id: string;
+          user_id: string;
+          stripe_customer_id: string | null;
+          stripe_subscription_id: string | null;
+          stripe_price_id: string;
+          plan_name: string;
+          status: string;
+          current_period_start: string | null;
+          current_period_end: string | null;
+          cancel_at_period_end: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          stripe_customer_id?: string | null;
+          stripe_subscription_id?: string | null;
+          stripe_price_id: string;
+          plan_name: string;
+          status?: string;
+          current_period_start?: string | null;
+          current_period_end?: string | null;
+          cancel_at_period_end?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          stripe_customer_id?: string | null;
+          stripe_subscription_id?: string | null;
+          stripe_price_id?: string;
+          plan_name?: string;
+          status?: string;
+          current_period_start?: string | null;
+          current_period_end?: string | null;
+          cancel_at_period_end?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      usage_tracking: {
+        Row: {
+          id: string;
+          user_id: string;
+          action_type: string;
+          month: number;
+          year: number;
+          count: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          action_type: string;
+          month: number;
+          year: number;
+          count?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          action_type?: string;
+          month?: number;
+          year?: number;
+          count?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
     };
   };
 }
@@ -141,4 +216,5 @@ export function createSupabaseClient() {
 export type UserProfile = Database['public']['Tables']['user_profiles']['Row'];
 export type Resume = Database['public']['Tables']['resumes']['Row'];
 export type ResumeAnalysis = Database['public']['Tables']['resume_analyses']['Row'];
-// UserSubscription type removed
+export type UserSubscription = Database['public']['Tables']['user_subscriptions']['Row'];
+export type UsageTracking = Database['public']['Tables']['usage_tracking']['Row'];

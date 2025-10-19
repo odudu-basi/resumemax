@@ -3,20 +3,21 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Check, Star, Zap, Crown, Users } from "lucide-react";
+import { Check, Star, Zap, Crown, Users, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/src/contexts/AuthContext";
 import MixpanelService from "@/src/lib/mixpanel";
 
 const plans = [
   {
+    id: "free",
     name: "Free",
     price: "$0",
     period: "forever",
     description: "Perfect for getting started with resume analysis",
     features: [
-      "1 resume analysis per month",
+      "3 resume analyses per month",
       "Basic scoring and feedback",
       "ATS compatibility check",
       "Email support"
@@ -28,48 +29,50 @@ const plans = [
     ],
     icon: Users,
     popular: false,
-    cta: "Get Started Free"
+    cta: "Get Started Free",
+    priceId: null
   },
   {
-    name: "Pro",
-    price: "$19",
+    id: "basic",
+    name: "Basic",
+    price: "$4",
     period: "per month",
-    description: "Ideal for active job seekers and professionals",
+    description: "Great for job seekers who need more analyses",
     features: [
-      "Unlimited resume analyses",
+      "25 resume analyses per month",
       "Detailed AI-powered feedback",
-      "Advanced keyword optimization",
-      "Industry-specific recommendations",
+      "Keyword optimization suggestions",
       "ATS optimization score",
-      "Cover letter analysis",
-      "Priority email support",
-      "Resume templates access"
+      "Resume format recommendations",
+      "Priority email support"
     ],
     limitations: [],
     icon: Zap,
     popular: true,
-    cta: "Start Pro Trial"
+    cta: "Start Basic Plan",
+    priceId: "price_1SJGF6GfV3OgrONkHsG1SRpl"
   },
   {
-    name: "Enterprise",
-    price: "$99",
+    id: "unlimited",
+    name: "Unlimited",
+    price: "$9.99",
     period: "per month",
-    description: "For teams, recruiters, and career services",
+    description: "For power users and professionals",
     features: [
-      "Everything in Pro",
-      "Team management dashboard",
-      "Bulk resume processing",
-      "Custom branding",
-      "API access",
-      "Advanced analytics",
-      "Dedicated account manager",
-      "Custom integrations",
-      "White-label solution"
+      "Unlimited resume analyses",
+      "Advanced AI-powered feedback",
+      "Industry-specific recommendations",
+      "Cover letter analysis",
+      "Resume templates access",
+      "Priority support",
+      "Advanced keyword optimization",
+      "Export to multiple formats"
     ],
     limitations: [],
     icon: Crown,
     popular: false,
-    cta: "Contact Sales"
+    cta: "Go Unlimited",
+    priceId: "price_1SFol1GfV3OgrONkCw68vdG1"
   }
 ];
 
@@ -94,6 +97,7 @@ const faqs = [
 
 export default function PricingPage() {
   const { user } = useAuth();
+  const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
 
   // Track pricing page view
   useEffect(() => {
@@ -102,6 +106,55 @@ export default function PricingPage() {
       referrer_page: document.referrer || 'direct',
     });
   }, [user?.id]);
+
+  const handlePlanSelect = async (plan: typeof plans[0]) => {
+    if (!user) {
+      // Redirect to signup if not authenticated
+      window.location.href = `/auth/signup?returnTo=${encodeURIComponent('/pricing')}`;
+      return;
+    }
+
+    if (plan.id === 'free') {
+      // Free plan - redirect to onboarding or dashboard
+      window.location.href = '/onboarding';
+      return;
+    }
+
+    if (!plan.priceId) {
+      console.error('No price ID for plan:', plan.name);
+      return;
+    }
+
+    setLoadingPlan(plan.id);
+
+    try {
+      const response = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          plan: plan.id,
+          userId: user.id,
+          userEmail: user.email,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create checkout session');
+      }
+
+      // Redirect to Stripe Checkout
+      window.location.href = data.url;
+    } catch (error) {
+      console.error('Checkout error:', error);
+      alert('Failed to start checkout. Please try again.');
+    } finally {
+      setLoadingPlan(null);
+    }
+  };
   return (
     <div className="py-16">
       {/* Header */}
@@ -161,10 +214,19 @@ export default function PricingPage() {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <Button 
+                      onClick={() => handlePlanSelect(plan)}
+                      disabled={loadingPlan === plan.id}
                       className={`w-full ${plan.popular ? 'bg-gradient-to-r from-blue-600 to-purple-600' : ''}`}
                       variant={plan.popular ? "default" : "outline"}
                     >
-                      {plan.cta}
+                      {loadingPlan === plan.id ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        plan.cta
+                      )}
                     </Button>
                     
                     <div className="space-y-3">
@@ -206,21 +268,21 @@ export default function PricingPage() {
                     <tr className="border-b">
                       <th className="text-left py-3 px-4">Feature</th>
                       <th className="text-center py-3 px-4">Free</th>
-                      <th className="text-center py-3 px-4">Pro</th>
-                      <th className="text-center py-3 px-4">Enterprise</th>
+                      <th className="text-center py-3 px-4">Basic</th>
+                      <th className="text-center py-3 px-4">Unlimited</th>
                     </tr>
                   </thead>
                   <tbody className="text-sm">
                     <tr className="border-b">
                       <td className="py-3 px-4">Resume analyses per month</td>
-                      <td className="text-center py-3 px-4">1</td>
-                      <td className="text-center py-3 px-4">Unlimited</td>
+                      <td className="text-center py-3 px-4">3</td>
+                      <td className="text-center py-3 px-4">25</td>
                       <td className="text-center py-3 px-4">Unlimited</td>
                     </tr>
                     <tr className="border-b">
                       <td className="py-3 px-4">AI-powered feedback</td>
                       <td className="text-center py-3 px-4">Basic</td>
-                      <td className="text-center py-3 px-4">Advanced</td>
+                      <td className="text-center py-3 px-4">Detailed</td>
                       <td className="text-center py-3 px-4">Advanced</td>
                     </tr>
                     <tr className="border-b">
@@ -232,19 +294,19 @@ export default function PricingPage() {
                     <tr className="border-b">
                       <td className="py-3 px-4">Cover letter analysis</td>
                       <td className="text-center py-3 px-4">-</td>
-                      <td className="text-center py-3 px-4"><Check className="h-4 w-4 text-green-600 mx-auto" /></td>
+                      <td className="text-center py-3 px-4">-</td>
                       <td className="text-center py-3 px-4"><Check className="h-4 w-4 text-green-600 mx-auto" /></td>
                     </tr>
                     <tr className="border-b">
-                      <td className="py-3 px-4">Team management</td>
+                      <td className="py-3 px-4">Resume templates</td>
                       <td className="text-center py-3 px-4">-</td>
                       <td className="text-center py-3 px-4">-</td>
                       <td className="text-center py-3 px-4"><Check className="h-4 w-4 text-green-600 mx-auto" /></td>
                     </tr>
                     <tr>
-                      <td className="py-3 px-4">API access</td>
+                      <td className="py-3 px-4">Priority support</td>
                       <td className="text-center py-3 px-4">-</td>
-                      <td className="text-center py-3 px-4">-</td>
+                      <td className="text-center py-3 px-4"><Check className="h-4 w-4 text-green-600 mx-auto" /></td>
                       <td className="text-center py-3 px-4"><Check className="h-4 w-4 text-green-600 mx-auto" /></td>
                     </tr>
                   </tbody>
