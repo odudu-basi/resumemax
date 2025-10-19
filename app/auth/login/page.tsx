@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,7 @@ import { LogIn, Mail, Lock, AlertCircle, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/src/contexts/AuthContext';
 
-export default function LoginPage() {
+function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -234,5 +234,34 @@ export default function LoginPage() {
         </motion.div>
       </div>
     </div>
+  );
+}
+
+function LoginPageLoading() {
+  return (
+    <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-md">
+        <div className="text-center mb-8">
+          <Badge variant="secondary" className="mb-4">
+            <LogIn className="mr-1 h-3 w-3" />
+            Sign In
+          </Badge>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            Welcome Back
+          </h1>
+          <p className="text-gray-600">
+            Loading...
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoginPageLoading />}>
+      <LoginForm />
+    </Suspense>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,7 @@ import { UserPlus, Mail, Lock, User, AlertCircle, Loader2, CheckCircle } from 'l
 import { motion } from 'framer-motion';
 import { useAuth } from '@/src/contexts/AuthContext';
 
-export default function SignUpPage() {
+function SignUpForm() {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -327,5 +327,34 @@ export default function SignUpPage() {
         </motion.div>
       </div>
     </div>
+  );
+}
+
+function SignUpPageLoading() {
+  return (
+    <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-md">
+        <div className="text-center mb-8">
+          <Badge variant="secondary" className="mb-4">
+            <UserPlus className="mr-1 h-3 w-3" />
+            Sign Up
+          </Badge>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            Create Account
+          </h1>
+          <p className="text-gray-600">
+            Loading...
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function SignUpPage() {
+  return (
+    <Suspense fallback={<SignUpPageLoading />}>
+      <SignUpForm />
+    </Suspense>
   );
 }

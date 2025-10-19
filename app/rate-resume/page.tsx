@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -27,7 +27,7 @@ import { motion } from "framer-motion";
 import { useAuth } from "@/src/contexts/AuthContext";
 import MixpanelService, { type PageEvent } from "@/src/lib/mixpanel";
 
-export default function RateResumePage() {
+function RateResumeContent() {
   const { session, user } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -35,11 +35,12 @@ export default function RateResumePage() {
   
   // Track page view
   React.useEffect(() => {
-    MixpanelService.trackPageView({
+    const pageEvent: PageEvent = {
       page_name: 'rate_resume',
       user_id: user?.id,
       from_onboarding: isFromOnboarding,
-    } as PageEvent);
+    };
+    MixpanelService.trackPageView(pageEvent);
   }, [user?.id, isFromOnboarding]);
 
   // Handle back to onboarding
@@ -765,5 +766,34 @@ export default function RateResumePage() {
         )}
       </div>
     </div>
+  );
+}
+
+function RateResumeLoading() {
+  return (
+    <div className="container mx-auto px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-4xl">
+        <div className="text-center mb-12">
+          <Badge variant="secondary" className="mb-4">
+            <BarChart3 className="mr-1 h-3 w-3" />
+            Resume Rating
+          </Badge>
+          <h1 className="text-4xl font-bold text-gray-900 mb-4">
+            Rate Your Resume
+          </h1>
+          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+            Loading...
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function RateResumePage() {
+  return (
+    <Suspense fallback={<RateResumeLoading />}>
+      <RateResumeContent />
+    </Suspense>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -162,7 +162,7 @@ interface ResumeData {
   skills: string[];
 }
 
-export default function TailorResumePage() {
+function TailorResumeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isFromOnboarding = searchParams.get('from') === 'onboarding';
@@ -2275,5 +2275,34 @@ export default function TailorResumePage() {
 
       </div>
     </div>
+  );
+}
+
+function TailorResumeLoading() {
+  return (
+    <div className="container mx-auto px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-6xl">
+        <div className="text-center mb-12">
+          <Badge variant="secondary" className="mb-4">
+            <Target className="mr-1 h-3 w-3" />
+            Tailor Resume
+          </Badge>
+          <h1 className="text-4xl font-bold text-gray-900 mb-4">
+            Tailor Your Resume
+          </h1>
+          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+            Loading...
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function TailorResumePage() {
+  return (
+    <Suspense fallback={<TailorResumeLoading />}>
+      <TailorResumeContent />
+    </Suspense>
   );
 }
