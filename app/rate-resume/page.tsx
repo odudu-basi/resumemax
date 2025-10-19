@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/src/contexts/AuthContext";
-import MixpanelService from "@/src/lib/mixpanel";
+import MixpanelService, { type PageEvent } from "@/src/lib/mixpanel";
 
 export default function RateResumePage() {
   const { session, user } = useAuth();
@@ -39,7 +39,7 @@ export default function RateResumePage() {
       page_name: 'rate_resume',
       user_id: user?.id,
       from_onboarding: isFromOnboarding,
-    });
+    } as PageEvent);
   }, [user?.id, isFromOnboarding]);
 
   // Handle back to onboarding
