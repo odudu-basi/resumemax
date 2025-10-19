@@ -164,7 +164,7 @@ interface ResumeData {
 }
 
 export default function CreateResumeBuilderPage() {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("personal");
   
@@ -761,10 +761,17 @@ export default function CreateResumeBuilderPage() {
         return;
       }
 
+      // Check authentication
+      if (!session?.access_token) {
+        setPdfError('Please log in to download PDFs.');
+        return;
+      }
+
       const response = await fetch('/api/generate-pdf', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
           personalInfo: resumeData.personalInfo,
@@ -779,6 +786,17 @@ export default function CreateResumeBuilderPage() {
 
       if (!response.ok) {
         const errorData = await response.json();
+        
+        // Handle subscription-related errors
+        if (errorData.requiresUpgrade) {
+          setPdfError(`${errorData.error} Click here to upgrade your plan.`);
+          // Redirect to pricing page after a delay
+          setTimeout(() => {
+            router.push('/pricing');
+          }, 3000);
+          return;
+        }
+        
         throw new Error(errorData.error || 'Failed to generate PDF');
       }
 

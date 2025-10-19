@@ -20,6 +20,7 @@ const plans = [
       "3 resume analyses per month",
       "Basic scoring and feedback",
       "ATS compatibility check",
+      "No PDF downloads",
       "Email support"
     ],
     limitations: [
@@ -40,6 +41,7 @@ const plans = [
     description: "Great for job seekers who need more analyses",
     features: [
       "25 resume analyses per month",
+      "10 PDF downloads per month",
       "Detailed AI-powered feedback",
       "Keyword optimization suggestions",
       "ATS optimization score",
@@ -60,6 +62,7 @@ const plans = [
     description: "For power users and professionals",
     features: [
       "Unlimited resume analyses",
+      "Unlimited PDF downloads",
       "Advanced AI-powered feedback",
       "Industry-specific recommendations",
       "Cover letter analysis",
@@ -277,6 +280,12 @@ export default function PricingPage() {
                       <td className="py-3 px-4">Resume analyses per month</td>
                       <td className="text-center py-3 px-4">3</td>
                       <td className="text-center py-3 px-4">25</td>
+                      <td className="text-center py-3 px-4">Unlimited</td>
+                    </tr>
+                    <tr className="border-b">
+                      <td className="py-3 px-4">PDF downloads per month</td>
+                      <td className="text-center py-3 px-4">0</td>
+                      <td className="text-center py-3 px-4">10</td>
                       <td className="text-center py-3 px-4">Unlimited</td>
                     </tr>
                     <tr className="border-b">

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/src/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -135,6 +137,8 @@ interface ResumeData {
 }
 
 export default function CreateResumePage() {
+  const router = useRouter();
+  const { user, session } = useAuth();
   const [activeTab, setActiveTab] = useState("personal");
   
   // Tab order state for drag and drop
@@ -710,10 +714,17 @@ export default function CreateResumePage() {
         return;
       }
 
+      // Check authentication
+      if (!session?.access_token) {
+        setPdfError('Please log in to download PDFs.');
+        return;
+      }
+
       const response = await fetch('/api/generate-pdf', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
           personalInfo: resumeData.personalInfo,
@@ -728,6 +739,17 @@ export default function CreateResumePage() {
 
       if (!response.ok) {
         const errorData = await response.json();
+        
+        // Handle subscription-related errors
+        if (errorData.requiresUpgrade) {
+          setPdfError(`${errorData.error} Click here to upgrade your plan.`);
+          // Redirect to pricing page after a delay
+          setTimeout(() => {
+            router.push('/pricing');
+          }, 3000);
+          return;
+        }
+        
         throw new Error(errorData.error || 'Failed to generate PDF');
       }
 

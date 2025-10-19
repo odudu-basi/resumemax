@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import jsPDF from 'jspdf';
+import { withSubscriptionCheck } from '@/src/lib/subscription';
+import { createClient } from '@supabase/supabase-js';
+import { getConfig } from '@/src/lib/env';
 
 // Force Node.js runtime
 export const runtime = 'nodejs';
@@ -273,6 +276,29 @@ function generateResumePDF(userData: z.infer<typeof GeneratePDFRequestSchema>): 
  */
 export async function POST(request: NextRequest) {
   try {
+    // Check authentication
+    const authHeader = request.headers.get('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json(
+        { error: 'Authentication required. Please log in to download PDFs.' },
+        { status: 401 }
+      );
+    }
+
+    // Verify token and get user
+    const token = authHeader.substring(7);
+    const config = getConfig();
+    const supabase = createClient(config.supabase.url!, config.supabase.anonKey!);
+    
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Invalid authentication token' },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     
     // Validate request data
@@ -302,8 +328,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate PDF
-    const pdfBuffer = generateResumePDF(validatedData);
+    // Check subscription and generate PDF with usage tracking
+    const pdfBuffer = await withSubscriptionCheck(
+      user.id,
+      'resume_download',
+      () => Promise.resolve(generateResumePDF(validatedData))
+    );
 
     // Return PDF as response
     return new NextResponse(pdfBuffer as any, {
@@ -330,6 +360,19 @@ export async function POST(request: NextRequest) {
     }
 
     if (error instanceof Error) {
+      // Handle subscription-related errors
+      if (error.message.includes('monthly limit') || error.message.includes('not allowed') || error.message.includes('upgrade')) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: error.message,
+            requiresUpgrade: true,
+            upgradeUrl: '/pricing'
+          },
+          { status: 403 }
+        );
+      }
+
       return NextResponse.json(
         { 
           success: false,

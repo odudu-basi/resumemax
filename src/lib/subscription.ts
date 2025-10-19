@@ -13,6 +13,7 @@ export const PLAN_LIMITS = {
   free: {
     resumeAnalyses: 3,
     resumeCreations: 3,
+    resumeDownloads: 0, // No downloads for free users
     coverLetterAnalyses: 0,
     templateAccess: false,
     prioritySupport: false,
@@ -20,6 +21,7 @@ export const PLAN_LIMITS = {
   basic: {
     resumeAnalyses: 25,
     resumeCreations: 25,
+    resumeDownloads: 10, // 10 downloads per month
     coverLetterAnalyses: 0,
     templateAccess: false,
     prioritySupport: true,
@@ -27,6 +29,7 @@ export const PLAN_LIMITS = {
   unlimited: {
     resumeAnalyses: -1, // Unlimited
     resumeCreations: -1, // Unlimited
+    resumeDownloads: -1, // Unlimited downloads
     coverLetterAnalyses: -1, // Unlimited
     templateAccess: true,
     prioritySupport: true,
@@ -34,7 +37,7 @@ export const PLAN_LIMITS = {
 } as const;
 
 export type PlanName = keyof typeof PLAN_LIMITS;
-export type ActionType = 'resume_analysis' | 'resume_creation' | 'cover_letter_analysis';
+export type ActionType = 'resume_analysis' | 'resume_creation' | 'resume_download' | 'cover_letter_analysis';
 
 export interface SubscriptionInfo {
   planName: PlanName;
@@ -47,6 +50,7 @@ export interface SubscriptionInfo {
 export interface UsageInfo {
   resumeAnalyses: number;
   resumeCreations: number;
+  resumeDownloads: number;
   coverLetterAnalyses: number;
 }
 
@@ -115,6 +119,7 @@ export async function getUserUsage(userId: string): Promise<UsageInfo> {
     const usageMap: UsageInfo = {
       resumeAnalyses: 0,
       resumeCreations: 0,
+      resumeDownloads: 0,
       coverLetterAnalyses: 0,
     };
 
@@ -125,6 +130,9 @@ export async function getUserUsage(userId: string): Promise<UsageInfo> {
           break;
         case 'resume_creation':
           usageMap.resumeCreations = item.count;
+          break;
+        case 'resume_download':
+          usageMap.resumeDownloads = item.count;
           break;
         case 'cover_letter_analysis':
           usageMap.coverLetterAnalyses = item.count;
@@ -138,6 +146,7 @@ export async function getUserUsage(userId: string): Promise<UsageInfo> {
     return {
       resumeAnalyses: 0,
       resumeCreations: 0,
+      resumeDownloads: 0,
       coverLetterAnalyses: 0,
     };
   }
@@ -167,6 +176,10 @@ export async function canPerformAction(
       case 'resume_creation':
         limit = subscription.limits.resumeCreations;
         currentUsage = usage.resumeCreations;
+        break;
+      case 'resume_download':
+        limit = subscription.limits.resumeDownloads;
+        currentUsage = usage.resumeDownloads;
         break;
       case 'cover_letter_analysis':
         limit = subscription.limits.coverLetterAnalyses;
