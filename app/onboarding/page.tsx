@@ -20,11 +20,15 @@ export default function OnboardingPage() {
   const { user } = useAuth();
   const router = useRouter();
   const [displayedText, setDisplayedText] = useState("");
+  const [displayedSubText, setDisplayedSubText] = useState("");
   const [showButtons, setShowButtons] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [subTextIndex, setSubTextIndex] = useState(0);
+  const [startSubText, setStartSubText] = useState(false);
   const [startTime] = useState(Date.now());
 
   const fullText = `Welcome ${user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'there'}, What would you like to do today?`;
+  const subText = "if you have an account sign in";
 
   // Track page view and onboarding start
   useEffect(() => {
@@ -39,7 +43,7 @@ export default function OnboardingPage() {
     });
   }, [user?.id, user?.user_metadata?.full_name, user?.email]);
 
-  // Typing animation effect
+  // Main text typing animation effect
   useEffect(() => {
     if (currentIndex < fullText.length) {
       const timeout = setTimeout(() => {
@@ -48,14 +52,32 @@ export default function OnboardingPage() {
       }, 50); // Adjust typing speed here
 
       return () => clearTimeout(timeout);
-    } else {
-      // Text is complete, show buttons after a brief delay
+    } else if (!startSubText) {
+      // Main text is complete, start sub text after a brief delay
+      const timeout = setTimeout(() => {
+        setStartSubText(true);
+      }, 300);
+      return () => clearTimeout(timeout);
+    }
+  }, [currentIndex, fullText, startSubText]);
+
+  // Sub text typing animation effect
+  useEffect(() => {
+    if (startSubText && subTextIndex < subText.length) {
+      const timeout = setTimeout(() => {
+        setDisplayedSubText(prev => prev + subText[subTextIndex]);
+        setSubTextIndex(prev => prev + 1);
+      }, 40); // Slightly faster for the smaller text
+
+      return () => clearTimeout(timeout);
+    } else if (startSubText && subTextIndex >= subText.length) {
+      // Sub text is complete, show buttons after a brief delay
       const timeout = setTimeout(() => {
         setShowButtons(true);
       }, 500);
       return () => clearTimeout(timeout);
     }
-  }, [currentIndex, fullText]);
+  }, [startSubText, subTextIndex, subText]);
 
   const handleButtonClick = (action: string) => {
     const timeSpent = Math.round((Date.now() - startTime) / 1000);
@@ -167,16 +189,40 @@ export default function OnboardingPage() {
             </Badge>
             
             <div className="relative">
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 min-h-[120px] flex items-center justify-center">
+              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-4 min-h-[120px] flex items-center justify-center">
                 <span className="relative">
                   {displayedText}
-                  <motion.span
-                    animate={{ opacity: [1, 0] }}
-                    transition={{ duration: 0.8, repeat: Infinity, repeatType: "reverse" }}
-                    className="inline-block w-1 h-12 bg-white ml-1"
-                  />
+                  {currentIndex >= fullText.length && !startSubText && (
+                    <motion.span
+                      animate={{ opacity: [1, 0] }}
+                      transition={{ duration: 0.8, repeat: Infinity, repeatType: "reverse" }}
+                      className="inline-block w-1 h-12 bg-white ml-1"
+                    />
+                  )}
                 </span>
               </h1>
+              
+              {/* Sub text */}
+              <AnimatePresence>
+                {startSubText && (
+                  <motion.p 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="text-sm md:text-base text-white/70 mb-6"
+                  >
+                    <span className="relative">
+                      {displayedSubText}
+                      {subTextIndex < subText.length && (
+                        <motion.span
+                          animate={{ opacity: [1, 0] }}
+                          transition={{ duration: 0.8, repeat: Infinity, repeatType: "reverse" }}
+                          className="inline-block w-0.5 h-4 bg-white/70 ml-1"
+                        />
+                      )}
+                    </span>
+                  </motion.p>
+                )}
+              </AnimatePresence>
             </div>
           </motion.div>
 

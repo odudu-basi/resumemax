@@ -256,6 +256,23 @@ export default function CreateResumeIntroPage() {
                     compared to standard resumes.
                   </p>
                 </motion.div>
+
+                {/* Continue Button in ATS Section */}
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6, delay: 3 }}
+                  className="text-center mt-8"
+                >
+                  <Button
+                    onClick={handleContinue}
+                    size="lg"
+                    className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-8 py-4 text-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300"
+                  >
+                    Continue to Resume Builder
+                    <ArrowRight className="h-5 w-5 ml-2" />
+                  </Button>
+                </motion.div>
               </CardContent>
             </Card>
           </motion.div>
