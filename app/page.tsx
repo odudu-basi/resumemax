@@ -65,7 +65,13 @@ export default function Home() {
       user_id: user?.id,
     });
     
-    // Always redirect to onboarding page first
+    // If not authenticated, send to login then to onboarding
+    if (!user) {
+      router.push(`/auth/login?returnTo=${encodeURIComponent('/onboarding')}`);
+      return;
+    }
+
+    // Authenticated users go to onboarding first
     router.push('/onboarding');
   };
   return (

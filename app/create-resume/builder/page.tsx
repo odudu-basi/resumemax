@@ -789,11 +789,9 @@ export default function CreateResumeBuilderPage() {
         
         // Handle subscription-related errors
         if (errorData.requiresUpgrade) {
-          setPdfError(`${errorData.error} Click here to upgrade your plan.`);
-          // Redirect to pricing page after a delay
-          setTimeout(() => {
-            router.push('/pricing');
-          }, 3000);
+          // Redirect to billing/pricing and return back
+          const returnTo = `${window.location.pathname}`;
+          router.push(`/pricing?returnTo=${encodeURIComponent(returnTo)}`);
           return;
         }
         

@@ -360,7 +360,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (error instanceof Error) {
-      // Handle subscription-related errors
+      // Handle subscription-related errors -> tell client to go to billing
       if (error.message.includes('monthly limit') || error.message.includes('not allowed') || error.message.includes('upgrade')) {
         return NextResponse.json(
           {
