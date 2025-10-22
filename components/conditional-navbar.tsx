@@ -5,8 +5,8 @@ import { Navbar } from "@/components/navbar";
 
 export function ConditionalNavbar() {
   const pathname = usePathname();
-  const hiddenNavbarPaths = ['/dashboard'];
-  const shouldShowNavbar = !hiddenNavbarPaths.includes(pathname);
+  const hiddenNavbarPaths = ['/dashboard', '/create-resume', '/tailor-resume'];
+  const shouldShowNavbar = !hiddenNavbarPaths.some(path => pathname.startsWith(path));
 
   if (!shouldShowNavbar) {
     return null;

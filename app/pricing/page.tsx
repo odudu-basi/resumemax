@@ -3,35 +3,37 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Check, Star, Zap, Crown, Users, Loader2 } from "lucide-react";
+import { Check, Star, Zap, Crown, Users, Loader2, Home as HomeIcon, LogOut } from "lucide-react";
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/src/contexts/AuthContext";
 import MixpanelService from "@/src/lib/mixpanel";
+import Link from "next/link";
+import Image from "next/image";
 
 const plans = [
   {
-    id: "free",
-    name: "Free",
-    price: "$0",
-    period: "forever",
-    description: "Perfect for getting started with resume analysis",
+    id: "unlimited",
+    name: "Unlimited",
+    price: "$9.99",
+    period: "per month",
+    description: "For power users and professionals",
     features: [
-      "3 resume analyses per month",
-      "Basic scoring and feedback",
-      "ATS compatibility check",
-      "No PDF downloads",
-      "Email support"
+      "Unlimited resume analyses",
+      "Unlimited PDF downloads",
+      "Advanced AI-powered feedback",
+      "Industry-specific recommendations",
+      "Cover letter analysis",
+      "Resume templates access",
+      "Priority support",
+      "Advanced keyword optimization",
+      "Export to multiple formats"
     ],
-    limitations: [
-      "Limited detailed recommendations",
-      "No keyword optimization",
-      "Basic formatting suggestions"
-    ],
-    icon: Users,
-    popular: false,
-    cta: "Get Started Free",
-    priceId: null
+    limitations: [],
+    icon: Crown,
+    popular: true,
+    cta: "Go Unlimited",
+    priceId: "price_1SFol1GfV3OgrONkCw68vdG1"
   },
   {
     id: "basic",
@@ -55,27 +57,27 @@ const plans = [
     priceId: "price_1SJGF6GfV3OgrONkHsG1SRpl"
   },
   {
-    id: "unlimited",
-    name: "Unlimited",
-    price: "$9.99",
-    period: "per month",
-    description: "For power users and professionals",
+    id: "free",
+    name: "Free",
+    price: "$0",
+    period: "forever",
+    description: "Perfect for getting started with resume analysis",
     features: [
-      "Unlimited resume analyses",
-      "Unlimited PDF downloads",
-      "Advanced AI-powered feedback",
-      "Industry-specific recommendations",
-      "Cover letter analysis",
-      "Resume templates access",
-      "Priority support",
-      "Advanced keyword optimization",
-      "Export to multiple formats"
+      "3 resume analyses per month",
+      "Basic scoring and feedback",
+      "ATS compatibility check",
+      "No PDF downloads",
+      "Email support"
     ],
-    limitations: [],
-    icon: Crown,
-    popular: true,
-    cta: "Go Unlimited",
-    priceId: "price_1SFol1GfV3OgrONkCw68vdG1"
+    limitations: [
+      "Limited detailed recommendations",
+      "No keyword optimization",
+      "Basic formatting suggestions"
+    ],
+    icon: Users,
+    popular: false,
+    cta: "Get Started Free",
+    priceId: null
   }
 ];
 
@@ -99,7 +101,7 @@ const faqs = [
 ];
 
 export default function PricingPage() {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
 
   // Track pricing page view
@@ -159,9 +161,102 @@ export default function PricingPage() {
     }
   };
   return (
-    <div className="py-16">
+    <div className="min-h-screen bg-gradient-to-br from-white via-gray-50 via-30% via-gray-200 via-60% to-black relative overflow-hidden">
+      {/* Decorative gradient orbs */}
+      <div className="absolute top-0 left-0 w-96 h-96 bg-gradient-radial from-gray-300/30 to-transparent rounded-full blur-3xl"></div>
+      <div className="absolute bottom-0 right-0 w-[600px] h-[600px] bg-gradient-radial from-gray-800/20 to-transparent rounded-full blur-3xl"></div>
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-gradient-radial from-gray-400/10 to-transparent rounded-full blur-3xl"></div>
+
+      {/* Subtle grid pattern overlay */}
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]"></div>
+
+      {/* Glassmorphic Navbar */}
+      <motion.nav
+        initial={{ y: -20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.5 }}
+        className="sticky top-4 z-50 flex justify-center px-4 py-4"
+      >
+        <div className="flex items-center justify-between w-full max-w-6xl px-8 py-4 bg-black/60 backdrop-blur-xl border border-white/30 rounded-full shadow-2xl">
+          {/* Logo */}
+          <Link href="/" className="flex items-center gap-3">
+            <Image src="/logo.png" alt="ResumeMax Logo" width={32} height={32} className="h-8 w-8" />
+            <span className="text-lg font-bold text-white">ResumeMax</span>
+          </Link>
+
+          {/* Navigation Links */}
+          <div className="hidden md:flex items-center gap-2">
+            <Link href="/#features">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-white hover:bg-white/20"
+              >
+                Features
+              </Button>
+            </Link>
+            <Link href="/pricing">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-white hover:bg-white/20"
+              >
+                Pricing
+              </Button>
+            </Link>
+          </div>
+
+          {/* User Section */}
+          <div className="flex items-center gap-3">
+            {user ? (
+              <>
+                <Link href="/dashboard">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-white hover:bg-white/20 flex items-center gap-2"
+                  >
+                    <HomeIcon className="h-4 w-4" />
+                    <span className="hidden sm:inline">Dashboard</span>
+                  </Button>
+                </Link>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => signOut()}
+                  className="text-white hover:bg-white/20 flex items-center gap-2"
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span className="hidden sm:inline">Sign Out</span>
+                </Button>
+              </>
+            ) : (
+              <>
+                <Link href="/auth/login">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-white hover:bg-white/20"
+                  >
+                    Sign In
+                  </Button>
+                </Link>
+                <Link href="/auth/signup">
+                  <Button
+                    size="sm"
+                    className="bg-white text-black hover:bg-gray-100"
+                  >
+                    Sign Up
+                  </Button>
+                </Link>
+              </>
+            )}
+          </div>
+        </div>
+      </motion.nav>
+
       {/* Header */}
-      <section className="container mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="relative z-10 container mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -172,10 +267,10 @@ export default function PricingPage() {
             <Star className="mr-1 h-3 w-3" />
             Pricing Plans
           </Badge>
-          <h1 className="text-4xl font-bold text-gray-900 sm:text-5xl">
+          <h1 className="text-4xl font-bold text-black sm:text-5xl">
             Choose Your Plan
           </h1>
-          <p className="mt-4 text-lg text-gray-600 max-w-2xl mx-auto">
+          <p className="mt-4 text-lg text-gray-700 max-w-2xl mx-auto">
             Start free and upgrade as you grow. All plans include our core AI analysis features.
           </p>
         </motion.div>
@@ -194,16 +289,16 @@ export default function PricingPage() {
               >
                 {plan.popular && (
                   <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                    <Badge className="bg-gradient-to-r from-blue-600 to-purple-600">
+                    <Badge className="bg-gradient-to-r from-gray-800 to-black text-white">
                       Most Popular
                     </Badge>
                   </div>
                 )}
-                <Card className={`h-full ${plan.popular ? 'ring-2 ring-blue-500 shadow-lg' : ''}`}>
+                <Card className={`h-full bg-white/80 backdrop-blur-sm border-gray-200 ${plan.popular ? 'ring-2 ring-gray-800 shadow-lg' : ''}`}>
                   <CardHeader>
                     <div className="flex items-center gap-2 mb-2">
-                      <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                        <Icon className="h-4 w-4 text-blue-600" />
+                      <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+                        <Icon className="h-4 w-4 text-gray-800" />
                       </div>
                       <CardTitle className="text-xl">{plan.name}</CardTitle>
                     </div>
@@ -216,10 +311,10 @@ export default function PricingPage() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <Button 
+                    <Button
                       onClick={() => handlePlanSelect(plan)}
                       disabled={loadingPlan === plan.id}
-                      className={`w-full ${plan.popular ? 'bg-gradient-to-r from-blue-600 to-purple-600' : ''}`}
+                      className={`w-full ${plan.popular ? 'bg-gradient-to-r from-gray-800 to-black' : 'border-gray-800 text-gray-800 hover:bg-gray-50'}`}
                       variant={plan.popular ? "default" : "outline"}
                     >
                       {loadingPlan === plan.id ? (
@@ -257,7 +352,7 @@ export default function PricingPage() {
           transition={{ duration: 0.8, delay: 0.4 }}
           className="mb-16"
         >
-          <Card>
+          <Card className="bg-white/80 backdrop-blur-sm border-gray-200">
             <CardHeader>
               <CardTitle className="text-center">Feature Comparison</CardTitle>
               <CardDescription className="text-center">
@@ -332,10 +427,10 @@ export default function PricingPage() {
           transition={{ duration: 0.8, delay: 0.6 }}
         >
           <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-gray-900">
+            <h2 className="text-3xl font-bold text-black">
               Frequently Asked Questions
             </h2>
-            <p className="mt-4 text-lg text-gray-600">
+            <p className="mt-4 text-lg text-gray-700">
               Got questions? We've got answers.
             </p>
           </div>
@@ -348,7 +443,7 @@ export default function PricingPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.8 + index * 0.1 }}
               >
-                <Card>
+                <Card className="bg-white/80 backdrop-blur-sm border-gray-200">
                   <CardHeader>
                     <CardTitle className="text-lg">{faq.question}</CardTitle>
                   </CardHeader>

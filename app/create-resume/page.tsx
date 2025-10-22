@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import Image from "next/image";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,14 +13,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { 
-  User, 
-  Briefcase, 
-  GraduationCap, 
-  FileText, 
-  Code, 
-  Plus, 
-  Trash2, 
+import {
+  User,
+  Briefcase,
+  GraduationCap,
+  FileText,
+  Code,
+  Plus,
+  Trash2,
   Download,
   Eye,
   FolderOpen,
@@ -30,7 +32,9 @@ import {
   Lightbulb,
   Wand2,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Home,
+  LogOut
 } from "lucide-react";
 import { motion } from "framer-motion";
 import {
@@ -81,10 +85,10 @@ function SortableTab({ id, children, isActive, onClick }: {
       style={style}
       {...attributes}
       {...listeners}
-      className={`px-4 py-2 rounded-lg cursor-pointer transition-colors ${
-        isActive 
-          ? 'bg-blue-600 text-white' 
-          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+      className={`px-3 py-1.5 text-sm rounded-lg cursor-pointer transition-colors ${
+        isActive
+          ? 'bg-gradient-to-r from-gray-800 to-gray-900 text-white shadow-sm'
+          : 'bg-white/80 text-gray-700 hover:bg-white border border-gray-200'
       } ${isDragging ? 'z-50' : ''}`}
       onClick={onClick}
     >
@@ -138,7 +142,7 @@ interface ResumeData {
 
 export default function CreateResumePage() {
   const router = useRouter();
-  const { user, session } = useAuth();
+  const { user, session, signOut } = useAuth();
   const [activeTab, setActiveTab] = useState("personal");
   
   // Tab order state for drag and drop
@@ -908,34 +912,87 @@ export default function CreateResumePage() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-4xl">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-          className="text-center mb-8"
-        >
-          <h1 className="text-3xl font-bold text-gray-900 sm:text-4xl">
-            Create Your Resume
-          </h1>
-          <p className="mt-4 text-lg text-gray-600">
-            Build a professional resume step by step with our easy-to-use builder
-          </p>
-        </motion.div>
+    <div className="min-h-screen bg-gradient-to-br from-white via-gray-50 via-30% via-gray-200 via-60% to-black relative overflow-hidden">
+      {/* Decorative gradient orbs */}
+      <div className="absolute top-0 left-0 w-96 h-96 bg-gradient-radial from-gray-300/30 to-transparent rounded-full blur-3xl"></div>
+      <div className="absolute bottom-0 right-0 w-[600px] h-[600px] bg-gradient-radial from-gray-800/20 to-transparent rounded-full blur-3xl"></div>
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-gradient-radial from-gray-400/10 to-transparent rounded-full blur-3xl"></div>
 
-        {/* Action Buttons */}
-        <div className="flex justify-center gap-4 mb-8">
-          <Button variant="outline" className="flex items-center gap-2">
-            <Eye className="h-4 w-4" />
-            Preview Resume
-          </Button>
-          <Button className="flex items-center gap-2">
-            <Download className="h-4 w-4" />
-            Download PDF
-          </Button>
+      {/* Subtle grid pattern overlay */}
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]"></div>
+
+      {/* Glassmorphic Navbar */}
+      <motion.nav
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+        className="sticky top-4 z-50 flex justify-center px-4 py-4"
+      >
+        <div className="flex items-center justify-center gap-8 px-8 py-4 bg-black/60 backdrop-blur-xl border border-white/30 rounded-full shadow-2xl">
+          {/* Logo */}
+          <Link href="/dashboard" className="flex items-center space-x-2">
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="flex items-center space-x-2"
+            >
+              <Image src="/logo.png" alt="ResumeMax Logo" width={32} height={32} className="h-8 w-8" />
+              <span className="text-lg font-bold text-white">ResumeMax</span>
+            </motion.div>
+          </Link>
+
+          {/* Navigation Items */}
+          <div className="flex items-center gap-4">
+            <Link href="/">
+              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                <Button
+                  variant="ghost"
+                  className="flex items-center space-x-2 text-white/90 hover:text-white hover:bg-white/20"
+                >
+                  <Home className="h-4 w-4" />
+                  <span className="hidden sm:inline">Home</span>
+                </Button>
+              </motion.div>
+            </Link>
+          </div>
+
+          {/* User Section */}
+          <div className="flex items-center gap-3 border-l border-white/30 pl-6">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 text-white/90 text-sm">
+                <User className="h-4 w-4" />
+                <span className="hidden md:inline">{user?.user_metadata?.full_name || 'User'}</span>
+              </div>
+              <Button
+                variant="ghost"
+                onClick={() => signOut()}
+                className="flex items-center gap-2 text-white/80 hover:text-white hover:bg-white/20"
+              >
+                <LogOut className="h-4 w-4" />
+                <span className="hidden sm:inline">Sign Out</span>
+              </Button>
+            </div>
+          </div>
         </div>
+      </motion.nav>
+
+      {/* Main Content */}
+      <div className="relative z-10 container mx-auto px-4 py-8 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-4xl">
+          {/* Header */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            className="text-center mb-8"
+          >
+            <h1 className="text-3xl font-bold bg-gradient-to-br from-gray-900 via-gray-700 to-black bg-clip-text text-transparent sm:text-4xl">
+              Create Your Resume
+            </h1>
+            <p className="mt-4 text-lg text-gray-700">
+              Build a professional resume step by step with our easy-to-use builder
+            </p>
+          </motion.div>
 
         {/* Resume Builder Tabs */}
         <motion.div
@@ -951,7 +1008,7 @@ export default function CreateResumePage() {
                 onDragEnd={handleDragEnd}
               >
                 <SortableContext items={tabOrder} strategy={horizontalListSortingStrategy}>
-                  <div className="flex gap-2 p-2 bg-gray-50 rounded-lg overflow-x-auto">
+                  <div className="flex gap-2 p-3 bg-white/60 backdrop-blur-sm rounded-xl overflow-x-auto border border-gray-200/50 shadow-sm">
                     {tabOrder.map((tabId) => {
                       const tabConfig = {
                         personal: { icon: User, label: "Personal" },
@@ -1947,6 +2004,7 @@ export default function CreateResumePage() {
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
+      </div>
       </div>
     </div>
   );
