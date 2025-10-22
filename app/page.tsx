@@ -56,7 +56,7 @@ export default function Home() {
 
   const handleFeatureClick = (targetPath: string) => {
     const featureName = targetPath.replace('/', '');
-    
+
     // Track feature button click
     MixpanelService.trackFeatureButtonClick({
       button_name: `${featureName}_button`,
@@ -64,15 +64,15 @@ export default function Home() {
       user_authenticated: !!user,
       user_id: user?.id,
     });
-    
-    // If not authenticated, send to login then to onboarding
+
+    // If not authenticated, send to login then to the feature
     if (!user) {
-      router.push(`/auth/login?returnTo=${encodeURIComponent('/onboarding')}`);
+      router.push(`/auth/login?returnTo=${encodeURIComponent(targetPath)}`);
       return;
     }
 
-    // Authenticated users go to onboarding first
-    router.push('/onboarding');
+    // Authenticated users go directly to the feature
+    router.push(targetPath);
   };
   return (
     <div className="flex flex-col">
@@ -99,42 +99,19 @@ export default function Home() {
                 Get instant, AI-powered feedback on your resume. Discover what recruiters are looking for 
                 and optimize your resume to land more interviews.
               </p>
-              <div className="mt-10 flex items-center justify-center gap-x-6 flex-wrap">
+              <div className="mt-10 flex items-center justify-center">
                 <motion.div
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                 >
-                  <Button 
-                    size="lg" 
+                  <Button
+                    size="lg"
                     className="text-lg px-8 py-3 bg-gradient-to-r from-blue-600 to-purple-600"
-                    onClick={() => handleFeatureClick('/create-resume')}
+                    onClick={() => handleFeatureClick('/dashboard')}
                   >
-                    <FileText className="mr-2 h-5 w-5" />
-                    Create Resume
+                    Get Started
                   </Button>
                 </motion.div>
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  <Button 
-                    variant="outline" 
-                    size="lg" 
-                    className="text-lg px-8 py-3"
-                    onClick={() => handleFeatureClick('/rate-resume')}
-                  >
-                    <BarChart3 className="mr-2 h-5 w-5" />
-                    Rate Resume
-                  </Button>
-                </motion.div>
-                <Button 
-                  variant="ghost" 
-                  size="lg" 
-                  className="text-lg px-8 py-3"
-                  onClick={() => handleFeatureClick('/tailor-resume')}
-                >
-                  Tailor Resume
-                </Button>
               </div>
             </motion.div>
           </div>
@@ -364,14 +341,14 @@ export default function Home() {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
               >
-                <Button 
-                  size="lg" 
-                  variant="secondary" 
+                <Button
+                  size="lg"
+                  variant="secondary"
                   className="text-lg px-8 py-3"
-                  onClick={() => handleFeatureClick('/rate-resume')}
+                  onClick={() => handleFeatureClick('/dashboard')}
                 >
                   <Users className="mr-2 h-5 w-5" />
-                  Start Free Analysis
+                  Get Started Free
                 </Button>
               </motion.div>
             </div>

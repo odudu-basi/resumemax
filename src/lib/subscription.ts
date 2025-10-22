@@ -15,6 +15,8 @@ export const PLAN_LIMITS = {
     resumeCreations: 3,
     resumeDownloads: 0, // No downloads for free users
     coverLetterAnalyses: 0,
+    resumeTailoring: 3, // 3 free tailor sessions
+    aiSectionTailoring: 2, // 2 AI section tailoring clicks
     templateAccess: false,
     prioritySupport: false,
   },
@@ -23,6 +25,8 @@ export const PLAN_LIMITS = {
     resumeCreations: 25,
     resumeDownloads: 10, // 10 downloads per month
     coverLetterAnalyses: 0,
+    resumeTailoring: 25, // 25 tailor sessions per month
+    aiSectionTailoring: 12, // 12 AI section tailoring clicks
     templateAccess: false,
     prioritySupport: true,
   },
@@ -31,13 +35,15 @@ export const PLAN_LIMITS = {
     resumeCreations: -1, // Unlimited
     resumeDownloads: -1, // Unlimited downloads
     coverLetterAnalyses: -1, // Unlimited
+    resumeTailoring: -1, // Unlimited tailoring
+    aiSectionTailoring: -1, // Unlimited AI section tailoring
     templateAccess: true,
     prioritySupport: true,
   },
 } as const;
 
 export type PlanName = keyof typeof PLAN_LIMITS;
-export type ActionType = 'resume_analysis' | 'resume_creation' | 'resume_download' | 'cover_letter_analysis';
+export type ActionType = 'resume_analysis' | 'resume_creation' | 'resume_download' | 'cover_letter_analysis' | 'resume_tailoring' | 'ai_section_tailoring';
 
 export interface SubscriptionInfo {
   planName: PlanName;
@@ -52,6 +58,8 @@ export interface UsageInfo {
   resumeCreations: number;
   resumeDownloads: number;
   coverLetterAnalyses: number;
+  resumeTailoring: number;
+  aiSectionTailoring: number;
 }
 
 /**
@@ -121,6 +129,8 @@ export async function getUserUsage(userId: string): Promise<UsageInfo> {
       resumeCreations: 0,
       resumeDownloads: 0,
       coverLetterAnalyses: 0,
+      resumeTailoring: 0,
+      aiSectionTailoring: 0,
     };
 
     usage?.forEach((item) => {
@@ -137,6 +147,12 @@ export async function getUserUsage(userId: string): Promise<UsageInfo> {
         case 'cover_letter_analysis':
           usageMap.coverLetterAnalyses = item.count;
           break;
+        case 'resume_tailoring':
+          usageMap.resumeTailoring = item.count;
+          break;
+        case 'ai_section_tailoring':
+          usageMap.aiSectionTailoring = item.count;
+          break;
       }
     });
 
@@ -148,6 +164,8 @@ export async function getUserUsage(userId: string): Promise<UsageInfo> {
       resumeCreations: 0,
       resumeDownloads: 0,
       coverLetterAnalyses: 0,
+      resumeTailoring: 0,
+      aiSectionTailoring: 0,
     };
   }
 }
@@ -184,6 +202,14 @@ export async function canPerformAction(
       case 'cover_letter_analysis':
         limit = subscription.limits.coverLetterAnalyses;
         currentUsage = usage.coverLetterAnalyses;
+        break;
+      case 'resume_tailoring':
+        limit = subscription.limits.resumeTailoring;
+        currentUsage = usage.resumeTailoring;
+        break;
+      case 'ai_section_tailoring':
+        limit = subscription.limits.aiSectionTailoring;
+        currentUsage = usage.aiSectionTailoring;
         break;
       default:
         return { canPerform: false, reason: 'Invalid action type' };

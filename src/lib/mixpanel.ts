@@ -8,6 +8,21 @@ if (typeof window !== 'undefined') {
     debug: process.env.NODE_ENV === 'development',
     track_pageview: true,
     persistence: 'localStorage',
+    // Session Replay Configuration
+    record_sessions_percent: 100, // Record 100% of sessions (adjust as needed)
+    record_block_class: 'mp-block', // CSS class to block from recording
+    record_collect_fonts: true,
+    record_idle_timeout_ms: 30000, // Stop recording after 30s of inactivity
+    record_max_ms: 30 * 60 * 1000, // Max 30 minute recordings
+    record_mask_text_selector: '.mp-mask, [data-mp-mask]', // Mask sensitive text
+    // Privacy settings
+    record_block_selector: '.mp-no-record, [data-mp-no-record], input[type="password"]',
+    loaded: function(mixpanel) {
+      // Start session replay automatically
+      if (process.env.NODE_ENV !== 'development' || true) { // Enable in dev too for testing
+        console.log('🎥 Mixpanel Session Replay enabled');
+      }
+    }
   });
 }
 
@@ -38,11 +53,6 @@ export const MIXPANEL_EVENTS = {
   FEATURE_EXPLORED: 'feature_explored',
   ERROR_OCCURRED: 'error_occurred',
   SESSION_STARTED: 'session_started',
-  
-  // Onboarding Events
-  ONBOARDING_STARTED: 'onboarding_started',
-  ONBOARDING_COMPLETED: 'onboarding_completed',
-  ONBOARDING_ABANDONED: 'onboarding_abandoned',
 } as const;
 
 // User properties
@@ -63,11 +73,21 @@ export const setUserProperties = (userId: string, properties: Record<string, any
 export const trackEvent = (eventName: string, properties?: Record<string, any>) => {
   if (typeof window === 'undefined') return;
   
+  // Normalize URL to always use custom domain for consistent analytics
+  let normalizedUrl = window.location.href;
+  if (normalizedUrl.includes('-oduduabasiav-4616s-projects.vercel.app')) {
+    normalizedUrl = normalizedUrl.replace(
+      /https:\/\/[^.]*-oduduabasiav-4616s-projects\.vercel\.app/,
+      'https://resumemax.ai'
+    );
+  }
+
   const eventProperties = {
     timestamp: new Date().toISOString(),
-    page_url: window.location.href,
+    page_url: normalizedUrl,
     page_title: document.title,
     user_agent: navigator.userAgent,
+    canonical_domain: 'resumemax.ai',
     ...properties,
   };
   
@@ -78,7 +98,6 @@ export const trackEvent = (eventName: string, properties?: Record<string, any>) 
 export interface PageEvent {
   page_name: string;
   user_id?: string;
-  from_onboarding?: boolean;
   [key: string]: any; // Allow additional properties
 }
 
@@ -217,28 +236,46 @@ export const MixpanelService = {
     trackEvent(MIXPANEL_EVENTS.SESSION_STARTED, properties);
   },
 
-  // Onboarding Events
-  trackOnboardingStarted: (properties: {
-    user_id?: string;
-    user_name?: string;
-  }) => {
-    trackEvent(MIXPANEL_EVENTS.ONBOARDING_STARTED, properties);
+  // Session Replay Controls
+  startRecording: () => {
+    if (typeof window === 'undefined') return;
+    mixpanel.start_session_recording();
+    console.log('🎥 Session recording started manually');
   },
 
-  trackOnboardingCompleted: (properties: {
-    user_id?: string;
-    selected_action: string;
-    time_spent_seconds: number;
-  }) => {
-    trackEvent(MIXPANEL_EVENTS.ONBOARDING_COMPLETED, properties);
+  stopRecording: () => {
+    if (typeof window === 'undefined') return;
+    mixpanel.stop_session_recording();
+    console.log('⏹️ Session recording stopped');
   },
 
-  trackOnboardingAbandoned: (properties: {
-    user_id?: string;
-    time_spent_seconds: number;
-    last_action?: string;
-  }) => {
-    trackEvent(MIXPANEL_EVENTS.ONBOARDING_ABANDONED, properties);
+  getSessionReplayUrl: () => {
+    if (typeof window === 'undefined') return null;
+    // Note: This method might not be available in all Mixpanel versions
+    // Check Mixpanel documentation for the correct method name
+    try {
+      return (mixpanel as any).get_session_recording_url?.() || null;
+    } catch (error) {
+      console.log('Session recording URL method not available');
+      return null;
+    }
+  },
+
+  // Privacy helpers
+  maskElement: (elementId: string) => {
+    if (typeof window === 'undefined') return;
+    const element = document.getElementById(elementId);
+    if (element) {
+      element.classList.add('mp-mask');
+    }
+  },
+
+  blockElement: (elementId: string) => {
+    if (typeof window === 'undefined') return;
+    const element = document.getElementById(elementId);
+    if (element) {
+      element.classList.add('mp-no-record');
+    }
   },
 
   // Generic event tracker

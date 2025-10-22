@@ -1,0 +1,28 @@
+{
+  "name": "resumemax-migration-scripts",
+  "version": "1.0.0",
+  "description": "Migration scripts for ResumeMax Supabase databases",
+  "main": "migrate-database.js",
+  "scripts": {
+    "migrate": "node migrate-database.js",
+    "migrate:dry-run": "node migrate-database.js --dry-run", 
+    "migrate:no-auth": "node migrate-database.js --no-auth",
+    "validate": "node validate-migration.js",
+    "setup": "npm install"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.75.1",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0"
+  },
+  "keywords": [
+    "supabase",
+    "migration", 
+    "database",
+    "resumemax"
+  ],
+  "author": "ResumeMax",
+  "license": "MIT"
+}

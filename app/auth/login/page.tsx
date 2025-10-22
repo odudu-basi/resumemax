@@ -19,12 +19,12 @@ function LoginForm() {
   const { signIn, signInWithGoogle, user } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const returnTo = searchParams.get('returnTo') || '/onboarding';
+  const returnTo = searchParams.get('returnTo') || '/dashboard';
 
   // Redirect authenticated users to their intended destination or dashboard
   useEffect(() => {
     if (user) {
-      const destination = returnTo || '/onboarding';
+      const destination = returnTo || '/dashboard';
       router.push(destination);
     }
   }, [user, returnTo, router]);
@@ -40,7 +40,7 @@ function LoginForm() {
       setError(error.message);
       setLoading(false);
     } else {
-      const destination = returnTo || '/onboarding';
+      const destination = returnTo || '/dashboard';
       router.push(destination);
     }
   };

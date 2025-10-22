@@ -50,7 +50,7 @@ const plans = [
     ],
     limitations: [],
     icon: Zap,
-    popular: true,
+    popular: false,
     cta: "Start Basic Plan",
     priceId: "price_1SJGF6GfV3OgrONkHsG1SRpl"
   },
@@ -73,7 +73,7 @@ const plans = [
     ],
     limitations: [],
     icon: Crown,
-    popular: false,
+    popular: true,
     cta: "Go Unlimited",
     priceId: "price_1SFol1GfV3OgrONkCw68vdG1"
   }
@@ -118,8 +118,8 @@ export default function PricingPage() {
     }
 
     if (plan.id === 'free') {
-      // Free plan - redirect to onboarding or dashboard
-      window.location.href = '/onboarding';
+      // Free plan - redirect to dashboard
+      window.location.href = '/dashboard';
       return;
     }
 

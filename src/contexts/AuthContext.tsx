@@ -167,10 +167,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: typeof window !== 'undefined' ? `${window.location.origin}/dashboard` : undefined,
+          // Redirect to dashboard after OAuth callback
+          redirectTo: typeof window !== 'undefined' ? `${window.location.origin}/auth/callback?returnTo=${encodeURIComponent('/dashboard')}` : undefined,
         },
       });
-      
+
       // Note: Google OAuth tracking will be handled in the auth state change listener
       return { error };
     } catch (err: any) {

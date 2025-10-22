@@ -51,11 +51,13 @@ export async function GET(request: NextRequest) {
     ]);
 
     // Check permissions for different actions
-    const [canAnalyze, canCreate, canDownload, canCoverLetter] = await Promise.all([
+    const [canAnalyze, canCreate, canDownload, canCoverLetter, canTailor, canAiTailor] = await Promise.all([
       canPerformAction(verifiedUserId, 'resume_analysis'),
       canPerformAction(verifiedUserId, 'resume_creation'),
       canPerformAction(verifiedUserId, 'resume_download'),
       canPerformAction(verifiedUserId, 'cover_letter_analysis'),
+      canPerformAction(verifiedUserId, 'resume_tailoring'),
+      canPerformAction(verifiedUserId, 'ai_section_tailoring'),
     ]);
 
     return NextResponse.json({
@@ -83,6 +85,14 @@ export async function GET(request: NextRequest) {
         coverLetterAnalysis: {
           canPerform: canCoverLetter.canPerform,
           reason: canCoverLetter.reason,
+        },
+        resumeTailoring: {
+          canPerform: canTailor.canPerform,
+          reason: canTailor.reason,
+        },
+        aiSectionTailoring: {
+          canPerform: canAiTailor.canPerform,
+          reason: canAiTailor.reason,
         },
       },
     });

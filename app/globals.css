@@ -1,6 +1,48 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Mixpanel Session Replay Privacy Classes */
+.mp-mask {
+  /* This class will mask text content in session replays */
+}
+
+.mp-no-record {
+  /* This class will completely block elements from session recording */
+}
+
+/* Visual indicators for development (only visible in dev mode) */
+.mp-mask::after {
+  content: "🎭 MASKED";
+  position: absolute;
+  top: -20px;
+  left: 0;
+  font-size: 10px;
+  color: orange;
+  background: rgba(255, 165, 0, 0.1);
+  padding: 2px 4px;
+  border-radius: 3px;
+  display: none;
+}
+
+.mp-no-record::after {
+  content: "🚫 NOT RECORDED";
+  position: absolute;
+  top: -20px;
+  left: 0;
+  font-size: 10px;
+  color: red;
+  background: rgba(255, 0, 0, 0.1);
+  padding: 2px 4px;
+  border-radius: 3px;
+  display: none;
+}
+
+/* Show indicators in development mode */
+[data-env="development"] .mp-mask::after,
+[data-env="development"] .mp-no-record::after {
+  display: block;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

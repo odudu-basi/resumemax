@@ -1,345 +1,194 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { 
-  User, 
-  FileText, 
-  BarChart3, 
-  Zap, 
-  Plus, 
-  Calendar,
-  TrendingUp,
-  Download,
-  Eye,
-  Trash2
-} from 'lucide-react';
+import { FileText, BarChart3, Zap, User, LogOut, Home } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/src/contexts/AuthContext';
-import { createSupabaseClient, Resume, ResumeAnalysis } from '@/src/lib/supabase';
 import MixpanelService from '@/src/lib/mixpanel';
 
 export default function DashboardPage() {
-  const { user, loading } = useAuth();
-  const [resumes, setResumes] = useState<Resume[]>([]);
-  const [analyses, setAnalyses] = useState<ResumeAnalysis[]>([]);
-  const [loadingData, setLoadingData] = useState(true);
+  const { user, loading, signOut } = useAuth();
   const router = useRouter();
-  const supabase = createSupabaseClient();
 
   // Track dashboard visit
   useEffect(() => {
     if (user) {
       MixpanelService.trackDashboardVisited({
         user_id: user.id,
-        resumes_count: resumes.length,
-        analyses_count: analyses.length,
       });
     }
-  }, [user, resumes.length, analyses.length]);
+  }, [user]);
 
   useEffect(() => {
     if (!loading && !user) {
       router.push('/auth/login');
       return;
     }
-
-    if (user) {
-      loadUserData();
-    }
   }, [user, loading, router]);
 
-  const loadUserData = async () => {
-    if (!user?.id) return;
-    
-    try {
-      // Load user's resumes
-      const { data: resumesData } = await supabase
-        .from('resumes')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-      // Load user's analyses
-      const { data: analysesData } = await supabase
-        .from('resume_analyses')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-      setResumes(resumesData || []);
-      setAnalyses(analysesData || []);
-    } catch (error) {
-      console.error('Error loading user data:', error);
-    } finally {
-      setLoadingData(false);
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  };
-
-  const getScoreColor = (score: number) => {
-    if (score >= 90) return 'text-green-600';
-    if (score >= 75) return 'text-blue-600';
-    if (score >= 60) return 'text-yellow-600';
-    return 'text-red-600';
-  };
-
-  if (loading || loadingData) {
+  if (loading) {
     return (
-      <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
-        </div>
+      <div className="min-h-screen bg-gradient-to-br from-white via-gray-100 to-black flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-6xl">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-          className="mb-8"
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                Welcome back, {user?.user_metadata?.full_name || 'User'}!
-              </h1>
-              <p className="text-gray-600">
-                Manage your resumes and track your analysis history
-              </p>
-            </div>
-            <Badge variant="secondary" className="flex items-center gap-1">
-              <User className="h-3 w-3" />
-              Dashboard
-            </Badge>
+    <div className="min-h-screen bg-gradient-to-br from-white via-gray-50 via-30% via-gray-200 via-60% to-black relative overflow-hidden">
+      {/* Decorative gradient orbs */}
+      <div className="absolute top-0 left-0 w-96 h-96 bg-gradient-radial from-gray-300/30 to-transparent rounded-full blur-3xl"></div>
+      <div className="absolute bottom-0 right-0 w-[600px] h-[600px] bg-gradient-radial from-gray-800/20 to-transparent rounded-full blur-3xl"></div>
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-gradient-radial from-gray-400/10 to-transparent rounded-full blur-3xl"></div>
+
+      {/* Subtle grid pattern overlay */}
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]"></div>
+
+      {/* Glassmorphic Navbar */}
+      <motion.nav
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+        className="sticky top-4 z-50 flex justify-center px-4 py-4"
+      >
+        <div className="flex items-center justify-center gap-8 px-8 py-4 bg-black/60 backdrop-blur-xl border border-white/30 rounded-full shadow-2xl">
+          {/* Logo */}
+          <Link href="/dashboard" className="flex items-center space-x-2">
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="flex items-center space-x-2"
+            >
+              <Image src="/logo.png" alt="ResumeMax Logo" width={32} height={32} className="h-8 w-8" />
+              <span className="text-lg font-bold text-white">ResumeMax</span>
+            </motion.div>
+          </Link>
+
+          {/* Navigation Items */}
+          <div className="flex items-center gap-4">
+            <Link href="/">
+              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                <Button
+                  variant="ghost"
+                  className="flex items-center space-x-2 text-white/90 hover:text-white hover:bg-white/20"
+                >
+                  <Home className="h-4 w-4" />
+                  <span className="hidden sm:inline">Home</span>
+                </Button>
+              </motion.div>
+            </Link>
+
+            <Link href="/pricing">
+              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                <Button
+                  variant="ghost"
+                  className="flex items-center space-x-2 text-white/90 hover:text-white hover:bg-white/20"
+                >
+                  <span>Pricing</span>
+                </Button>
+              </motion.div>
+            </Link>
           </div>
-        </motion.div>
 
-        {/* Stats Cards */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.2 }}
-          className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8"
-        >
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Total Resumes</p>
-                  <p className="text-2xl font-bold text-gray-900">{resumes.length}</p>
-                </div>
-                <FileText className="h-8 w-8 text-blue-600" />
+          {/* User Section */}
+          <div className="flex items-center gap-3 border-l border-white/30 pl-6">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 text-white/90 text-sm">
+                <User className="h-4 w-4" />
+                <span className="hidden md:inline">{user?.user_metadata?.full_name || 'User'}</span>
               </div>
-            </CardContent>
-          </Card>
+              <Button
+                variant="ghost"
+                onClick={() => signOut()}
+                className="flex items-center gap-2 text-white/80 hover:text-white hover:bg-white/20"
+              >
+                <LogOut className="h-4 w-4" />
+                <span className="hidden sm:inline">Sign Out</span>
+              </Button>
+            </div>
+          </div>
+        </div>
+      </motion.nav>
 
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Analyses Run</p>
-                  <p className="text-2xl font-bold text-gray-900">{analyses.length}</p>
-                </div>
-                <BarChart3 className="h-8 w-8 text-green-600" />
-              </div>
-            </CardContent>
-          </Card>
+      {/* Main Content */}
+      <div className="relative z-10 flex items-center justify-center px-4 pb-20 pt-12">
+        <div className="w-full max-w-2xl">
+          {/* Welcome Message */}
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.2 }}
+            className="text-center mb-12"
+          >
+            <h1 className="text-5xl font-bold bg-gradient-to-br from-gray-900 via-gray-700 to-black bg-clip-text text-transparent mb-3">
+              Welcome back, {user?.user_metadata?.full_name || 'User'}
+            </h1>
+            <p className="text-xl text-gray-700">
+              What would you like to do today?
+            </p>
+          </motion.div>
 
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Avg Score</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {analyses.length > 0 
-                      ? Math.round(analyses.reduce((acc, analysis) => 
-                          acc + (analysis.analysis_results?.scores?.overall || 0), 0) / analyses.length)
-                      : 0}
-                  </p>
-                </div>
-                <TrendingUp className="h-8 w-8 text-purple-600" />
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+          {/* Three Action Buttons */}
+          <div className="space-y-4">
+            {/* Create Resume Button */}
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6, delay: 0.3 }}
+            >
+              <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                <Button
+                  onClick={() => router.push('/create-resume')}
+                  className="w-full h-24 text-2xl font-semibold bg-gradient-to-r from-gray-800 via-gray-900 to-black hover:from-gray-900 hover:to-black text-white shadow-2xl border border-gray-700 transition-all duration-300 relative overflow-hidden group"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700"></div>
+                  <FileText className="h-7 w-7 mr-3 relative z-10" />
+                  <span className="relative z-10">Create Resume</span>
+                </Button>
+              </motion.div>
+            </motion.div>
 
-        {/* Quick Actions */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.4 }}
-          className="mb-8"
-        >
-          <Card>
-            <CardHeader>
-              <CardTitle>Quick Actions</CardTitle>
-              <CardDescription>
-                Get started with analyzing or creating your resume
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Link href="/rate-resume">
-                  <Button className="w-full h-16 flex flex-col items-center justify-center gap-2">
-                    <BarChart3 className="h-5 w-5" />
-                    Rate Resume
-                  </Button>
-                </Link>
-                <Link href="/tailor-resume">
-                  <Button variant="outline" className="w-full h-16 flex flex-col items-center justify-center gap-2">
-                    <Zap className="h-5 w-5" />
-                    Tailor Resume
-                  </Button>
-                </Link>
-                <Link href="/create-resume">
-                  <Button variant="outline" className="w-full h-16 flex flex-col items-center justify-center gap-2">
-                    <Plus className="h-5 w-5" />
-                    Create Resume
-                  </Button>
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+            {/* Rate Resume Button */}
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6, delay: 0.4 }}
+            >
+              <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                <Button
+                  onClick={() => router.push('/rate-resume')}
+                  className="w-full h-24 text-2xl font-semibold bg-gradient-to-r from-gray-700 via-gray-800 to-gray-900 hover:from-gray-800 hover:to-black text-white shadow-2xl border border-gray-600 transition-all duration-300 relative overflow-hidden group"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700"></div>
+                  <BarChart3 className="h-7 w-7 mr-3 relative z-10" />
+                  <span className="relative z-10">Rate Resume</span>
+                </Button>
+              </motion.div>
+            </motion.div>
 
-        {/* Recent Analyses */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.6 }}
-          className="mb-8"
-        >
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent Analyses</CardTitle>
-              <CardDescription>
-                Your latest resume analysis results
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {analyses.length === 0 ? (
-                <div className="text-center py-8">
-                  <BarChart3 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-500 mb-4">No analyses yet</p>
-                  <Link href="/rate-resume">
-                    <Button>
-                      <BarChart3 className="mr-2 h-4 w-4" />
-                      Analyze Your First Resume
-                    </Button>
-                  </Link>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {analyses.slice(0, 5).map((analysis) => (
-                    <div
-                      key={analysis.id}
-                      className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors"
-                    >
-                      <div className="flex-1">
-                        <h4 className="font-medium text-gray-900">
-                          {analysis.job_title || 'Resume Analysis'}
-                        </h4>
-                        <p className="text-sm text-gray-600">
-                          <Calendar className="inline h-3 w-3 mr-1" />
-                          {formatDate(analysis.created_at)}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <p className="text-sm text-gray-600">Overall Score</p>
-                          <p className={`text-lg font-bold ${getScoreColor(analysis.analysis_results?.scores?.overall || 0)}`}>
-                            {analysis.analysis_results?.scores?.overall || 0}
-                          </p>
-                        </div>
-                        <Button variant="ghost" size="sm">
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* Saved Resumes */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.8 }}
-        >
-          <Card>
-            <CardHeader>
-              <CardTitle>Saved Resumes</CardTitle>
-              <CardDescription>
-                Manage your uploaded and created resumes
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {resumes.length === 0 ? (
-                <div className="text-center py-8">
-                  <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-500 mb-4">No resumes saved yet</p>
-                  <Link href="/create-resume">
-                    <Button>
-                      <Plus className="mr-2 h-4 w-4" />
-                      Create Your First Resume
-                    </Button>
-                  </Link>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {resumes.map((resume) => (
-                    <Card key={resume.id} className="hover:shadow-md transition-shadow">
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between mb-2">
-                          <h4 className="font-medium text-gray-900 truncate">
-                            {resume.title}
-                          </h4>
-                          <Button variant="ghost" size="sm">
-                            <Trash2 className="h-4 w-4 text-red-600" />
-                          </Button>
-                        </div>
-                        <p className="text-sm text-gray-600 mb-4">
-                          <Calendar className="inline h-3 w-3 mr-1" />
-                          {formatDate(resume.created_at)}
-                        </p>
-                        <div className="flex gap-2">
-                          <Button variant="outline" size="sm" className="flex-1">
-                            <Eye className="h-3 w-3 mr-1" />
-                            View
-                          </Button>
-                          <Button variant="outline" size="sm" className="flex-1">
-                            <Download className="h-3 w-3 mr-1" />
-                            Download
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </motion.div>
+            {/* Tailor Resume Button */}
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6, delay: 0.5 }}
+            >
+              <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                <Button
+                  onClick={() => router.push('/tailor-resume')}
+                  className="w-full h-24 text-2xl font-semibold bg-gradient-to-r from-gray-600 via-gray-700 to-gray-800 hover:from-gray-700 hover:to-gray-900 text-white shadow-2xl border border-gray-500 transition-all duration-300 relative overflow-hidden group"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700"></div>
+                  <Zap className="h-7 w-7 mr-3 relative z-10" />
+                  <span className="relative z-10">Tailor Resume</span>
+                </Button>
+              </motion.div>
+            </motion.div>
+          </div>
+        </div>
       </div>
     </div>
   );

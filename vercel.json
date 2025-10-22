@@ -8,6 +8,19 @@
       "maxDuration": 60
     }
   },
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "(?<host>.*-oduduabasiav-4616s-projects\\.vercel\\.app)"
+        }
+      ],
+      "destination": "https://resumemax.ai/$1",
+      "permanent": true
+    }
+  ],
   "headers": [
     {
       "source": "/api/(.*)",

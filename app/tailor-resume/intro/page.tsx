@@ -45,14 +45,14 @@ export default function TailorResumeIntroPage() {
     MixpanelService.track('tailor_resume_intro_continue', {
       user_id: user?.id,
     });
-    router.push('/tailor-resume?from=onboarding');
+    router.push('/tailor-resume');
   };
 
   const handleBack = () => {
     MixpanelService.track('tailor_resume_intro_back', {
       user_id: user?.id,
     });
-    router.push('/onboarding');
+    router.push('/dashboard');
   };
 
   const tailoringData = [
@@ -95,7 +95,7 @@ export default function TailorResumeIntroPage() {
             className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to Onboarding
+            Back to Dashboard
           </Button>
         </motion.div>
 

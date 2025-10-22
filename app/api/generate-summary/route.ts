@@ -38,6 +38,9 @@ const GenerateSummaryRequestSchema = z.object({
     description: z.string(),
   })),
   skills: z.array(z.string()),
+  // Optional job targeting parameters
+  jobTitle: z.string().optional(),
+  jobDescription: z.string().optional(),
 });
 
 // Response schema
@@ -55,7 +58,7 @@ const openai = new OpenAI({
  * Generate professional summary using OpenAI based on all user data
  */
 async function generateProfessionalSummary(userData: z.infer<typeof GenerateSummaryRequestSchema>): Promise<string> {
-  const { personalInfo, experiences, education, projects, skills } = userData;
+  const { personalInfo, experiences, education, projects, skills, jobTitle, jobDescription } = userData;
 
   // Analyze the user's data to extract key information
   const totalYearsExperience = calculateYearsOfExperience(experiences);
@@ -77,19 +80,30 @@ CRITICAL RULES:
 8. NO asterisks, bullet points, or special formatting
 9. Write in FIRST PERSON using "I" statements - make it personal and direct
 10. Focus on what makes them unique and valuable
+11. When a target job is specified, tailor the summary to highlight relevant experience and skills for that role
+12. Only include factual information from the candidate's actual experience - never invent qualifications
 
 Guidelines:
 - For technical roles: Emphasize technologies, methodologies, and technical achievements
 - For business roles: Focus on leadership, results, and business impact
 - For entry-level: Emphasize education, skills, and potential
 - For senior roles: Highlight leadership, strategic thinking, and major accomplishments
-- Use "I am", "I have", "I bring", "I specialize in", etc.`;
+- Use "I am", "I have", "I bring", "I specialize in", etc.
+- When targeting a specific job: Prioritize relevant experience, skills, and achievements that align with the role`;
+
+  const jobTargetingSection = jobTitle || jobDescription ? `
+TARGET JOB:
+- Job Title: ${jobTitle || 'Not specified'}
+- Job Description: ${jobDescription ? jobDescription.substring(0, 500) + (jobDescription.length > 500 ? '...' : '') : 'Not provided'}
+
+IMPORTANT: Tailor the summary to highlight experience, skills, and achievements most relevant to this target role. Focus on qualifications that align with the job requirements.` : '';
 
   const userPrompt = `Generate a professional summary for this candidate:
 
 PERSONAL INFO:
 - Name: ${personalInfo.name}
 - Location: ${personalInfo.state}
+${jobTargetingSection}
 
 EXPERIENCE (${totalYearsExperience} years total):
 ${experiences.map(exp => 
@@ -110,7 +124,7 @@ ${keyProjects.map(proj =>
 SKILLS:
 ${primarySkills.join(', ')}
 
-Write a compelling professional summary in FIRST PERSON that captures their expertise, experience, and value proposition. Focus on their strongest qualifications and what makes them stand out. Use "I am", "I have", "I bring", "I specialize in", etc.
+Write a compelling professional summary in FIRST PERSON that captures their expertise, experience, and value proposition. Focus on their strongest qualifications and what makes them stand out. Use "I am", "I have", "I bring", "I specialize in", etc.${jobTitle || jobDescription ? ' Make sure to emphasize qualifications most relevant to the target job role.' : ''}
 
 Professional Summary:`;
 

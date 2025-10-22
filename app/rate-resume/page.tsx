@@ -31,26 +31,15 @@ function RateResumeContent() {
   const { session, user } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const isFromOnboarding = searchParams.get('from') === 'onboarding';
-  
+
   // Track page view
   React.useEffect(() => {
     const pageEvent: PageEvent = {
       page_name: 'rate_resume',
       user_id: user?.id,
-      from_onboarding: isFromOnboarding,
     };
     MixpanelService.trackPageView(pageEvent);
-  }, [user?.id, isFromOnboarding]);
-
-  // Handle back to onboarding
-  const handleBackToOnboarding = () => {
-    MixpanelService.track('rate_resume_back_to_onboarding', {
-      user_id: user?.id,
-      current_step: step,
-    });
-    router.push('/onboarding');
-  };
+  }, [user?.id]);
 
   const [step, setStep] = useState(1);
   const [file, setFile] = useState<File | null>(null);
@@ -273,25 +262,6 @@ function RateResumeContent() {
   return (
     <div className="container mx-auto px-4 py-8 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-4xl">
-        {/* Back to Onboarding Button - Only show if coming from onboarding */}
-        {isFromOnboarding && (
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.5 }}
-            className="mb-8"
-          >
-            <Button
-              variant="ghost"
-              onClick={handleBackToOnboarding}
-              className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back to Onboarding
-            </Button>
-          </motion.div>
-        )}
-
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -753,7 +723,30 @@ function RateResumeContent() {
                     )}
                   </Button>
                   <Button 
-                    onClick={() => window.location.href = '/tailor-resume'}
+                    onClick={() => {
+                      // Store file data for transfer to tailor resume
+                      if (file) {
+                        // Store file metadata and content
+                        const fileReader = new FileReader();
+                        fileReader.onload = (e) => {
+                          const fileData = {
+                            name: file.name,
+                            type: file.type,
+                            size: file.size,
+                            content: e.target?.result,
+                            jobTitle: jobTitle,
+                            jobDescription: jobDescription
+                          };
+                          localStorage.setItem('transferredResumeFile', JSON.stringify(fileData));
+                          // Navigate to tailor resume with flag
+                          router.push('/tailor-resume?from=rate-resume&file=transferred');
+                        };
+                        fileReader.readAsDataURL(file);
+                      } else {
+                        // Fallback if no file (shouldn't happen)
+                        router.push('/tailor-resume?from=rate-resume');
+                      }
+                    }}
                     className="flex items-center gap-2"
                   >
                     <Zap className="h-4 w-4" />

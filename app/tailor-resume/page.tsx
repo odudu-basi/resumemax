@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -167,17 +167,64 @@ function TailorResumeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, session } = useAuth();
-  const isFromOnboarding = searchParams.get('from') === 'onboarding';
-
-  // Handle back to onboarding
-  const handleBackToOnboarding = () => {
-    router.push('/onboarding');
-  };
 
   const [step, setStep] = useState(1);
   const [file, setFile] = useState<File | null>(null);
   const [jobTitle, setJobTitle] = useState("");
   const [jobDescription, setJobDescription] = useState("");
+
+  // Check for transferred file from rate-resume flow
+  useEffect(() => {
+    const fromRateResume = searchParams.get('from') === 'rate-resume';
+    const hasTransferredFile = searchParams.get('file') === 'transferred';
+    
+    if (fromRateResume && hasTransferredFile) {
+      try {
+        const storedFileData = localStorage.getItem('transferredResumeFile');
+        if (storedFileData) {
+          const fileData = JSON.parse(storedFileData);
+          
+          // Convert base64 back to File object
+          fetch(fileData.content)
+            .then(res => res.blob())
+            .then(blob => {
+              const transferredFile = new File([blob], fileData.name, { type: fileData.type });
+              setFile(transferredFile);
+              
+              // Also carry over job details if available
+              if (fileData.jobTitle) {
+                setJobTitle(fileData.jobTitle);
+              }
+              if (fileData.jobDescription) {
+                setJobDescription(fileData.jobDescription);
+              }
+              
+              // Skip to step 2 since file is already uploaded
+              setStep(2);
+              
+              // Clean up localStorage
+              localStorage.removeItem('transferredResumeFile');
+            })
+            .catch(error => {
+              console.error('Error converting transferred file:', error);
+              // Clean up on error
+              localStorage.removeItem('transferredResumeFile');
+            });
+        }
+      } catch (error) {
+        console.error('Error loading transferred file:', error);
+        // Clean up on error
+        localStorage.removeItem('transferredResumeFile');
+      }
+    }
+  }, [searchParams]);
+
+  // Load AI tailoring usage on component mount
+  useEffect(() => {
+    if (user?.id && step === 4) {
+      checkAiTailoringPermission();
+    }
+  }, [user?.id, step]);
   const [analysisComplete, setAnalysisComplete] = useState(false);
   
   // Resume parsing states
@@ -228,6 +275,17 @@ function TailorResumeContent() {
   const [showPreview, setShowPreview] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [pdfError, setPdfError] = useState("");
+
+  // Summary generation states
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+  const [generateSummaryError, setGenerateSummaryError] = useState("");
+
+  // Usage tracking
+  const [hasTrackedUsage, setHasTrackedUsage] = useState(false);
+
+  // AI tailoring usage tracking
+  const [aiTailoringUsage, setAiTailoringUsage] = useState<{current: number, limit: number} | null>(null);
+  const [checkingAiPermissions, setCheckingAiPermissions] = useState(false);
 
   // Analysis states
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -311,6 +369,9 @@ function TailorResumeContent() {
       
       setResumeData(transformedData);
       setStep(3);
+      
+      // Track usage when user successfully enters tailoring step
+      trackTailoringUsage();
       
     } catch (error) {
       console.error('Resume parsing error:', error);
@@ -454,6 +515,16 @@ function TailorResumeContent() {
   // AI Tailoring function
   const tailorWithAI = async (type: 'experience' | 'summary' | 'project' | 'skills', id?: string, currentContent?: string) => {
     const tailoringKey = id ? `${type}-${id}` : type;
+    
+    // Check permissions before proceeding
+    const canUseAiTailoring = await checkAiTailoringPermission();
+    
+    if (!canUseAiTailoring) {
+      // Redirect to pricing page if user has exceeded limit
+      router.push('/pricing');
+      return;
+    }
+    
     setIsTailoring(prev => ({ ...prev, [tailoringKey]: true }));
     setTailoringError("");
 
@@ -486,6 +557,9 @@ function TailorResumeContent() {
       // Store the AI suggestion
       setAiSuggestions(prev => ({ ...prev, [tailoringKey]: data.tailoredContent }));
       setShowSuggestions(prev => ({ ...prev, [tailoringKey]: true }));
+      
+      // Track usage after successful AI tailoring
+      await trackAiTailoringUsage();
 
     } catch (error) {
       setTailoringError('Failed to tailor content. Please try again.');
@@ -616,6 +690,129 @@ function TailorResumeContent() {
       console.error('PDF generation error:', error);
     } finally {
       setIsGeneratingPDF(false);
+    }
+  };
+
+  // Generate professional summary using AI
+  const generateSummary = async () => {
+    setIsGeneratingSummary(true);
+    setGenerateSummaryError("");
+
+    try {
+      const response = await fetch('/api/generate-summary', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          personalInfo: resumeData.personalInfo,
+          experiences: resumeData.experiences,
+          education: resumeData.education,
+          projects: resumeData.projects,
+          skills: resumeData.skills,
+          jobTitle: jobTitle,
+          jobDescription: jobDescription,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to generate summary');
+      }
+
+      const result = await response.json();
+      
+      if (result.success && result.summary) {
+        // Update the resume data with the generated summary
+        setResumeData(prev => ({ ...prev, summary: result.summary }));
+      } else {
+        throw new Error(result.error || 'Failed to generate summary');
+      }
+
+    } catch (error) {
+      setGenerateSummaryError(error instanceof Error ? error.message : 'Failed to generate summary. Please try again.');
+      console.error('Summary generation error:', error);
+    } finally {
+      setIsGeneratingSummary(false);
+    }
+  };
+
+  // Track resume tailoring usage
+  const trackTailoringUsage = async () => {
+    if (!user?.id || hasTrackedUsage) return;
+    
+    try {
+      const response = await fetch('/api/increment-usage', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: user.id,
+          action: 'resume_tailoring',
+        }),
+      });
+
+      if (response.ok) {
+        setHasTrackedUsage(true);
+      }
+    } catch (error) {
+      console.error('Error tracking usage:', error);
+      // Don't block the user experience if tracking fails
+    }
+  };
+
+  // Check AI tailoring permissions
+  const checkAiTailoringPermission = async (): Promise<boolean> => {
+    if (!user?.id) return false;
+    
+    setCheckingAiPermissions(true);
+    
+    try {
+      const response = await fetch(`/api/subscription/status?userId=${user.id}`);
+      const data = await response.json();
+      
+      if (response.ok && data.permissions?.aiSectionTailoring) {
+        // Update usage tracking state
+        setAiTailoringUsage({
+          current: data.usage?.aiSectionTailoring || 0,
+          limit: data.subscription?.limits?.aiSectionTailoring || 0
+        });
+        
+        return data.permissions.aiSectionTailoring.canPerform;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Error checking AI tailoring permission:', error);
+      return false;
+    } finally {
+      setCheckingAiPermissions(false);
+    }
+  };
+
+  // Track AI section tailoring usage
+  const trackAiTailoringUsage = async () => {
+    if (!user?.id) return;
+    
+    try {
+      const response = await fetch('/api/increment-usage', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: user.id,
+          action: 'ai_section_tailoring',
+        }),
+      });
+
+      if (response.ok) {
+        // Update local usage count
+        setAiTailoringUsage(prev => prev ? { ...prev, current: prev.current + 1 } : null);
+      }
+    } catch (error) {
+      console.error('Error tracking AI tailoring usage:', error);
     }
   };
 
@@ -879,25 +1076,6 @@ function TailorResumeContent() {
   return (
     <div className="container mx-auto px-4 py-8 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-4xl">
-        {/* Back to Onboarding Button - Only show if coming from onboarding */}
-        {isFromOnboarding && (
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.5 }}
-            className="mb-8"
-          >
-            <Button
-              variant="ghost"
-              onClick={handleBackToOnboarding}
-              className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back to Onboarding
-            </Button>
-          </motion.div>
-        )}
-
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -1358,8 +1536,13 @@ function TailorResumeContent() {
                   <Edit3 className="h-5 w-5" />
                   Edit Your Resume
                     </CardTitle>
-                    <CardDescription>
-                  Review and edit the extracted resume data. Make any necessary corrections before analysis.
+                    <CardDescription className="flex justify-between items-center">
+                      <span>Review and edit the extracted resume data. Use AI Tailor to optimize sections for your target job.</span>
+                      {aiTailoringUsage && aiTailoringUsage.limit > 0 && (
+                        <Badge variant="outline" className="ml-4">
+                          AI Tailoring: {aiTailoringUsage.current}/{aiTailoringUsage.limit === -1 ? '∞' : aiTailoringUsage.limit}
+                        </Badge>
+                      )}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -1463,20 +1646,36 @@ function TailorResumeContent() {
                         <label className="block text-sm font-medium text-gray-700">
                           Professional Summary
                         </label>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => tailorWithAI('summary', undefined, resumeData.summary)}
-                          disabled={!resumeData.summary.trim() || !jobTitle.trim() || isTailoring['summary']}
-                          className="flex items-center gap-1 text-xs bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200"
-                        >
-                          {isTailoring['summary'] ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <Wand2 className="h-3 w-3" />
-                          )}
-                          AI Tailor
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={generateSummary}
+                            disabled={!resumeData.experiences.length && !resumeData.education.length && !resumeData.skills.length || isGeneratingSummary}
+                            className="flex items-center gap-1 text-xs bg-green-50 hover:bg-green-100 text-green-700 border-green-200"
+                          >
+                            {isGeneratingSummary ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Sparkles className="h-3 w-3" />
+                            )}
+                            Generate
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => tailorWithAI('summary', undefined, resumeData.summary)}
+                            disabled={!resumeData.summary.trim() || !jobTitle.trim() || isTailoring['summary']}
+                            className="flex items-center gap-1 text-xs bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200"
+                          >
+                            {isTailoring['summary'] ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Wand2 className="h-3 w-3" />
+                            )}
+                            AI Tailor
+                          </Button>
+                        </div>
                       </div>
 
                       <div className="relative">
@@ -1566,6 +1765,34 @@ function TailorResumeContent() {
                             <div className="flex items-center gap-2">
                               <Loader2 className="h-4 w-4 text-blue-600 animate-spin" />
                               <span className="text-sm text-blue-700">AI is tailoring your summary for "{jobTitle}"...</span>
+                            </div>
+                          </motion.div>
+                        )}
+
+                        {/* Loading indicator for generating summary */}
+                        {isGeneratingSummary && (
+                          <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className="mt-4 p-3 bg-green-50 border border-green-200 rounded-md"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Loader2 className="h-4 w-4 text-green-600 animate-spin" />
+                              <span className="text-sm text-green-700">AI is generating your professional summary...</span>
+                            </div>
+                          </motion.div>
+                        )}
+
+                        {/* Error message for generate summary */}
+                        {generateSummaryError && (
+                          <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className="mt-4 p-3 bg-red-50 border border-red-200 rounded-md"
+                          >
+                            <div className="flex items-center gap-2">
+                              <AlertCircle className="h-4 w-4 text-red-600" />
+                              <span className="text-sm text-red-700">{generateSummaryError}</span>
                             </div>
                           </motion.div>
                         )}
