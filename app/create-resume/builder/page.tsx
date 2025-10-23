@@ -56,11 +56,11 @@ import { useAuth } from "@/src/contexts/AuthContext";
 import MixpanelService from "@/src/lib/mixpanel";
 
 // Sortable Tab Component
-function SortableTab({ id, children, isActive, onClick }: { 
-  id: string; 
-  children: React.ReactNode; 
-  isActive: boolean; 
-  onClick: () => void; 
+function SortableTab({ id, children, isActive, onClick }: {
+  id: string;
+  children: React.ReactNode;
+  isActive: boolean;
+  onClick: () => void;
 }) {
   const {
     attributes,
@@ -69,6 +69,7 @@ function SortableTab({ id, children, isActive, onClick }: {
     transform,
     transition,
     isDragging,
+    setActivatorNodeRef,
   } = useSortable({ id });
 
   const style = {
@@ -77,43 +78,36 @@ function SortableTab({ id, children, isActive, onClick }: {
     opacity: isDragging ? 0.5 : 1,
   };
 
-  // Handle click vs drag
-  const handleClick = (e: React.MouseEvent) => {
-    // Only trigger onClick if we're not dragging
-    if (!isDragging) {
-      onClick();
-    }
-  };
-
   return (
     <div
       ref={setNodeRef}
       style={style}
       {...attributes}
       className={`group relative px-4 py-2 rounded-lg transition-colors select-none ${
-        isActive 
-          ? 'bg-blue-600 text-white' 
+        isActive
+          ? 'bg-blue-600 text-white'
           : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-      } ${isDragging ? 'z-50 cursor-grabbing' : 'cursor-pointer'}`}
-      onClick={handleClick}
+      } ${isDragging ? 'z-50' : ''}`}
     >
-      {/* Drag Handle - invisible but covers the tab */}
+      {/* Drag Handle - visible dots on the left */}
       <div
+        ref={setActivatorNodeRef}
         {...listeners}
-        className="absolute inset-0 cursor-grab active:cursor-grabbing opacity-0"
+        className="absolute left-1 top-1/2 -translate-y-1/2 cursor-grab active:cursor-grabbing flex flex-col gap-0.5 opacity-40 hover:opacity-100 transition-opacity p-1"
         style={{ touchAction: 'none' }}
         title="Hold and drag to reorder"
-      />
-      
-      {/* Tab Content */}
-      <div className="relative z-10 flex items-center gap-2">
-        {/* Drag Indicator Dots */}
-        <div className="flex flex-col gap-0.5 opacity-40 group-hover:opacity-70 transition-opacity">
-          <div className="w-1 h-1 bg-current rounded-full"></div>
-          <div className="w-1 h-1 bg-current rounded-full"></div>
-          <div className="w-1 h-1 bg-current rounded-full"></div>
-          <div className="w-1 h-1 bg-current rounded-full"></div>
-        </div>
+      >
+        <div className="w-1 h-1 bg-current rounded-full"></div>
+        <div className="w-1 h-1 bg-current rounded-full"></div>
+        <div className="w-1 h-1 bg-current rounded-full"></div>
+        <div className="w-1 h-1 bg-current rounded-full"></div>
+      </div>
+
+      {/* Tab Content - clickable */}
+      <div
+        onClick={onClick}
+        className="relative z-10 flex items-center gap-2 cursor-pointer pl-4"
+      >
         {children}
       </div>
     </div>

@@ -80,6 +80,32 @@ const faqs = [
 export default function PricingPage() {
   const { user, signOut } = useAuth();
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+  const [currentPlan, setCurrentPlan] = useState<string | null>(null);
+  const [loadingSubscription, setLoadingSubscription] = useState(true);
+
+  // Fetch user's current subscription
+  useEffect(() => {
+    const fetchSubscription = async () => {
+      if (!user?.id) {
+        setLoadingSubscription(false);
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/subscription/status?userId=${user.id}`);
+        if (response.ok) {
+          const data = await response.json();
+          setCurrentPlan(data.subscription.planName);
+        }
+      } catch (error) {
+        console.error('Error fetching subscription:', error);
+      } finally {
+        setLoadingSubscription(false);
+      }
+    };
+
+    fetchSubscription();
+  }, [user?.id]);
 
   // Track pricing page view
   useEffect(() => {
@@ -256,6 +282,8 @@ export default function PricingPage() {
         <div className="grid gap-8 lg:grid-cols-2 max-w-4xl mx-auto mb-16">
           {plans.map((plan, index) => {
             const Icon = plan.icon;
+            const isCurrentPlan = currentPlan?.toLowerCase() === plan.id.toLowerCase();
+
             return (
               <motion.div
                 key={plan.name}
@@ -264,18 +292,33 @@ export default function PricingPage() {
                 transition={{ duration: 0.6, delay: index * 0.1 }}
                 className="relative"
               >
-                {plan.popular && (
+                {isCurrentPlan && (
+                  <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
+                    <Badge className="bg-gradient-to-r from-green-600 to-green-700 text-white">
+                      Current Plan
+                    </Badge>
+                  </div>
+                )}
+                {!isCurrentPlan && plan.popular && (
                   <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
                     <Badge className="bg-gradient-to-r from-gray-800 to-black text-white">
                       Most Popular
                     </Badge>
                   </div>
                 )}
-                <Card className={`h-full bg-white/80 backdrop-blur-sm border-gray-200 ${plan.popular ? 'ring-2 ring-gray-800 shadow-lg' : ''}`}>
+                <Card className={`h-full bg-white/80 backdrop-blur-sm ${
+                  isCurrentPlan
+                    ? 'ring-2 ring-green-600 shadow-lg border-green-500'
+                    : plan.popular
+                    ? 'ring-2 ring-gray-800 shadow-lg border-gray-200'
+                    : 'border-gray-200'
+                }`}>
                   <CardHeader>
                     <div className="flex items-center gap-2 mb-2">
-                      <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
-                        <Icon className="h-4 w-4 text-gray-800" />
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                        isCurrentPlan ? 'bg-green-100' : 'bg-gray-100'
+                      }`}>
+                        <Icon className={`h-4 w-4 ${isCurrentPlan ? 'text-green-700' : 'text-gray-800'}`} />
                       </div>
                       <CardTitle className="text-xl">{plan.name}</CardTitle>
                     </div>
@@ -290,20 +333,28 @@ export default function PricingPage() {
                   <CardContent className="space-y-4">
                     <Button
                       onClick={() => handlePlanSelect(plan)}
-                      disabled={loadingPlan === plan.id}
-                      className={`w-full ${plan.popular ? 'bg-gradient-to-r from-gray-800 to-black' : 'border-gray-800 text-gray-800 hover:bg-gray-50'}`}
-                      variant={plan.popular ? "default" : "outline"}
+                      disabled={loadingPlan === plan.id || isCurrentPlan}
+                      className={`w-full ${
+                        isCurrentPlan
+                          ? 'bg-green-600/50 border-green-600 cursor-default'
+                          : plan.popular
+                          ? 'bg-gradient-to-r from-gray-800 to-black'
+                          : 'border-gray-800 text-gray-800 hover:bg-gray-50'
+                      }`}
+                      variant={isCurrentPlan || plan.popular ? "default" : "outline"}
                     >
                       {loadingPlan === plan.id ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                           Loading...
                         </>
+                      ) : isCurrentPlan ? (
+                        'Current Plan'
                       ) : (
                         plan.cta
                       )}
                     </Button>
-                    
+
                     <div className="space-y-3">
                       <h4 className="font-medium text-sm text-gray-900">What's included:</h4>
                       <ul className="space-y-2">
