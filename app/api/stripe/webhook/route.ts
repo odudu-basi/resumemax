@@ -31,17 +31,23 @@ export async function POST(request: NextRequest) {
   let event: Stripe.Event;
 
   try {
-    // For now, we'll skip webhook signature verification during development
-    // In production, add your webhook secret to env variables
-    event = JSON.parse(body);
-    
-    // TODO: Uncomment this when you have the webhook secret
-    // event = stripe.webhooks.constructEvent(
-    //   body,
-    //   signature,
-    //   config.stripe.webhookSecret!
-    // );
-    
+    // Verify webhook signature for security
+    if (!config.stripe.webhookSecret) {
+      console.error('❌ STRIPE_WEBHOOK_SECRET not configured in environment variables');
+      console.error('⚠️ Webhooks will not work without this! Get it from Stripe Dashboard → Webhooks');
+      // Fallback to parsing for development, but log warning
+      event = JSON.parse(body);
+      console.warn('⚠️ WARNING: Processing webhook without signature verification (development mode)');
+    } else {
+      // Production: Verify signature
+      event = stripe.webhooks.constructEvent(
+        body,
+        signature,
+        config.stripe.webhookSecret
+      );
+      console.log('✅ Webhook signature verified successfully');
+    }
+
     console.log('✅ Received webhook event:', event.type, event.id);
   } catch (error) {
     console.error('❌ Webhook signature verification failed:', error);
@@ -53,36 +59,61 @@ export async function POST(request: NextRequest) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
         console.log('🛒 Processing checkout completed:', session.id);
-        await handleCheckoutCompleted(session);
+        try {
+          await handleCheckoutCompleted(session);
+        } catch (error) {
+          console.error('❌ Error handling checkout.session.completed:', error);
+          throw error;
+        }
         break;
       }
 
       case 'customer.subscription.created':
       case 'customer.subscription.updated': {
         const subscription = event.data.object as Stripe.Subscription;
-        console.log('📋 Processing subscription updated:', subscription.id);
-        await handleSubscriptionUpdated(subscription);
+        console.log('📋 Processing subscription event:', event.type, subscription.id);
+        try {
+          await handleSubscriptionUpdated(subscription);
+        } catch (error) {
+          console.error(`❌ Error handling ${event.type}:`, error);
+          throw error;
+        }
         break;
       }
 
       case 'customer.subscription.deleted': {
         const subscription = event.data.object as Stripe.Subscription;
         console.log('🗑️ Processing subscription deleted:', subscription.id);
-        await handleSubscriptionDeleted(subscription);
+        try {
+          await handleSubscriptionDeleted(subscription);
+        } catch (error) {
+          console.error('❌ Error handling customer.subscription.deleted:', error);
+          throw error;
+        }
         break;
       }
 
       case 'invoice.payment_succeeded': {
         const invoice = event.data.object as Stripe.Invoice;
         console.log('💰 Processing payment succeeded:', invoice.id);
-        await handlePaymentSucceeded(invoice);
+        try {
+          await handlePaymentSucceeded(invoice);
+        } catch (error) {
+          console.error('❌ Error handling invoice.payment_succeeded:', error);
+          throw error;
+        }
         break;
       }
 
       case 'invoice.payment_failed': {
         const invoice = event.data.object as Stripe.Invoice;
         console.log('💸 Processing payment failed:', invoice.id);
-        await handlePaymentFailed(invoice);
+        try {
+          await handlePaymentFailed(invoice);
+        } catch (error) {
+          console.error('❌ Error handling invoice.payment_failed:', error);
+          throw error;
+        }
         break;
       }
 
@@ -94,8 +125,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ received: true });
   } catch (error) {
     console.error('❌ Webhook handler error:', error);
+    console.error('❌ Error details:', {
+      name: (error as Error).name,
+      message: (error as Error).message,
+      stack: (error as Error).stack,
+    });
     return NextResponse.json(
-      { error: 'Webhook handler failed' },
+      { error: 'Webhook handler failed', details: (error as Error).message },
       { status: 500 }
     );
   }
@@ -200,54 +236,81 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
 }
 
 async function upsertSubscription(subscription: Stripe.Subscription, userId: string) {
-  const priceId = subscription.items.data[0]?.price.id;
-  const planName = PLAN_MAPPING[priceId as keyof typeof PLAN_MAPPING] || 'unknown';
+  try {
+    const priceId = subscription.items.data[0]?.price.id;
+    const planName = PLAN_MAPPING[priceId as keyof typeof PLAN_MAPPING] || 'unknown';
 
-  console.log('💾 Upserting subscription data:', {
-    userId,
-    subscriptionId: subscription.id,
-    priceId,
-    planName,
-    status: subscription.status
-  });
-
-  const subscriptionData = {
-    user_id: userId,
-    stripe_customer_id: subscription.customer as string,
-    stripe_subscription_id: subscription.id,
-    stripe_price_id: priceId,
-    plan_name: planName,
-    status: subscription.status,
-    current_period_start: (subscription as any).current_period_start ? new Date((subscription as any).current_period_start * 1000).toISOString() : null,
-    current_period_end: (subscription as any).current_period_end ? new Date((subscription as any).current_period_end * 1000).toISOString() : null,
-    cancel_at_period_end: subscription.cancel_at_period_end,
-    updated_at: new Date().toISOString(),
-  };
-
-  // FIX: Use user_id as the conflict resolution field (primary key)
-  const { error } = await supabase
-    .from('user_subscriptions')
-    .upsert(subscriptionData, {
-      onConflict: 'user_id',  // ← FIXED: Use user_id instead of stripe_subscription_id
+    console.log('💾 Upserting subscription data:', {
+      userId,
+      subscriptionId: subscription.id,
+      priceId,
+      planName,
+      status: subscription.status
     });
 
-  if (error) {
-    console.error('❌ Error upserting subscription:', error, subscriptionData);
-    throw error;
-  }
+    // Validate required data
+    if (!userId) {
+      throw new Error('userId is required');
+    }
+    if (!subscription.customer) {
+      throw new Error('subscription.customer is required');
+    }
+    if (!priceId) {
+      throw new Error('priceId is required');
+    }
 
-  console.log('✅ Successfully upserted subscription for user:', userId);
-  
-  // Verify the data was saved
-  const { data: savedData, error: verifyError } = await supabase
-    .from('user_subscriptions')
-    .select('*')
-    .eq('user_id', userId)
-    .single();
-    
-  if (verifyError) {
-    console.error('❌ Error verifying saved subscription:', verifyError);
-  } else {
-    console.log('✅ Verified saved subscription data:', savedData);
+    const subscriptionData = {
+      user_id: userId,
+      stripe_customer_id: subscription.customer as string,
+      stripe_subscription_id: subscription.id,
+      stripe_price_id: priceId,
+      plan_name: planName,
+      status: subscription.status,
+      current_period_start: subscription.current_period_start ? new Date(subscription.current_period_start * 1000).toISOString() : null,
+      current_period_end: subscription.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null,
+      cancel_at_period_end: subscription.cancel_at_period_end || false,
+      updated_at: new Date().toISOString(),
+    };
+
+    console.log('📝 Subscription data to upsert:', subscriptionData);
+
+    // Use user_id as the conflict resolution field (primary key)
+    const { error, data } = await supabase
+      .from('user_subscriptions')
+      .upsert(subscriptionData, {
+        onConflict: 'user_id',
+      })
+      .select();
+
+    if (error) {
+      console.error('❌ Supabase upsert error:', {
+        error,
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        subscriptionData
+      });
+      throw error;
+    }
+
+    console.log('✅ Successfully upserted subscription for user:', userId);
+    console.log('✅ Upserted data:', data);
+
+    // Verify the data was saved
+    const { data: savedData, error: verifyError } = await supabase
+      .from('user_subscriptions')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    if (verifyError) {
+      console.error('❌ Error verifying saved subscription:', verifyError);
+    } else {
+      console.log('✅ Verified saved subscription data:', savedData);
+    }
+  } catch (error) {
+    console.error('❌ Error in upsertSubscription:', error);
+    throw error;
   }
 }

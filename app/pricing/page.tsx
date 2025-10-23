@@ -55,29 +55,6 @@ const plans = [
     popular: false,
     cta: "Start Basic Plan",
     priceId: "price_1SJGF6GfV3OgrONkHsG1SRpl"
-  },
-  {
-    id: "free",
-    name: "Free",
-    price: "$0",
-    period: "forever",
-    description: "Perfect for getting started with resume analysis",
-    features: [
-      "3 resume analyses per month",
-      "Basic scoring and feedback",
-      "ATS compatibility check",
-      "No PDF downloads",
-      "Email support"
-    ],
-    limitations: [
-      "Limited detailed recommendations",
-      "No keyword optimization",
-      "Basic formatting suggestions"
-    ],
-    icon: Users,
-    popular: false,
-    cta: "Get Started Free",
-    priceId: null
   }
 ];
 
@@ -276,7 +253,7 @@ export default function PricingPage() {
         </motion.div>
 
         {/* Pricing Cards */}
-        <div className="grid gap-8 lg:grid-cols-3 mb-16">
+        <div className="grid gap-8 lg:grid-cols-2 max-w-4xl mx-auto mb-16">
           {plans.map((plan, index) => {
             const Icon = plan.icon;
             return (
