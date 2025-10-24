@@ -7,7 +7,7 @@ import { FileText, BarChart3, Zap, CheckCircle, Star, Users, Home as HomeIcon, L
 import { motion } from "framer-motion";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import MixpanelService from "@/src/lib/mixpanel";
 import MixpanelTest from "@/src/components/MixpanelTest";
 import Link from "next/link";
@@ -35,6 +35,7 @@ const features = [
 export default function Home() {
   const { user, signOut } = useAuth();
   const router = useRouter();
+  const [activeVideoTab, setActiveVideoTab] = useState<'create' | 'tailor'>('create');
 
   // Track page view
   useEffect(() => {
@@ -204,6 +205,80 @@ export default function Home() {
               </div>
             </motion.div>
           </div>
+        </div>
+      </section>
+
+      {/* Video Showcase Section */}
+      <section className="relative z-10 py-20">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            className="max-w-5xl mx-auto"
+          >
+            <div className="text-center mb-8 sm:mb-12 px-4">
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-black mb-3 sm:mb-4">
+                See ResumeMax in Action
+              </h2>
+              <p className="text-base sm:text-lg text-gray-700">
+                Watch how our AI-powered tools can transform your resume
+              </p>
+            </div>
+
+            {/* Glassmorphic Tab Buttons */}
+            <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4 mb-8 px-4">
+              <button
+                onClick={() => setActiveVideoTab('create')}
+                className={`px-6 sm:px-8 py-3 sm:py-4 rounded-2xl font-semibold transition-all duration-300 min-h-[48px] ${
+                  activeVideoTab === 'create'
+                    ? 'bg-black/80 text-white backdrop-blur-xl border border-white/30 shadow-2xl sm:scale-105'
+                    : 'bg-white/60 text-gray-800 backdrop-blur-sm border border-gray-200 hover:bg-white/80 hover:shadow-lg'
+                }`}
+              >
+                Create Resume
+              </button>
+              <button
+                onClick={() => setActiveVideoTab('tailor')}
+                className={`px-6 sm:px-8 py-3 sm:py-4 rounded-2xl font-semibold transition-all duration-300 min-h-[48px] ${
+                  activeVideoTab === 'tailor'
+                    ? 'bg-black/80 text-white backdrop-blur-xl border border-white/30 shadow-2xl sm:scale-105'
+                    : 'bg-white/60 text-gray-800 backdrop-blur-sm border border-gray-200 hover:bg-white/80 hover:shadow-lg'
+                }`}
+              >
+                Tailor Resume
+              </button>
+            </div>
+
+            {/* Video Container with Glassmorphic Effect */}
+            <div className="relative rounded-3xl overflow-hidden bg-white/40 backdrop-blur-xl border border-white/50 shadow-2xl p-2">
+              <div className="relative rounded-2xl overflow-hidden bg-black">
+                <video
+                  key={activeVideoTab}
+                  className="w-full h-auto"
+                  controls
+                  playsInline
+                  preload="metadata"
+                  src={activeVideoTab === 'create' ? '/create-resume-demo.mp4' : '/tailor-resume-demo.mov'}
+                >
+                  <source
+                    src={activeVideoTab === 'create' ? '/create-resume-demo.mp4' : '/tailor-resume-demo.mov'}
+                    type={activeVideoTab === 'create' ? 'video/mp4' : 'video/quicktime'}
+                  />
+                  Your browser does not support the video tag.
+                </video>
+              </div>
+            </div>
+
+            {/* Video Description */}
+            <div className="mt-8 text-center px-4">
+              <p className="text-base sm:text-lg text-gray-700">
+                {activeVideoTab === 'create'
+                  ? 'Watch how easy it is to build a professional resume from scratch with AI-powered suggestions and templates.'
+                  : 'See how our AI optimizes your existing resume for specific job opportunities with keyword matching and ATS optimization.'}
+              </p>
+            </div>
+          </motion.div>
         </div>
       </section>
 
