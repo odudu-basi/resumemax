@@ -1,0 +1,127 @@
+# version removed for Docker Compose v2
+
+services:
+  # Redis for job queue
+  redis:
+    image: redis:7-alpine
+    container_name: resumemax-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - resumemax-network
+
+  # Browser automation service
+  browser-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.simple
+    container_name: resumemax-browser-service
+    ports:
+      - "8000:8000"
+    environment:
+      # Application
+      - ENVIRONMENT=development
+      - LOG_LEVEL=INFO
+
+      # Redis
+      - REDIS_URL=redis://redis:6379/0
+
+      # API Keys (load from .env)
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+
+      # Supabase (if needed)
+      - SUPABASE_URL=${SUPABASE_URL:-}
+      - SUPABASE_KEY=${SUPABASE_KEY:-}
+
+      # Sentry (optional)
+      - SENTRY_DSN=${SENTRY_DSN:-}
+
+      # Browser settings
+      - HEADLESS=true
+      - MAX_BROWSER_SESSIONS=3
+    volumes:
+      # Mount code for development (hot reload)
+      - ./:/app
+      # Persist browser data
+      - browser-data:/app/.browser-data
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - resumemax-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # RQ Worker for background jobs
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.simple
+    container_name: resumemax-worker
+    command: rq worker --url redis://redis:6379/0 browser-automation
+    environment:
+      # Application
+      - ENVIRONMENT=development
+      - LOG_LEVEL=INFO
+
+      # Redis
+      - REDIS_URL=redis://redis:6379/0
+
+      # API Keys (load from .env)
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+
+      # Supabase (if needed)
+      - SUPABASE_URL=${SUPABASE_URL:-}
+      - SUPABASE_KEY=${SUPABASE_KEY:-}
+
+      # Sentry (optional)
+      - SENTRY_DSN=${SENTRY_DSN:-}
+
+      # Browser settings
+      - HEADLESS=true
+      - MAX_BROWSER_SESSIONS=1
+    volumes:
+      - ./:/app
+      - browser-data:/app/.browser-data
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - resumemax-network
+
+  # RQ Dashboard (optional - for monitoring queues)
+  rq-dashboard:
+    image: eoranged/rq-dashboard
+    container_name: resumemax-rq-dashboard
+    ports:
+      - "9181:9181"
+    environment:
+      - RQ_DASHBOARD_REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+    networks:
+      - resumemax-network
+
+networks:
+  resumemax-network:
+    driver: bridge
+
+volumes:
+  redis-data:
+    driver: local
+  browser-data:
+    driver: local

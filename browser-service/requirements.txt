@@ -1,0 +1,36 @@
+# Core dependencies
+browser-use==0.1.11
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+playwright>=1.48.0
+langchain==0.3.13
+langchain-openai==0.2.14
+langchain-core==0.3.28
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+httpx>=0.27.0
+
+# Database
+supabase>=2.0.0
+
+# Gmail OAuth2 and API dependencies
+google-auth==2.23.4
+google-auth-oauthlib==1.1.0
+google-auth-httplib2==0.1.1
+google-api-python-client==2.108.0
+
+# Queue and Background Workers
+redis>=5.0.0
+rq>=1.15.0
+
+# Video processing (for recording application sessions)
+opencv-python-headless==4.8.1.78
+ffmpeg-python==0.2.0
+
+# Logging and Monitoring
+sentry-sdk[fastapi]>=1.40.0
+python-json-logger>=2.0.0
+
+# Production utilities
+psutil>=5.9.0
