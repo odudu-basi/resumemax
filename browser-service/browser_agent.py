@@ -349,10 +349,18 @@ class JobApplicationAgent:
         redacted = api_key[:5] + "..." if len(api_key) > 8 else "***"
         logger.info(f"✅ OpenAI API key found (starts with {redacted})")
 
-        # Use browser-use default LLM via OPENAI_API_KEY
-        logger.info("🤖 Using browser-use default LLM (via OPENAI_API_KEY)")
-
         try:
+            # Initialize LLM - browser-use now requires explicit LLM
+            from langchain_openai import ChatOpenAI
+
+            logger.info("🤖 Initializing ChatOpenAI LLM...")
+            self.llm = ChatOpenAI(
+                model="gpt-4o",  # Use GPT-4o for better performance
+                api_key=api_key,
+                temperature=0.7,
+            )
+            logger.info("✅ LLM initialized successfully")
+
             # Initialize Browser with config
             logger.info("🖥️ Initializing Browser...")
             browser_config = BrowserConfig(
@@ -660,12 +668,13 @@ class JobApplicationAgent:
                 else:
                     logger.info("📎 No local resume file available; agent may skip file upload")
 
-                # browser-use API: pass browser via Controller, not directly to Agent
+                # browser-use API: requires llm and uses Controller for browser
                 from browser_use import Controller
 
                 controller = Controller()
                 self.agent = Agent(
                     task=task_description,
+                    llm=self.llm,
                     controller=controller,
                 )
                 logger.info("✅ Agent created successfully")
