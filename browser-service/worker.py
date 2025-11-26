@@ -6,7 +6,7 @@ import logging
 from typing import Dict, Any
 from datetime import datetime
 
-from browser_agent import JobApplicationAgent
+from browser_agent import JobApplicationAgent, ApplicationRequest
 from config import get_settings
 from logger import get_logger
 
@@ -51,14 +51,21 @@ async def run_browser_automation(
         # Initialize browser agent
         agent = JobApplicationAgent()
 
-        # Execute the automation
-        result = await agent.apply_to_job(
-            job_url=job_url,
-            user_profile=user_profile,
-            resume_data=resume_data,
-            session_id=session_id,
+        # Create ApplicationRequest from parameters
+        # Merge user_profile and resume_data into a flat structure
+        request_data = {
+            "job_url": job_url,
+            "user_id": user_id,
+            "session_id": session_id,
+            **user_profile,
+            **resume_data,
             **kwargs
-        )
+        }
+
+        application_request = ApplicationRequest(**request_data)
+
+        # Execute the automation
+        result = await agent.apply_to_job(application_request)
 
         duration = (datetime.utcnow() - start_time).total_seconds()
 
