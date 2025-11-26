@@ -4,21 +4,23 @@ FROM mcr.microsoft.com/playwright/python:v1.48.0-noble
 # Set working directory
 WORKDIR /app
 
-# Copy requirements and install Python packages
+# Copy requirements and install Python packages as root
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Playwright browsers (required for browser-use)
-RUN playwright install chromium
+# Install Playwright system dependencies as root
 RUN playwright install-deps chromium
 
 # Copy application code
 COPY . .
 
-# The noble image already has a user with UID 1000 (pwuser)
-# We'll use that user instead of creating a new one
-RUN chown -R 1000:1000 /app
-USER 1000
+# Create a non-root user and switch to it
+RUN useradd -m -u 1001 appuser || true
+RUN chown -R 1001:1001 /app
+USER 1001
+
+# Install Playwright browsers as non-root user (installs to user's home directory)
+RUN playwright install chromium
 
 # Expose port
 EXPOSE 8000
