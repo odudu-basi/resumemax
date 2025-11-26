@@ -8,6 +8,7 @@ from datetime import datetime
 
 from pydantic import BaseModel
 from browser_use import Agent, Browser
+from browser_use.browser.config import BrowserConfig
 from dotenv import load_dotenv
 from pathlib import Path
 from urllib.parse import urlparse
@@ -353,9 +354,13 @@ class JobApplicationAgent:
         logger.info("🤖 Using browser-use default LLM (via OPENAI_API_KEY)")
 
         try:
-            # Initialize Browser (browser-use handles headless mode internally)
+            # Initialize Browser with config
             logger.info("🖥️ Initializing Browser...")
-            self.browser = Browser()
+            browser_config = BrowserConfig(
+                headless=True,  # Run in headless mode on Railway
+                disable_security=False,
+            )
+            self.browser = Browser(config=browser_config)
             logger.info(f"✅ Browser initialized: {type(self.browser)}")
 
         except Exception as e:
