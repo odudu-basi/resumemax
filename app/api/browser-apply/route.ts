@@ -16,7 +16,7 @@ export const runtime = 'nodejs';
 
 // Configuration
 const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:8000';
-const PYTHON_SERVICE_URL_FALLBACK = 'http://127.0.0.1:8000';
+const PYTHON_SERVICE_API_KEY = process.env.PYTHON_SERVICE_API_KEY || '';
 
 // Request schema validation - simplified to just require jobUrl and userId
 // All other data will be fetched from the database
@@ -538,26 +538,25 @@ export async function POST(request: NextRequest) {
     // Call Python service
     console.log('📞 [Browser-Apply] Calling Python service at:', PYTHON_SERVICE_URL);
 
-    let response: Response;
-    try {
-      response = await fetch(`${PYTHON_SERVICE_URL}/apply`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+    // Call Railway browser service to submit job
+    const response = await fetch(`${PYTHON_SERVICE_URL}/jobs/submit`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': PYTHON_SERVICE_API_KEY,
+      },
+      body: JSON.stringify({
+        user_id: validatedData.userId,
+        job_url: validatedData.jobUrl,
+        user_profile: pythonPayload.userProfile || {},
+        resume_data: pythonPayload.resumeData || {},
+        session_id: sessionId,
+        additional_params: {
+          headless: validatedData.headless,
+          timeout: validatedData.timeout,
         },
-        body: JSON.stringify(pythonPayload),
-      });
-    } catch (networkError: any) {
-      // Retry with 127.0.0.1 as a fallback host for localhost resolution differences
-      console.error('⚠️  [Browser-Apply] Primary Python service URL failed, retrying with 127.0.0.1:', networkError?.message);
-      response = await fetch(`${PYTHON_SERVICE_URL_FALLBACK}/apply`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(pythonPayload),
-      });
-    }
+      }),
+    });
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -566,32 +565,22 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await response.json();
+    // Railway service returns: { job_id, status, message, queue_position }
 
-    console.log('✅ [Browser-Apply] Application initiated:', result.session_id);
-
-    // Log to Supabase (optional - for tracking)
-    try {
-      await supabase.from('auto_apply_sessions').insert({
-        id: result.session_id, // use sessionId as primary id so hooks can find it
-        user_id: validatedData.userId,
-        job_url: validatedData.jobUrl,
-        status: 'filling',
-        created_at: new Date().toISOString(),
-        // optional metadata
-        video_path: null,
-        screenshot_path: null,
-      });
-    } catch (dbError) {
-      console.error('⚠️ [Browser-Apply] Failed to log to database:', dbError);
-      // Don't fail the request if database logging fails
-    }
+    console.log('✅ [Browser-Apply] Job submitted to Railway:', {
+      jobId: result.job_id,
+      sessionId: sessionId,
+      status: result.status,
+      queuePosition: result.queue_position,
+    });
 
     return NextResponse.json({
       success: true,
-      sessionId: result.session_id,
+      sessionId: sessionId,
+      jobId: result.job_id,
       status: result.status,
-      progress: result.progress,
-      message: 'Job application initiated successfully. Use the session ID to check status.',
+      queuePosition: result.queue_position,
+      message: 'Job application submitted to queue successfully',
     });
 
   } catch (error: any) {
