@@ -7,8 +7,7 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 
 from pydantic import BaseModel
-from browser_use import Agent, Browser
-from browser_use.browser.config import BrowserConfig
+from browser_use import Agent, Browser, BrowserConfig
 from dotenv import load_dotenv
 from pathlib import Path
 from urllib.parse import urlparse
