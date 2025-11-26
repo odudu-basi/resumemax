@@ -353,28 +353,14 @@ class JobApplicationAgent:
         logger.info("🤖 Using browser-use default LLM (via OPENAI_API_KEY)")
 
         try:
-            # Check if cloud mode is requested via environment variable
-            use_cloud = os.getenv('BROWSER_USE_CLOUD', 'false').lower() == 'true'
-            
-            if use_cloud:
-                logger.info("🌐 Initializing Browser with cloud mode for stealth...")
-                self.browser = Browser(use_cloud=True)
-                logger.info(f"✅ Browser initialized with cloud mode: {type(self.browser)}")
-            else:
-                logger.info("🖥️ Initializing Browser in local mode (visible browser)...")
-                self.browser = Browser(use_cloud=False)
-                logger.info(f"✅ Browser initialized in local mode: {type(self.browser)}")
-            
+            # Initialize Browser (browser-use handles headless mode internally)
+            logger.info("🖥️ Initializing Browser...")
+            self.browser = Browser()
+            logger.info(f"✅ Browser initialized: {type(self.browser)}")
+
         except Exception as e:
             logger.error(f"❌ Failed to initialize Browser: {e}")
-            # Fallback to local browser if cloud fails
-            logger.info("🔄 Falling back to local browser...")
-            try:
-                self.browser = Browser(use_cloud=False)
-                logger.info(f"✅ Browser initialized in local mode: {type(self.browser)}")
-            except Exception as fallback_error:
-                logger.error(f"❌ Failed to initialize fallback browser: {fallback_error}")
-                raise
+            raise
 
         # Initialize captcha solver
         self.captcha_solver = CaptchaSolver()

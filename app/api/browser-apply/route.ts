@@ -451,7 +451,11 @@ export async function POST(request: NextRequest) {
     // Validate request
     const validatedData = BrowserApplyRequestSchema.parse(body);
 
+    // Generate sessionId if not provided
+    const sessionId = validatedData.sessionId || `session-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
     console.log('🚀 [Browser-Apply] Starting application for:', validatedData.jobUrl);
+    console.log('🆔 [Browser-Apply] Session ID:', sessionId);
     console.log('📊 [Browser-Apply] Fetching comprehensive user profile data...');
 
     // Fetch comprehensive user profile data from database
