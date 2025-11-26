@@ -75,13 +75,13 @@ async def run_browser_automation(
                 "user_id": user_id,
                 "session_id": session_id,
                 "duration_seconds": duration,
-                "status": result.get("status")
+                "success": result.success
             }
         )
 
         return {
             "success": True,
-            "result": result,
+            "result": result.model_dump(),  # Convert Pydantic model to dict
             "duration_seconds": duration,
             "completed_at": datetime.utcnow().isoformat()
         }

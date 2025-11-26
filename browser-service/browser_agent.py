@@ -660,10 +660,13 @@ class JobApplicationAgent:
                 else:
                     logger.info("📎 No local resume file available; agent may skip file upload")
 
+                # browser-use API: pass browser via Controller, not directly to Agent
+                from browser_use import Controller
+
+                controller = Controller()
                 self.agent = Agent(
                     task=task_description,
-                    browser=self.browser,
-                    available_file_paths=available_paths or None,
+                    controller=controller,
                 )
                 logger.info("✅ Agent created successfully")
                 log_action("✅ AI Agent created successfully")
