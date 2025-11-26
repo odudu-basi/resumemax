@@ -45,5 +45,10 @@
       "source": "/api/:path*",
       "destination": "/api/:path*"
     }
+  ],
+  "crons": [
+    { "path": "/api/jobs/ingest?source=greenhouse&limit=500", "schedule": "0 */4 * * *" },
+    { "path": "/api/jobs/ingest?source=lever&limit=500", "schedule": "10 */4 * * *" },
+    { "path": "/api/jobs/ingest?source=workable&limit=500", "schedule": "20 */4 * * *" }
   ]
 }

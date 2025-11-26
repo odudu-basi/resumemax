@@ -4,26 +4,48 @@ import mixpanel from 'mixpanel-browser';
 const MIXPANEL_TOKEN = 'aacb76a61ef50cb06055ea77d040a790';
 
 if (typeof window !== 'undefined') {
-  mixpanel.init(MIXPANEL_TOKEN, {
-    debug: process.env.NODE_ENV === 'development',
-    track_pageview: true,
-    persistence: 'localStorage',
-    // Session Replay Configuration
-    record_sessions_percent: 100, // Record 100% of sessions (adjust as needed)
-    record_block_class: 'mp-block', // CSS class to block from recording
-    record_collect_fonts: true,
-    record_idle_timeout_ms: 30000, // Stop recording after 30s of inactivity
-    record_max_ms: 30 * 60 * 1000, // Max 30 minute recordings
-    record_mask_text_selector: '.mp-mask, [data-mp-mask]', // Mask sensitive text
-    // Privacy settings
-    record_block_selector: '.mp-no-record, [data-mp-no-record], input[type="password"]',
-    loaded: function(mixpanel) {
-      // Start session replay automatically
-      if (process.env.NODE_ENV !== 'development' || true) { // Enable in dev too for testing
-        console.log('🎥 Mixpanel Session Replay enabled');
+  try {
+    mixpanel.init(MIXPANEL_TOKEN, {
+      debug: false, // Disable debug to suppress console errors
+      track_pageview: true,
+      persistence: 'localStorage',
+      ignore_dnt: true, // Ignore Do Not Track
+      batch_requests: true, // Batch requests to reduce network calls
+      batch_size: 50,
+      batch_flush_interval_ms: 5000,
+      // Session Replay Configuration
+      record_sessions_percent: 100, // Record 100% of sessions (adjust as needed)
+      record_block_class: 'mp-block', // CSS class to block from recording
+      record_collect_fonts: true,
+      record_idle_timeout_ms: 30000, // Stop recording after 30s of inactivity
+      record_max_ms: 30 * 60 * 1000, // Max 30 minute recordings
+      record_mask_text_selector: '.mp-mask, [data-mp-mask]', // Mask sensitive text
+      // Privacy settings
+      record_block_selector: '.mp-no-record, [data-mp-no-record], input[type="password"]',
+      // Error handling
+      error_reporter: function(error: any) {
+        // Silently ignore network errors (HTTP status 0)
+        if (error.message && error.message.includes('Bad HTTP status: 0')) {
+          return; // Don't log these errors
+        }
+        // Only log other errors in development
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('Mixpanel error (non-critical):', error);
+        }
+      },
+      loaded: function(mixpanel) {
+        // Start session replay automatically
+        if (process.env.NODE_ENV !== 'development' || true) { // Enable in dev too for testing
+          console.log('🎥 Mixpanel Session Replay enabled');
+        }
       }
+    });
+  } catch (error) {
+    // Silently fail - Mixpanel is non-critical
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('Failed to initialize Mixpanel (non-critical):', error);
     }
-  });
+  }
 }
 
 // Event names constants
@@ -59,39 +81,47 @@ export const MIXPANEL_EVENTS = {
 export const setUserProperties = (userId: string, properties: Record<string, any>) => {
   if (typeof window === 'undefined') return;
   
-  mixpanel.identify(userId);
-  mixpanel.people.set({
-    $email: properties.email,
-    $name: properties.full_name,
-    signup_date: properties.signup_date,
-    plan_type: properties.plan_type || 'free',
-    ...properties,
-  });
+  try {
+    mixpanel.identify(userId);
+    mixpanel.people.set({
+      $email: properties.email,
+      $name: properties.full_name,
+      signup_date: properties.signup_date,
+      plan_type: properties.plan_type || 'free',
+      ...properties,
+    });
+  } catch (error) {
+    console.warn('Failed to set Mixpanel user properties (non-critical):', error);
+  }
 };
 
 // Track events
 export const trackEvent = (eventName: string, properties?: Record<string, any>) => {
   if (typeof window === 'undefined') return;
   
-  // Normalize URL to always use custom domain for consistent analytics
-  let normalizedUrl = window.location.href;
-  if (normalizedUrl.includes('-oduduabasiav-4616s-projects.vercel.app')) {
-    normalizedUrl = normalizedUrl.replace(
-      /https:\/\/[^.]*-oduduabasiav-4616s-projects\.vercel\.app/,
-      'https://resumemax.ai'
-    );
-  }
+  try {
+    // Normalize URL to always use custom domain for consistent analytics
+    let normalizedUrl = window.location.href;
+    if (normalizedUrl.includes('-oduduabasiav-4616s-projects.vercel.app')) {
+      normalizedUrl = normalizedUrl.replace(
+        /https:\/\/[^.]*-oduduabasiav-4616s-projects\.vercel\.app/,
+        'https://resumemax.ai'
+      );
+    }
 
-  const eventProperties = {
-    timestamp: new Date().toISOString(),
-    page_url: normalizedUrl,
-    page_title: document.title,
-    user_agent: navigator.userAgent,
-    canonical_domain: 'resumemax.ai',
-    ...properties,
-  };
-  
-  mixpanel.track(eventName, eventProperties);
+    const eventProperties = {
+      timestamp: new Date().toISOString(),
+      page_url: normalizedUrl,
+      page_title: document.title,
+      user_agent: navigator.userAgent,
+      canonical_domain: 'resumemax.ai',
+      ...properties,
+    };
+    
+    mixpanel.track(eventName, eventProperties);
+  } catch (error) {
+    console.warn('Failed to track Mixpanel event (non-critical):', error);
+  }
 };
 
 // Type definitions for events

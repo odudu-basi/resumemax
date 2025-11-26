@@ -64,7 +64,7 @@ Go to Stripe Dashboard → Customers → Find the customer
 Note:
 - Customer ID (starts with `cus_`)
 - Subscription ID (starts with `sub_`)
-- Price ID (`price_1SJGF6GfV3OgrONkHsG1SRpl` or `price_1SFol1GfV3OgrONkCw68vdG1`)
+- Price ID (`price_1SLoMAGfV3OgrONkMEAyWnAG` or `price_1SLoMuGfV3OgrONkCc9AOPqX`)
 
 ### Step 2: Get User ID from Supabase
 
@@ -94,7 +94,7 @@ INSERT INTO user_subscriptions (
     'USER_ID_FROM_STEP_2',
     'cus_FROM_STRIPE',
     'sub_FROM_STRIPE',
-    'price_1SJGF6GfV3OgrONkHsG1SRpl', -- basic plan, or use 'price_1SFol1GfV3OgrONkCw68vdG1' for unlimited
+    'price_1SLoMAGfV3OgrONkMEAyWnAG', -- basic plan, or use 'price_1SLoMuGfV3OgrONkCc9AOPqX' for unlimited
     'basic', -- or 'unlimited'
     'active',
     NOW(),

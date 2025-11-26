@@ -87,7 +87,7 @@ export function PaywallOverlay({
                   </Link>
                   
                   <p className="text-xs text-gray-500">
-                    Starting at $9.99/month • Cancel anytime
+                    Starting at $7/month • Cancel anytime
                   </p>
                 </div>
               )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -40,7 +40,6 @@ import { motion } from "framer-motion";
 import {
   DndContext,
   closestCenter,
-  KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
@@ -49,20 +48,24 @@ import {
 import {
   arrayMove,
   SortableContext,
-  sortableKeyboardCoordinates,
   horizontalListSortingStrategy,
-} from '@dnd-kit/sortable';
-import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-// Sortable Tab Component
-function SortableTab({ id, children, isActive, onClick }: { 
-  id: string; 
-  children: React.ReactNode; 
-  isActive: boolean; 
-  onClick: () => void; 
+// Sortable Tab Component with Drag Handle
+function SortableTab({
+  id,
+  value,
+  isActive,
+  onClick,
+  children
+}: {
+  id: string;
+  value: string;
+  children: React.ReactNode;
+  isActive: boolean;
+  onClick: () => void;
 }) {
   const {
     attributes,
@@ -83,16 +86,37 @@ function SortableTab({ id, children, isActive, onClick }: {
     <div
       ref={setNodeRef}
       style={style}
-      {...attributes}
-      {...listeners}
-      className={`px-3 py-1.5 text-sm rounded-lg cursor-pointer transition-colors ${
+      className={`relative flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 ${
         isActive
-          ? 'bg-gradient-to-r from-gray-800 to-gray-900 text-white shadow-sm'
-          : 'bg-white/80 text-gray-700 hover:bg-white border border-gray-200'
-      } ${isDragging ? 'z-50' : ''}`}
-      onClick={onClick}
+          ? 'bg-gradient-to-r from-gray-800 to-gray-900 text-white shadow-lg'
+          : 'bg-white/80 text-gray-700 hover:bg-white border border-gray-200 hover:border-gray-300'
+      } ${isDragging ? 'z-50 shadow-2xl ring-2 ring-gray-400' : ''}`}
     >
-      {children}
+      {/* Drag Handle - Three Dots */}
+      <div
+        {...attributes}
+        {...listeners}
+        className={`flex flex-col gap-0.5 cursor-grab active:cursor-grabbing hover:opacity-100 transition-opacity ${
+          isActive ? 'opacity-60' : 'opacity-40'
+        }`}
+        onClick={(e) => e.stopPropagation()} // Prevent click from bubbling
+      >
+        <div className={`w-1 h-1 rounded-full ${isActive ? 'bg-white' : 'bg-gray-600'}`}></div>
+        <div className={`w-1 h-1 rounded-full ${isActive ? 'bg-white' : 'bg-gray-600'}`}></div>
+        <div className={`w-1 h-1 rounded-full ${isActive ? 'bg-white' : 'bg-gray-600'}`}></div>
+      </div>
+
+      {/* Tab Content - Clickable but not draggable */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onClick();
+        }}
+        className="flex items-center gap-2 whitespace-nowrap cursor-pointer hover:opacity-90 transition-opacity"
+        type="button"
+      >
+        {children}
+      </button>
     </div>
   );
 }
@@ -144,16 +168,23 @@ export default function CreateResumePage() {
   const router = useRouter();
   const { user, session, signOut } = useAuth();
   const [activeTab, setActiveTab] = useState("personal");
-  
+  const [mounted, setMounted] = useState(false);
+
   // Tab order state for drag and drop
   const [tabOrder, setTabOrder] = useState([
     "personal",
-    "summary", 
+    "summary",
     "experience",
     "education",
     "projects",
     "skills"
   ]);
+
+  // Fix hydration issues with drag-and-drop
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const [resumeData, setResumeData] = useState<ResumeData>({
     personalInfo: {
       name: "",
@@ -198,11 +229,12 @@ export default function CreateResumePage() {
   // Preview states
   const [showPreview, setShowPreview] = useState<boolean>(false);
 
-  // Drag and drop sensors
+  // Drag and drop sensors (only for the drag handle)
   const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // Require 8px of movement before dragging starts
+      },
     })
   );
 
@@ -737,7 +769,7 @@ export default function CreateResumePage() {
           projects: resumeData.projects,
           skills: resumeData.skills,
           summary: resumeData.summary,
-          sectionOrder: tabOrder.filter(tab => tab !== 'personal'), // Exclude personal info from section order
+          sectionOrder: tabOrder.filter(tab => tab !== 'personal'), // Dynamic section order based on tab arrangement
         }),
       });
 
@@ -1002,46 +1034,81 @@ export default function CreateResumePage() {
         >
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <div className="mb-8">
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragEnd={handleDragEnd}
-              >
-                <SortableContext items={tabOrder} strategy={horizontalListSortingStrategy}>
-                  <div className="flex gap-2 p-3 bg-white/60 backdrop-blur-sm rounded-xl overflow-x-auto border border-gray-200/50 shadow-sm">
-                    {tabOrder.map((tabId) => {
-                      const tabConfig = {
-                        personal: { icon: User, label: "Personal" },
-                        experience: { icon: Briefcase, label: "Experience" },
-                        education: { icon: GraduationCap, label: "Education" },
-                        projects: { icon: FolderOpen, label: "Projects" },
-                        summary: { icon: FileText, label: "Summary" },
-                        skills: { icon: Code, label: "Skills" },
-                      }[tabId];
+              {mounted ? (
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
+                >
+                  <SortableContext items={tabOrder} strategy={horizontalListSortingStrategy}>
+                    <div className="flex gap-2 p-3 bg-white/60 backdrop-blur-sm rounded-xl overflow-x-auto border border-gray-200/50 shadow-sm">
+                      {tabOrder.map((tabId) => {
+                        const tabConfig = {
+                          personal: { icon: User, label: "Personal" },
+                          experience: { icon: Briefcase, label: "Experience" },
+                          education: { icon: GraduationCap, label: "Education" },
+                          projects: { icon: FolderOpen, label: "Projects" },
+                          summary: { icon: FileText, label: "Summary" },
+                          skills: { icon: Code, label: "Skills" },
+                        }[tabId];
 
-                      if (!tabConfig) return null;
+                        if (!tabConfig) return null;
 
-                      const Icon = tabConfig.icon;
+                        const Icon = tabConfig.icon;
 
-                      return (
-                        <SortableTab
-                          key={tabId}
-                          id={tabId}
-                          isActive={activeTab === tabId}
-                          onClick={() => setActiveTab(tabId)}
-                        >
-                          <div className="flex items-center gap-2 whitespace-nowrap">
+                        return (
+                          <SortableTab
+                            key={tabId}
+                            id={tabId}
+                            value={tabId}
+                            isActive={activeTab === tabId}
+                            onClick={() => setActiveTab(tabId)}
+                          >
                             <Icon className="h-4 w-4" />
                             <span className="hidden sm:inline">{tabConfig.label}</span>
-                          </div>
-                        </SortableTab>
-                      );
-                    })}
-                  </div>
-                </SortableContext>
-              </DndContext>
-              <p className="text-xs text-gray-500 mt-2 text-center">
-                💡 Drag tabs to reorder sections - this will change the order in your PDF
+                          </SortableTab>
+                        );
+                      })}
+                    </div>
+                  </SortableContext>
+                </DndContext>
+              ) : (
+                // Fallback for SSR
+                <div className="flex gap-2 p-3 bg-white/60 backdrop-blur-sm rounded-xl overflow-x-auto border border-gray-200/50 shadow-sm">
+                  {tabOrder.map((tabId) => {
+                    const tabConfig = {
+                      personal: { icon: User, label: "Personal" },
+                      experience: { icon: Briefcase, label: "Experience" },
+                      education: { icon: GraduationCap, label: "Education" },
+                      projects: { icon: FolderOpen, label: "Projects" },
+                      summary: { icon: FileText, label: "Summary" },
+                      skills: { icon: Code, label: "Skills" },
+                    }[tabId];
+
+                    if (!tabConfig) return null;
+
+                    const Icon = tabConfig.icon;
+                    const isActive = activeTab === tabId;
+
+                    return (
+                      <button
+                        key={tabId}
+                        onClick={() => setActiveTab(tabId)}
+                        className={`relative flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 ${
+                          isActive
+                            ? 'bg-gradient-to-r from-gray-800 to-gray-900 text-white shadow-lg'
+                            : 'bg-white/80 text-gray-700 hover:bg-white border border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <Icon className="h-4 w-4" />
+                        <span className="hidden sm:inline">{tabConfig.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              <p className="text-xs text-gray-500 mt-2 text-center px-2">
+                💡 Click tab name to switch sections • Drag the 3 dots (⋮) to reorder sections
               </p>
             </div>
 
@@ -1942,7 +2009,7 @@ export default function CreateResumePage() {
         )}
 
         {/* Navigation Buttons */}
-        <div className="flex justify-between mt-8">
+        <div className="flex flex-col sm:flex-row justify-between gap-4 mt-8">
           <Button
             variant="outline"
             onClick={() => {
@@ -1952,21 +2019,21 @@ export default function CreateResumePage() {
               }
             }}
             disabled={tabOrder.indexOf(activeTab) === 0}
-            className="flex items-center gap-2"
+            className="flex items-center justify-center gap-2 w-full sm:w-auto min-h-[44px]"
           >
             <ChevronLeft className="h-4 w-4" />
             Previous
           </Button>
-          
-          <div className="flex gap-4">
+
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 w-full sm:w-auto">
             <Dialog open={showPreview} onOpenChange={setShowPreview}>
               <DialogTrigger asChild>
-                <Button variant="outline">
+                <Button variant="outline" className="w-full sm:w-auto min-h-[44px]">
                   <Eye className="h-4 w-4 mr-2" />
                   Preview
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+              <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto mx-4">
                 <DialogHeader>
                   <DialogTitle>Resume Preview</DialogTitle>
                 </DialogHeader>
@@ -1975,21 +2042,21 @@ export default function CreateResumePage() {
                 </div>
               </DialogContent>
             </Dialog>
-            <Button 
+            <Button
               variant="outline"
               onClick={generatePDF}
               disabled={isGeneratingPDF}
-              className="flex items-center gap-2"
+              className="flex items-center justify-center gap-2 w-full sm:w-auto min-h-[44px]"
             >
               {isGeneratingPDF ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Download className="h-4 w-4" />
               )}
-              {isGeneratingPDF ? 'Generating...' : 'Download PDF'}
+              <span>{isGeneratingPDF ? 'Generating...' : 'Download PDF'}</span>
             </Button>
           </div>
-          
+
           <Button
             onClick={() => {
               const currentIndex = tabOrder.indexOf(activeTab);
@@ -1998,7 +2065,7 @@ export default function CreateResumePage() {
               }
             }}
             disabled={tabOrder.indexOf(activeTab) === tabOrder.length - 1}
-            className="flex items-center gap-2"
+            className="flex items-center justify-center gap-2 w-full sm:w-auto min-h-[44px]"
           >
             Next
             <ChevronRight className="h-4 w-4" />

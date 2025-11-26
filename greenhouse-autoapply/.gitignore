@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.env
+
+# Config files with personal data
+config/profile.json
+config/resume.pdf
+config/applications.json
+
+# Screenshots
+*.png
+
+# Logs
+*.log
+
+# OS files
+.DS_Store

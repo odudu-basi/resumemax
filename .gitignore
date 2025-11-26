@@ -39,3 +39,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.env*.local
+
+# Auto-apply screenshots and recordings (can be large files)
+/public/screenshots/
+/public/recordings/
+# Keep the directories but ignore their contents
+!public/screenshots/.gitkeep
+!public/recordings/.gitkeep

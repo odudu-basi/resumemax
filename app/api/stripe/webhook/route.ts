@@ -15,8 +15,8 @@ const supabase = createClient(
 
 // Plan mapping from price IDs
 const PLAN_MAPPING = {
-  'price_1SJGF6GfV3OgrONkHsG1SRpl': 'basic', // $4/month
-  'price_1SFol1GfV3OgrONkCw68vdG1': 'unlimited', // $9.99/month
+  'price_1SLoMAGfV3OgrONkMEAyWnAG': 'basic', // $7/month
+  'price_1SLoMuGfV3OgrONkCc9AOPqX': 'unlimited', // $15/month
 } as const;
 
 export async function POST(request: NextRequest) {

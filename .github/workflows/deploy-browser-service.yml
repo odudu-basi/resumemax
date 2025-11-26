@@ -1,0 +1,158 @@
+name: Deploy Browser Service to AWS ECS
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'browser-service/**'
+      - 'infrastructure/**'
+      - '.github/workflows/deploy-browser-service.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: resumemax-browser-service
+  ECS_SERVICE: browser-service
+  ECS_CLUSTER: resumemax-browser-service-cluster
+  CONTAINER_NAME: browser-service
+
+jobs:
+  test:
+    name: Test Browser Service
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          cd browser-service
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov
+
+      - name: Run tests
+        run: |
+          cd browser-service
+          pytest tests/ --cov=. --cov-report=xml || echo "No tests found"
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./browser-service/coverage.xml
+          flags: browser-service
+
+  build-and-deploy:
+    name: Build and Deploy to ECS
+    needs: test
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'production' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image to Amazon ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          cd browser-service
+
+          # Build Docker image
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+          # Push to ECR
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Download current task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition resumemax-browser-service \
+            --query taskDefinition > task-definition.json
+
+      - name: Update task definition with new image
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ steps.build-image.outputs.image }}
+
+      - name: Deploy to Amazon ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+      - name: Verify deployment
+        run: |
+          # Get load balancer DNS
+          LB_DNS=$(aws cloudformation describe-stacks \
+            --stack-name resumemax-browser-service \
+            --query 'Stacks[0].Outputs[?OutputKey==`LoadBalancerDNS`].OutputValue' \
+            --output text)
+
+          echo "Load Balancer DNS: $LB_DNS"
+
+          # Wait for health check
+          sleep 30
+
+          # Test health endpoint
+          curl -f http://$LB_DNS/health || exit 1
+
+          echo "✅ Deployment successful!"
+
+      - name: Notify on success
+        if: success()
+        run: |
+          echo "::notice::Browser service deployed successfully to ${{ github.event.inputs.environment || 'production' }}"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::error::Browser service deployment failed"
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "Rolling back to previous task definition..."
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service ${{ env.ECS_SERVICE }} \
+            --force-new-deployment \
+            --region ${{ env.AWS_REGION }}

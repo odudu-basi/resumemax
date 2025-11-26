@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/src/contexts/AuthContext";
+import { OnboardingProvider } from "@/src/contexts/OnboardingContext";
 import { Analytics } from '@vercel/analytics/react';
 import dynamic from "next/dynamic";
+import { Toaster } from 'sonner';
 const AuthExchange = dynamic(() => import("@/src/components/AuthExchange"));
 
 const geistSans = Geist({
@@ -32,8 +34,11 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <AuthProvider>
-          {children}
+          <OnboardingProvider>
+            {children}
+          </OnboardingProvider>
         </AuthProvider>
+        <Toaster position="top-right" richColors />
         <AuthExchange />
         <Analytics />
       </body>

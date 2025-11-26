@@ -15,7 +15,7 @@ const plans = [
   {
     id: "unlimited",
     name: "Unlimited",
-    price: "$9.99",
+    price: "$15",
     period: "per month",
     description: "For power users and professionals",
     features: [
@@ -33,12 +33,12 @@ const plans = [
     icon: Crown,
     popular: true,
     cta: "Go Unlimited",
-    priceId: "price_1SFol1GfV3OgrONkCw68vdG1"
+    priceId: "price_1SLoMuGfV3OgrONkCc9AOPqX"
   },
   {
     id: "basic",
     name: "Basic",
-    price: "$4",
+    price: "$7",
     period: "per month",
     description: "Great for job seekers who need more analyses",
     features: [
@@ -54,7 +54,7 @@ const plans = [
     icon: Zap,
     popular: false,
     cta: "Start Basic Plan",
-    priceId: "price_1SJGF6GfV3OgrONkHsG1SRpl"
+    priceId: "price_1SLoMAGfV3OgrONkMEAyWnAG"
   }
 ];
 

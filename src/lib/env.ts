@@ -9,6 +9,7 @@ const envSchema = z.object({
   
   // Next.js
   NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3000"),
+  NEXT_PUBLIC_BASE_URL: z.string().url().optional(),
   
   // OpenAI Configuration
   OPENAI_API_KEY: z.string().min(1, "OpenAI API key is required"),
@@ -67,7 +68,11 @@ const envSchema = z.object({
   
   // Logging
   LOG_LEVEL: z.enum(["error", "warn", "info", "debug"]).default("info"),
-  
+
+  // Browserless.io Configuration
+  BROWSERLESS_API_KEY: z.string().optional(),
+  BROWSERLESS_ENDPOINT: z.string().default("wss://production-sfo.browserless.io"),
+
   // Development
   SKIP_ENV_VALIDATION: z.coerce.boolean().default(false),
 });
@@ -78,6 +83,7 @@ const envSchema = z.object({
  */
 const clientEnvSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().url(),
+  NEXT_PUBLIC_BASE_URL: z.string().url().optional(),
   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().optional(),
   NEXT_PUBLIC_SUPABASE_URL: z.string().url().optional(),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1).optional(),
@@ -162,7 +168,7 @@ export function getConfig() {
     // App
     app: {
       name: "ResumeMax",
-      url: env.NEXT_PUBLIC_APP_URL,
+      url: env.NEXT_PUBLIC_BASE_URL || env.NEXT_PUBLIC_APP_URL,
       env: env.NODE_ENV,
     },
     
@@ -184,7 +190,7 @@ export function getConfig() {
     // Stripe
     stripe: {
       secretKey: env.STRIPE_SECRET_KEY,
-      publishableKey: env.STRIPE_PUBLISHABLE_KEY,
+      publishableKey: env.STRIPE_PUBLISHABLE_KEY || env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY,
       webhookSecret: env.STRIPE_WEBHOOK_SECRET,
       enabled: env.ENABLE_STRIPE,
     },
@@ -246,6 +252,12 @@ export function getConfig() {
     // Logging
     logging: {
       level: env.LOG_LEVEL,
+    },
+
+    // Browserless
+    browserless: {
+      apiKey: env.BROWSERLESS_API_KEY,
+      endpoint: env.BROWSERLESS_ENDPOINT,
     },
   };
 }

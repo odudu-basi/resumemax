@@ -137,7 +137,7 @@ INSERT INTO user_subscriptions (
     'USER_ID_FROM_AUTH_USERS_TABLE',
     'cus_...', -- From Stripe dashboard
     'sub_...', -- From Stripe dashboard
-    'price_1SJGF6GfV3OgrONkHsG1SRpl', -- or 'price_1SFol1GfV3OgrONkCw68vdG1' for unlimited
+    'price_1SLoMAGfV3OgrONkMEAyWnAG', -- or 'price_1SLoMuGfV3OgrONkCc9AOPqX' for unlimited
     'basic', -- or 'unlimited'
     'active',
     NOW(),

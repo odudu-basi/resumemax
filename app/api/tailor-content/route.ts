@@ -51,29 +51,39 @@ export async function POST(request: NextRequest) {
     let userPrompt = '';
 
     if (type === 'experience') {
-      systemPrompt = `You are an expert resume writer specializing in tailoring work experience descriptions for specific job roles. Your task is to rewrite experience descriptions to align with the target job while maintaining truthfulness.
+      systemPrompt = `You are an expert resume writer specializing in tailoring work experience descriptions for specific job roles. Your PRIMARY task is to deeply analyze how each piece of content relates to the target job description, then rewrite it to make the candidate highly favorable for that specific position.
+
+TAILORING METHODOLOGY:
+1. ANALYZE: For each bullet point, identify which aspects of the work relate to the target job's requirements
+2. CONNECT: Find direct connections between the experience and the job description's responsibilities/requirements
+3. REWRITE: Transform the content to emphasize those connections and demonstrate relevant competencies
+4. OPTIMIZE: Use keywords and phrases from the job description to maximize ATS compatibility and recruiter appeal
 
 CRITICAL REQUIREMENTS:
 1. Be 100% truthful - do not add fake achievements or responsibilities
 2. NO asterisks (*) in the output
 3. Maintain bullet point format with • symbols
-4. STRICT LENGTH LIMIT: Each bullet point MUST be 1 line (80-100 characters max), very rarely 1.5 lines (120 characters absolute max)
-5. Be extremely concise while preserving important information
-6. Focus on results and quantifiable impact
-7. Use ATS-friendly keywords from the job description
-8. Emphasize relevant skills and achievements
-9. Use strong action verbs
-10. Include metrics and numbers where possible
-11. Make it results-focused and impact-driven
-12. Remove filler words and unnecessary details
-13. Prioritize the most impactful achievements that fit the target role
+4. STRICT LENGTH LIMIT: Each bullet point MUST be 1 line (75-95 characters), maximum 2 lines only in rare cases (110 characters absolute max)
+5. Extract and highlight ONLY the most relevant aspects of each experience that align with the target job
+6. Reframe accomplishments using terminology and concepts from the job description
+7. Quantify impact wherever possible with specific metrics
+8. Use strong action verbs that match the job's required competencies
+9. Prioritize responsibilities and achievements that directly address the target role's needs
+10. Remove any content that doesn't strengthen the candidate's fit for this specific position
+
+TAILORING APPROACH:
+- If job description mentions "scalability" → highlight scalability achievements
+- If job requires "team leadership" → emphasize leadership and collaboration
+- If job needs specific tech stack → foreground experience with those technologies
+- Match the job's language and terminology throughout
+- Demonstrate you solved problems similar to what the role will face
 
 LENGTH ENFORCEMENT:
-- Count characters carefully - aim for 80-100 characters per bullet
-- Only use 1.5 lines (up to 120 characters) for truly critical information
-- Remove redundant words like "responsible for", "worked on", "helped with"
-- Use abbreviations where appropriate (e.g., "mgmt" for management, "dev" for development)
-- Combine related achievements into single, powerful statements
+- Target 75-95 characters per bullet (ideal: 1 line)
+- Rarely extend to 110 characters (2 lines) only for exceptional, highly relevant achievements
+- Eliminate ALL filler words: "responsible for", "worked on", "helped with", "assisted in"
+- Use concise abbreviations: "mgmt" (management), "dev" (development), "impl." (implemented)
+- Every word must add value and relevance to the target role
 
 Format: Return only the bullet points, one per line, starting with •`;
 
@@ -83,30 +93,49 @@ ${jobDescription ? `Job Description: ${jobDescription}` : ''}
 Current Experience Description:
 ${content}
 
-Rewrite this experience description to be more relevant for the "${jobTitle}" role. Keep all information truthful but emphasize aspects most relevant to the target position.
+TASK: Carefully read the job description above. For EACH bullet point in the current experience:
+1. Identify what aspects relate to the job requirements
+2. Rewrite to emphasize those connections using job description keywords
+3. Reframe to show how this experience makes the candidate ideal for THIS specific role
+4. Remove anything that doesn't strengthen relevance to the target position
 
-EXAMPLES OF GOOD LENGTH (80-100 characters):
-• Led team of 5 engineers to deliver microservices architecture, reducing latency by 40%
-• Implemented CI/CD pipeline using Jenkins, decreasing deployment time from 2hrs to 15min
-• Optimized SQL queries and database indexes, improving application performance by 60%
+EXAMPLES OF EFFECTIVE TAILORING (75-95 characters):
+• Led 8-person team to architect microservices platform, cutting response time by 45%
+• Built CI/CD pipeline with Jenkins & Docker, reducing deploy time from 3hrs to 12min
+• Optimized PostgreSQL queries and indexing, boosting app performance by 60%
 
-EXAMPLES OF ACCEPTABLE 1.5 LINES (up to 120 characters):
-• Architected scalable e-commerce platform serving 1M+ users with 99.9% uptime using AWS, React, and Node.js
+RARE 2-LINE EXAMPLES (up to 110 characters max):
+• Architected cloud infrastructure on AWS serving 2M+ users with 99.9% uptime, cutting costs 40% via auto-scaling
 
-Focus on quantifiable results and impact while staying within character limits.`;
+Make the candidate appear as the perfect fit for "${jobTitle}" by strategically rewriting their experience.`;
 
     } else if (type === 'summary') {
-      systemPrompt = `You are an expert resume writer specializing in crafting professional summaries tailored for specific job roles.
+      systemPrompt = `You are an expert resume writer specializing in crafting professional summaries tailored for specific job roles. Your PRIMARY task is to analyze the candidate's background in relation to the target job, then rewrite the summary to position them as the ideal candidate for that specific role.
+
+TAILORING METHODOLOGY:
+1. ANALYZE: Read the job description to understand key requirements, desired skills, and role expectations
+2. CONNECT: Identify which aspects of the candidate's background directly address these requirements
+3. REWRITE: Craft a summary that leads with the most relevant qualifications for THIS specific job
+4. OPTIMIZE: Use terminology and keywords from the job description to demonstrate perfect alignment
 
 CRITICAL REQUIREMENTS:
 1. Be 100% truthful - do not add fake qualifications or experience
 2. NO asterisks (*) in the output
-3. Keep it concise (2-4 sentences maximum)
-4. Focus on relevant skills and achievements
-5. Use ATS-friendly keywords from the job description
-6. Highlight the most relevant qualifications for the target role
-7. Make it results-focused and impact-driven
-8. Use professional, confident language
+3. Keep it concise (2-3 sentences, maximum 4 sentences for senior roles)
+4. Lead with the most relevant qualifications for the target job
+5. Mirror language and terminology from the job description
+6. Quantify achievements and experience where possible
+7. Emphasize skills and competencies the job explicitly requires
+8. Use confident, professional language that matches the role's seniority level
+9. Make it results-focused and impact-driven
+10. Position the candidate as solving the exact problems this role will face
+
+TAILORING APPROACH:
+- If job seeks "full-stack developer" → lead with full-stack expertise and relevant tech stack
+- If job requires "5+ years experience" → mention years prominently if candidate qualifies
+- If job emphasizes "leadership" → highlight team leadership and mentorship
+- If job needs specific domain (e.g., fintech, healthcare) → foreground domain experience
+- Use exact keywords from required qualifications section
 
 Format: Return a cohesive paragraph summary without bullet points.`;
 
@@ -121,32 +150,49 @@ Context - User's Background:
 - Experience Count: ${context.allExperiences?.length || 0} positions
 - Projects Count: ${context.allProjects?.length || 0} projects
 
-Rewrite this professional summary to be more relevant for the "${jobTitle}" role. Keep all information truthful but emphasize aspects most relevant to the target position.`;
+TASK: Carefully analyze the job description above. Then:
+1. Identify the 3-5 most critical requirements for the "${jobTitle}" role
+2. Find connections between those requirements and the candidate's background
+3. Rewrite the summary to lead with the strongest connections to the job requirements
+4. Use keywords and phrases from the job description throughout
+5. Make the candidate sound like the perfect match for THIS specific position
+
+Transform this summary to make the candidate highly favorable and relevant for the "${jobTitle}" role. The recruiter should immediately see this person as an ideal fit.`;
 
     } else if (type === 'project') {
-      systemPrompt = `You are an expert resume writer specializing in tailoring project descriptions for specific job roles.
+      systemPrompt = `You are an expert resume writer specializing in tailoring project descriptions for specific job roles. Your PRIMARY task is to analyze each project in relation to the target job, then rewrite it to showcase the most relevant technical skills and outcomes that make the candidate ideal for that position.
+
+TAILORING METHODOLOGY:
+1. ANALYZE: Examine the job description to identify required technologies, methodologies, and technical competencies
+2. CONNECT: Find which aspects of the project demonstrate those exact competencies
+3. REWRITE: Transform project descriptions to foreground relevant technologies and outcomes
+4. OPTIMIZE: Use technical keywords from the job description and emphasize results that match role expectations
 
 CRITICAL REQUIREMENTS:
 1. Be 100% truthful - do not add fake technologies or achievements
 2. NO asterisks (*) in the output
 3. Maintain bullet point format with • symbols
-4. STRICT LENGTH LIMIT: Each bullet point MUST be 1 line (80-100 characters max), very rarely 1.5 lines (120 characters absolute max)
-5. Be extremely concise while preserving important information
-6. Focus on relevant technologies and outcomes
-7. Use ATS-friendly keywords from the job description
-8. Emphasize technical skills relevant to the target role
-9. Include metrics and impact where possible
-10. Highlight problem-solving and results
-11. Remove filler words and unnecessary details
-12. Prioritize the most relevant technical achievements
+4. STRICT LENGTH LIMIT: Each bullet point MUST be 1 line (75-95 characters), maximum 2 lines only in rare cases (110 characters absolute max)
+5. Prioritize mentioning technologies, frameworks, and tools explicitly required in the job description
+6. Reframe technical accomplishments to align with the target role's technical challenges
+7. Quantify impact with specific metrics wherever possible
+8. Emphasize problem-solving approaches relevant to the target position
+9. Use terminology and technical language from the job description
+10. Remove any technical details that don't strengthen fit for this specific role
+
+TAILORING APPROACH:
+- If job requires React → prominently mention React and related ecosystem tools
+- If job needs cloud experience → highlight AWS/Azure/GCP usage and outcomes
+- If job emphasizes scalability → feature scalability achievements and metrics
+- If job wants microservices → foreground microservices architecture experience
+- Match the technical stack and methodologies mentioned in job requirements
 
 LENGTH ENFORCEMENT:
-- Count characters carefully - aim for 80-100 characters per bullet
-- Only use 1.5 lines (up to 120 characters) for truly critical information
-- Remove redundant phrases like "built a", "created a", "developed a"
-- Use tech abbreviations where standard (e.g., "JS" for JavaScript, "DB" for database)
-- Combine related technical details into single, powerful statements
-- Focus on impact and technologies most relevant to the target role
+- Target 75-95 characters per bullet (ideal: 1 line)
+- Rarely extend to 110 characters (2 lines) only for highly relevant technical achievements
+- Eliminate filler: "built a", "created a", "developed a", "worked on"
+- Use standard tech abbreviations: "JS" (JavaScript), "DB" (database), "API" (keep as-is)
+- Every word must demonstrate relevant technical competency
 
 Format: Return only the bullet points, one per line, starting with •`;
 
@@ -156,30 +202,49 @@ ${jobDescription ? `Job Description: ${jobDescription}` : ''}
 Current Project Description:
 ${content}
 
-Rewrite this project description to be more relevant for the "${jobTitle}" role. Keep all information truthful but emphasize technologies, methodologies, and outcomes most relevant to the target position.
+TASK: Carefully read the job description above. For EACH bullet point in the project:
+1. Identify which technologies and outcomes align with job requirements
+2. Rewrite to emphasize those technologies using job description keywords
+3. Highlight technical achievements that demonstrate competencies needed for the role
+4. Remove technical details that aren't relevant to THIS specific position
 
-EXAMPLES OF GOOD LENGTH (80-100 characters):
-• Built React dashboard with real-time analytics, increasing user engagement by 35%
-• Developed REST API using Node.js and MongoDB, handling 10K+ requests per minute
-• Implemented OAuth authentication and JWT tokens, securing 50K+ user accounts
+EXAMPLES OF EFFECTIVE TAILORING (75-95 characters):
+• Built React dashboard with Redux & real-time WebSocket updates, boosting engagement 35%
+• Developed Node.js REST API with MongoDB, processing 10K+ requests/min at <100ms
+• Implemented OAuth 2.0 & JWT authentication system, securing 50K+ user accounts
 
-EXAMPLES OF ACCEPTABLE 1.5 LINES (up to 120 characters):
-• Created full-stack inventory mgmt system using Python/Django and PostgreSQL, reducing processing time by 70%
+RARE 2-LINE EXAMPLES (up to 110 characters max):
+• Architected microservices platform using Docker & Kubernetes, scaling to 1M users with 99.9% uptime
 
-Focus on relevant technologies and measurable outcomes while staying within character limits.`;
+Make the candidate's projects demonstrate they have the exact technical skills needed for "${jobTitle}".`;
 
     } else if (type === 'skills') {
-      systemPrompt = `You are an expert resume writer specializing in tailoring skills lists for specific job roles.
+      systemPrompt = `You are an expert resume writer specializing in tailoring skills lists for specific job roles. Your PRIMARY task is to analyze the job description to understand which skills are most critical, then reorder and optimize the candidate's skills list to maximize relevance for that specific position.
+
+TAILORING METHODOLOGY:
+1. ANALYZE: Extract required and preferred skills from the job description
+2. CONNECT: Match the candidate's existing skills to job requirements
+3. PRIORITIZE: Reorder skills to place the most relevant ones first
+4. OPTIMIZE: Add highly relevant skills the candidate likely has based on their background, remove irrelevant ones
 
 CRITICAL REQUIREMENTS:
-1. Only suggest skills that are commonly associated with the job title
+1. Only include skills that are realistic given the candidate's background
 2. NO asterisks (*) in the output
-3. Prioritize the most relevant skills for the target role
-4. Include both technical and soft skills as appropriate
-5. Use industry-standard skill names
-6. Focus on skills mentioned in the job description
-7. Maintain a reasonable number of skills (8-15 total)
-8. Order skills by relevance to the target role
+3. Place the most job-relevant skills at the beginning of the list
+4. Use exact skill names as they appear in the job description when possible
+5. Include both technical and soft skills as emphasized in the job description
+6. Use industry-standard naming conventions (e.g., "JavaScript" not "Javascript")
+7. Maintain 10-16 skills total (not too few, not overwhelming)
+8. Group related skills logically (e.g., all frontend frameworks together)
+9. Remove skills that don't strengthen candidacy for THIS specific role
+10. Match skill terminology to job description language
+
+TAILORING APPROACH:
+- If job emphasizes "Python" → ensure Python is near the top, add related tools (Django, Flask, etc.)
+- If job requires "leadership" → include leadership-related soft skills prominently
+- If job needs cloud expertise → prioritize AWS/Azure/GCP and related services
+- If job mentions specific frameworks → feature those frameworks early in the list
+- Order: Job-critical skills first → highly relevant skills → supporting skills
 
 Format: Return skills as a comma-separated list without bullet points.`;
 
@@ -193,7 +258,14 @@ Context - User's Background:
 - Experience: ${context.allExperiences?.map(exp => `${exp.position} at ${exp.company}`).join(', ') || 'Not specified'}
 - Projects: ${context.allProjects?.map(proj => proj.name).join(', ') || 'Not specified'}
 
-Suggest a tailored skills list for the "${jobTitle}" role. Prioritize skills most relevant to this position while keeping the list realistic based on the user's background.`;
+TASK: Read the job description carefully and identify the most important skills for the "${jobTitle}" role. Then:
+1. Reorder the candidate's existing skills to put the most relevant ones first
+2. Add any critical skills from the job description that the candidate likely possesses based on their background
+3. Remove skills that don't strengthen their candidacy for this specific position
+4. Use exact terminology from the job description where applicable
+5. Ensure the final list makes the candidate appear perfectly matched for the role
+
+The recruiter should immediately see the exact skills they're looking for at the top of the list.`;
     }
 
     // Call OpenAI API
@@ -205,12 +277,12 @@ Suggest a tailored skills list for the "${jobTitle}" role. Prioritize skills mos
           content: systemPrompt
         },
         {
-          role: 'user', 
+          role: 'user',
           content: userPrompt
         }
       ],
-      max_tokens: 1000,
-      temperature: 0.3, // Low temperature for consistent, professional output
+      max_tokens: 1200,
+      temperature: 0.2, // Very low temperature for precise, consistent tailoring
     });
 
     const tailoredContent = completion.choices[0]?.message?.content;
@@ -220,34 +292,34 @@ Suggest a tailored skills list for the "${jobTitle}" role. Prioritize skills mos
 
     // Post-process content to ensure length compliance for bullet points
     let processedContent = tailoredContent.trim();
-    
+
     if (type === 'experience' || type === 'project') {
       const lines = processedContent.split('\n').filter(line => line.trim());
       const processedLines = lines.map(line => {
         const cleanLine = line.trim();
-        
-        // Check if line is too long (over 120 characters)
-        if (cleanLine.length > 120) {
+
+        // Check if line is too long (over 110 characters - strict limit)
+        if (cleanLine.length > 110) {
           console.log(`Warning: Line too long (${cleanLine.length} chars): ${cleanLine.substring(0, 50)}...`);
-          
+
           // Try to truncate intelligently at word boundaries
           const words = cleanLine.split(' ');
           let truncated = '';
-          
+
           for (const word of words) {
-            if ((truncated + ' ' + word).length <= 115) { // Leave room for ellipsis
+            if ((truncated + ' ' + word).length <= 105) { // Leave room for ellipsis
               truncated += (truncated ? ' ' : '') + word;
             } else {
               break;
             }
           }
-          
+
           return truncated + (truncated.length < cleanLine.length ? '...' : '');
         }
-        
+
         return cleanLine;
       });
-      
+
       processedContent = processedLines.join('\n');
     }
 

@@ -1,0 +1,138 @@
+{
+  "family": "resumemax-browser-service",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "2048",
+  "memory": "4096",
+  "executionRoleArn": "arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/resumemax-browser-task-role",
+  "containerDefinitions": [
+    {
+      "name": "browser-service",
+      "image": "YOUR_AWS_ACCOUNT_ID.dkr.ecr.YOUR_REGION.amazonaws.com/resumemax-browser-service:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "ENVIRONMENT",
+          "value": "production"
+        },
+        {
+          "name": "LOG_LEVEL",
+          "value": "INFO"
+        },
+        {
+          "name": "REDIS_URL",
+          "value": "redis://resumemax-redis.YOUR_REGION.cache.amazonaws.com:6379/0"
+        },
+        {
+          "name": "QUEUE_NAME",
+          "value": "browser-automation"
+        },
+        {
+          "name": "HEADLESS",
+          "value": "true"
+        },
+        {
+          "name": "MAX_BROWSER_SESSIONS",
+          "value": "3"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:YOUR_REGION:YOUR_AWS_ACCOUNT_ID:secret:resumemax/browser-service/api-key"
+        },
+        {
+          "name": "OPENAI_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:YOUR_REGION:YOUR_AWS_ACCOUNT_ID:secret:resumemax/openai-api-key"
+        },
+        {
+          "name": "ANTHROPIC_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:YOUR_REGION:YOUR_AWS_ACCOUNT_ID:secret:resumemax/anthropic-api-key"
+        },
+        {
+          "name": "SENTRY_DSN",
+          "valueFrom": "arn:aws:secretsmanager:YOUR_REGION:YOUR_AWS_ACCOUNT_ID:secret:resumemax/sentry-dsn"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/resumemax-browser-service",
+          "awslogs-region": "YOUR_REGION",
+          "awslogs-stream-prefix": "browser-service"
+        }
+      },
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\" || exit 1"
+        ],
+        "interval": 30,
+        "timeout": 10,
+        "retries": 3,
+        "startPeriod": 60
+      },
+      "mountPoints": [],
+      "volumesFrom": []
+    },
+    {
+      "name": "worker",
+      "image": "YOUR_AWS_ACCOUNT_ID.dkr.ecr.YOUR_REGION.amazonaws.com/resumemax-browser-service:latest",
+      "essential": true,
+      "command": ["rq", "worker", "--url", "redis://resumemax-redis.YOUR_REGION.cache.amazonaws.com:6379/0", "browser-automation"],
+      "environment": [
+        {
+          "name": "ENVIRONMENT",
+          "value": "production"
+        },
+        {
+          "name": "LOG_LEVEL",
+          "value": "INFO"
+        },
+        {
+          "name": "REDIS_URL",
+          "value": "redis://resumemax-redis.YOUR_REGION.cache.amazonaws.com:6379/0"
+        },
+        {
+          "name": "HEADLESS",
+          "value": "true"
+        },
+        {
+          "name": "MAX_BROWSER_SESSIONS",
+          "value": "1"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "OPENAI_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:YOUR_REGION:YOUR_AWS_ACCOUNT_ID:secret:resumemax/openai-api-key"
+        },
+        {
+          "name": "ANTHROPIC_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:YOUR_REGION:YOUR_AWS_ACCOUNT_ID:secret:resumemax/anthropic-api-key"
+        },
+        {
+          "name": "SENTRY_DSN",
+          "valueFrom": "arn:aws:secretsmanager:YOUR_REGION:YOUR_AWS_ACCOUNT_ID:secret:resumemax/sentry-dsn"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/resumemax-browser-worker",
+          "awslogs-region": "YOUR_REGION",
+          "awslogs-stream-prefix": "worker"
+        }
+      },
+      "mountPoints": [],
+      "volumesFrom": []
+    }
+  ]
+}

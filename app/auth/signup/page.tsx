@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { UserPlus, Mail, Lock, User, AlertCircle, Loader2, CheckCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/src/contexts/AuthContext';
+import { useOnboarding, saveOnboardingDataToDatabase } from '@/src/contexts/OnboardingContext';
 
 function SignUpForm() {
   const [fullName, setFullName] = useState('');
@@ -20,6 +21,7 @@ function SignUpForm() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const { signUp, signInWithGoogle, user } = useAuth();
+  const { onboardingData, clearOnboardingData } = useOnboarding();
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnTo = searchParams.get('returnTo') || '/dashboard';
@@ -58,6 +60,33 @@ function SignUpForm() {
         return;
       }
       setSuccess(true);
+      
+      // Save onboarding data to database if it exists
+      if (Object.keys(onboardingData).length > 0) {
+        console.log('Saving onboarding data to database...');
+        // Wait a moment for the user to be fully created
+        setTimeout(async () => {
+          try {
+            // Get the current user (should be available after signup)
+            const { createSupabaseClient } = await import('@/src/lib/supabase');
+            const supabase = createSupabaseClient();
+            const { data: { user: currentUser } } = await supabase.auth.getUser();
+            
+            if (currentUser) {
+              const result = await saveOnboardingDataToDatabase(currentUser.id, onboardingData);
+              if (result.success) {
+                console.log('✅ Onboarding data saved successfully');
+                clearOnboardingData(); // Clear the context data
+              } else {
+                console.error('❌ Failed to save onboarding data:', result.error);
+              }
+            }
+          } catch (saveError) {
+            console.error('Error saving onboarding data:', saveError);
+          }
+        }, 1000);
+      }
+      
       // Redirect after successful signup
       setTimeout(() => {
         const destination = returnTo || '/dashboard';
@@ -100,18 +129,46 @@ function SignUpForm() {
               <CardContent className="pt-6 text-center">
                 <CheckCircle className="h-16 w-16 text-green-600 mx-auto mb-4" />
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                  Check Your Email
+                  Account Created Successfully!
                 </h2>
                 <p className="text-gray-600 mb-6">
-                  We&apos;ve sent you a confirmation email at <strong>{email}</strong>. 
+                  We&apos;ve sent you a confirmation email at <strong>{email}</strong>.
                   Please click the link in the email to verify your account.
                 </p>
-                <Button
-                  onClick={() => router.push('/auth/login')}
-                  className="w-full"
-                >
-                  Go to Sign In
-                </Button>
+
+                {/* Gmail Connection Prompt */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                  <Mail className="h-8 w-8 text-blue-600 mx-auto mb-2" />
+                  <h3 className="font-semibold text-gray-900 mb-2">
+                    Connect Your Gmail (Recommended)
+                  </h3>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Enable automatic email verification for job applications.
+                    We&apos;ll handle verification codes and confirmation links automatically.
+                  </p>
+                  <Button
+                    onClick={() => {
+                      // The user will be created after they verify their email
+                      // For now, we'll store in localStorage and prompt again on dashboard
+                      localStorage.setItem('prompt_gmail_connection', 'true');
+                      router.push('/dashboard');
+                    }}
+                    className="w-full bg-blue-600 hover:bg-blue-700 mb-2"
+                  >
+                    Connect Gmail Now
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => router.push('/dashboard')}
+                    className="w-full"
+                  >
+                    Skip for Now
+                  </Button>
+                </div>
+
+                <p className="text-xs text-gray-500">
+                  You can connect Gmail later from your dashboard settings
+                </p>
               </CardContent>
             </Card>
           </motion.div>

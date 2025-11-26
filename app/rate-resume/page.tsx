@@ -26,6 +26,8 @@ import {
 import { motion } from "framer-motion";
 import { useAuth } from "@/src/contexts/AuthContext";
 import MixpanelService, { type PageEvent } from "@/src/lib/mixpanel";
+import { getUserSubscription } from "@/src/lib/subscription";
+import { PaywallOverlay } from "@/src/components/PaywallOverlay";
 
 function RateResumeContent() {
   const { session, user } = useAuth();
@@ -39,6 +41,29 @@ function RateResumeContent() {
       user_id: user?.id,
     };
     MixpanelService.trackPageView(pageEvent);
+  }, [user?.id]);
+
+  // Check subscription status
+  React.useEffect(() => {
+    const checkSubscription = async () => {
+      if (!user?.id) {
+        setSubscriptionStatus('free');
+        setLoadingSubscription(false);
+        return;
+      }
+
+      try {
+        const subscription = await getUserSubscription(user.id);
+        setSubscriptionStatus(subscription.planName);
+      } catch (error) {
+        console.error('Error fetching subscription:', error);
+        setSubscriptionStatus('free');
+      } finally {
+        setLoadingSubscription(false);
+      }
+    };
+
+    checkSubscription();
   }, [user?.id]);
 
   const [step, setStep] = useState(1);
@@ -59,6 +84,10 @@ function RateResumeContent() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Subscription states
+  const [subscriptionStatus, setSubscriptionStatus] = useState<'free' | 'basic' | 'unlimited'>('free');
+  const [loadingSubscription, setLoadingSubscription] = useState(true);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
@@ -511,23 +540,47 @@ function RateResumeContent() {
 
                     {/* Scores Grid */}
                     <div className="grid grid-cols-2 gap-6">
-                      {/* Overall Score */}
-                      <div className="text-center">
-                        <h3 className="text-lg font-medium mb-2">Overall</h3>
-                        <div className="text-4xl font-bold mb-2">{analysisResults.scores.overall}</div>
-                        <div className="w-full bg-gray-700 rounded-full h-2">
-                          <div 
-                            className={`h-2 rounded-full ${
-                              analysisResults.scores.overall >= 90 ? 'bg-green-500' :
-                              analysisResults.scores.overall >= 75 ? 'bg-yellow-500' :
-                              analysisResults.scores.overall >= 60 ? 'bg-orange-500' : 'bg-red-500'
-                            }`}
-                            style={{ width: `${analysisResults.scores.overall}%` }}
-                          />
+                      {/* Overall Score - Paywall for free users */}
+                      {subscriptionStatus === 'free' ? (
+                        <PaywallOverlay
+                          title="Unlock Detailed Scores"
+                          description="Get your complete resume analysis with all scoring metrics"
+                          upgradeText="Upgrade from $7/month"
+                          showUpgrade={true}
+                        >
+                          <div className="text-center">
+                            <h3 className="text-lg font-medium mb-2">Overall</h3>
+                            <div className="text-4xl font-bold mb-2">{analysisResults.scores.overall}</div>
+                            <div className="w-full bg-gray-700 rounded-full h-2">
+                              <div 
+                                className={`h-2 rounded-full ${
+                                  analysisResults.scores.overall >= 90 ? 'bg-green-500' :
+                                  analysisResults.scores.overall >= 75 ? 'bg-yellow-500' :
+                                  analysisResults.scores.overall >= 60 ? 'bg-orange-500' : 'bg-red-500'
+                                }`}
+                                style={{ width: `${analysisResults.scores.overall}%` }}
+                              />
+                            </div>
+                          </div>
+                        </PaywallOverlay>
+                      ) : (
+                        <div className="text-center">
+                          <h3 className="text-lg font-medium mb-2">Overall</h3>
+                          <div className="text-4xl font-bold mb-2">{analysisResults.scores.overall}</div>
+                          <div className="w-full bg-gray-700 rounded-full h-2">
+                            <div 
+                              className={`h-2 rounded-full ${
+                                analysisResults.scores.overall >= 90 ? 'bg-green-500' :
+                                analysisResults.scores.overall >= 75 ? 'bg-yellow-500' :
+                                analysisResults.scores.overall >= 60 ? 'bg-orange-500' : 'bg-red-500'
+                              }`}
+                              style={{ width: `${analysisResults.scores.overall}%` }}
+                            />
+                          </div>
                         </div>
-                      </div>
+                      )}
 
-                      {/* Potential Score */}
+                      {/* Potential Score - Always visible */}
                       <div className="text-center">
                         <h3 className="text-lg font-medium mb-2">Potential</h3>
                         <div className="text-4xl font-bold mb-2">{analysisResults.scores.potential}</div>
@@ -539,65 +592,157 @@ function RateResumeContent() {
                         </div>
                       </div>
 
-                      {/* ATS Score */}
-                      <div className="text-center">
-                        <h3 className="text-lg font-medium mb-2">ATS Readiness</h3>
-                        <div className="text-4xl font-bold mb-2">{analysisResults.scores.ats}</div>
-                        <div className="w-full bg-gray-700 rounded-full h-2">
-                          <div 
-                            className={`h-2 rounded-full ${
-                              analysisResults.scores.ats >= 90 ? 'bg-green-500' :
-                              analysisResults.scores.ats >= 75 ? 'bg-yellow-500' : 'bg-orange-500'
-                            }`}
-                            style={{ width: `${analysisResults.scores.ats}%` }}
-                          />
+                      {/* ATS Score - Paywall for free users */}
+                      {subscriptionStatus === 'free' ? (
+                        <PaywallOverlay
+                          title="Unlock ATS Analysis"
+                          description="See how well your resume passes through ATS systems"
+                          upgradeText="Upgrade from $7/month"
+                          showUpgrade={true}
+                        >
+                          <div className="text-center">
+                            <h3 className="text-lg font-medium mb-2">ATS Readiness</h3>
+                            <div className="text-4xl font-bold mb-2">{analysisResults.scores.ats}</div>
+                            <div className="w-full bg-gray-700 rounded-full h-2">
+                              <div 
+                                className={`h-2 rounded-full ${
+                                  analysisResults.scores.ats >= 90 ? 'bg-green-500' :
+                                  analysisResults.scores.ats >= 75 ? 'bg-yellow-500' : 'bg-orange-500'
+                                }`}
+                                style={{ width: `${analysisResults.scores.ats}%` }}
+                              />
+                            </div>
+                          </div>
+                        </PaywallOverlay>
+                      ) : (
+                        <div className="text-center">
+                          <h3 className="text-lg font-medium mb-2">ATS Readiness</h3>
+                          <div className="text-4xl font-bold mb-2">{analysisResults.scores.ats}</div>
+                          <div className="w-full bg-gray-700 rounded-full h-2">
+                            <div 
+                              className={`h-2 rounded-full ${
+                                analysisResults.scores.ats >= 90 ? 'bg-green-500' :
+                                analysisResults.scores.ats >= 75 ? 'bg-yellow-500' : 'bg-orange-500'
+                              }`}
+                              style={{ width: `${analysisResults.scores.ats}%` }}
+                            />
+                          </div>
                         </div>
-                      </div>
+                      )}
 
-                      {/* Alignment Score */}
-                      <div className="text-center">
-                        <h3 className="text-lg font-medium mb-2">Job Alignment</h3>
-                        <div className="text-4xl font-bold mb-2">{analysisResults.scores.alignment}</div>
-                        <div className="w-full bg-gray-700 rounded-full h-2">
-                          <div 
-                            className={`h-2 rounded-full ${
-                              analysisResults.scores.alignment >= 90 ? 'bg-green-500' :
-                              analysisResults.scores.alignment >= 75 ? 'bg-yellow-500' : 'bg-orange-500'
-                            }`}
-                            style={{ width: `${analysisResults.scores.alignment}%` }}
-                          />
+                      {/* Alignment Score - Paywall for free users */}
+                      {subscriptionStatus === 'free' ? (
+                        <PaywallOverlay
+                          title="Unlock Job Alignment"
+                          description="See how well your resume matches the target job"
+                          upgradeText="Upgrade from $7/month"
+                          showUpgrade={true}
+                        >
+                          <div className="text-center">
+                            <h3 className="text-lg font-medium mb-2">Job Alignment</h3>
+                            <div className="text-4xl font-bold mb-2">{analysisResults.scores.alignment}</div>
+                            <div className="w-full bg-gray-700 rounded-full h-2">
+                              <div 
+                                className={`h-2 rounded-full ${
+                                  analysisResults.scores.alignment >= 90 ? 'bg-green-500' :
+                                  analysisResults.scores.alignment >= 75 ? 'bg-yellow-500' : 'bg-orange-500'
+                                }`}
+                                style={{ width: `${analysisResults.scores.alignment}%` }}
+                              />
+                            </div>
+                          </div>
+                        </PaywallOverlay>
+                      ) : (
+                        <div className="text-center">
+                          <h3 className="text-lg font-medium mb-2">Job Alignment</h3>
+                          <div className="text-4xl font-bold mb-2">{analysisResults.scores.alignment}</div>
+                          <div className="w-full bg-gray-700 rounded-full h-2">
+                            <div 
+                              className={`h-2 rounded-full ${
+                                analysisResults.scores.alignment >= 90 ? 'bg-green-500' :
+                                analysisResults.scores.alignment >= 75 ? 'bg-yellow-500' : 'bg-orange-500'
+                              }`}
+                              style={{ width: `${analysisResults.scores.alignment}%` }}
+                            />
+                          </div>
                         </div>
-                      </div>
+                      )}
 
-                      {/* Impact Score */}
-                      <div className="text-center">
-                        <h3 className="text-lg font-medium mb-2">Impact</h3>
-                        <div className="text-4xl font-bold mb-2">{analysisResults.scores.impact}</div>
-                        <div className="w-full bg-gray-700 rounded-full h-2">
-                          <div 
-                            className={`h-2 rounded-full ${
-                              analysisResults.scores.impact >= 90 ? 'bg-green-500' :
-                              analysisResults.scores.impact >= 75 ? 'bg-yellow-500' : 'bg-orange-500'
-                            }`}
-                            style={{ width: `${analysisResults.scores.impact}%` }}
-                          />
+                      {/* Impact Score - Paywall for free users */}
+                      {subscriptionStatus === 'free' ? (
+                        <PaywallOverlay
+                          title="Unlock Impact Analysis"
+                          description="Discover how impactful your achievements appear"
+                          upgradeText="Upgrade from $7/month"
+                          showUpgrade={true}
+                        >
+                          <div className="text-center">
+                            <h3 className="text-lg font-medium mb-2">Impact</h3>
+                            <div className="text-4xl font-bold mb-2">{analysisResults.scores.impact}</div>
+                            <div className="w-full bg-gray-700 rounded-full h-2">
+                              <div 
+                                className={`h-2 rounded-full ${
+                                  analysisResults.scores.impact >= 90 ? 'bg-green-500' :
+                                  analysisResults.scores.impact >= 75 ? 'bg-yellow-500' : 'bg-orange-500'
+                                }`}
+                                style={{ width: `${analysisResults.scores.impact}%` }}
+                              />
+                            </div>
+                          </div>
+                        </PaywallOverlay>
+                      ) : (
+                        <div className="text-center">
+                          <h3 className="text-lg font-medium mb-2">Impact</h3>
+                          <div className="text-4xl font-bold mb-2">{analysisResults.scores.impact}</div>
+                          <div className="w-full bg-gray-700 rounded-full h-2">
+                            <div 
+                              className={`h-2 rounded-full ${
+                                analysisResults.scores.impact >= 90 ? 'bg-green-500' :
+                                analysisResults.scores.impact >= 75 ? 'bg-yellow-500' : 'bg-orange-500'
+                              }`}
+                              style={{ width: `${analysisResults.scores.impact}%` }}
+                            />
+                          </div>
                         </div>
-                      </div>
+                      )}
 
-                      {/* Polish Score */}
-                      <div className="text-center">
-                        <h3 className="text-lg font-medium mb-2">Polish</h3>
-                        <div className="text-4xl font-bold mb-2">{analysisResults.scores.polish}</div>
-                        <div className="w-full bg-gray-700 rounded-full h-2">
-                          <div 
-                            className={`h-2 rounded-full ${
-                              analysisResults.scores.polish >= 90 ? 'bg-green-500' :
-                              analysisResults.scores.polish >= 75 ? 'bg-yellow-500' : 'bg-orange-500'
-                            }`}
-                            style={{ width: `${analysisResults.scores.polish}%` }}
-                          />
+                      {/* Polish Score - Paywall for free users */}
+                      {subscriptionStatus === 'free' ? (
+                        <PaywallOverlay
+                          title="Unlock Polish Analysis"
+                          description="Get feedback on your resume's formatting and presentation"
+                          upgradeText="Upgrade from $7/month"
+                          showUpgrade={true}
+                        >
+                          <div className="text-center">
+                            <h3 className="text-lg font-medium mb-2">Polish</h3>
+                            <div className="text-4xl font-bold mb-2">{analysisResults.scores.polish}</div>
+                            <div className="w-full bg-gray-700 rounded-full h-2">
+                              <div 
+                                className={`h-2 rounded-full ${
+                                  analysisResults.scores.polish >= 90 ? 'bg-green-500' :
+                                  analysisResults.scores.polish >= 75 ? 'bg-yellow-500' : 'bg-orange-500'
+                                }`}
+                                style={{ width: `${analysisResults.scores.polish}%` }}
+                              />
+                            </div>
+                          </div>
+                        </PaywallOverlay>
+                      ) : (
+                        <div className="text-center">
+                          <h3 className="text-lg font-medium mb-2">Polish</h3>
+                          <div className="text-4xl font-bold mb-2">{analysisResults.scores.polish}</div>
+                          <div className="w-full bg-gray-700 rounded-full h-2">
+                            <div 
+                              className={`h-2 rounded-full ${
+                                analysisResults.scores.polish >= 90 ? 'bg-green-500' :
+                                analysisResults.scores.polish >= 75 ? 'bg-yellow-500' : 'bg-orange-500'
+                              }`}
+                              style={{ width: `${analysisResults.scores.polish}%` }}
+                            />
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
 
                     {/* Percentile and Label */}
@@ -618,66 +763,138 @@ function RateResumeContent() {
                 </Card>
 
                 {/* Recommendations */}
-                <div className="grid md:grid-cols-2 gap-6">
-                  {/* Strengths */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-green-600 flex items-center gap-2">
-                        <CheckCircle className="h-5 w-5" />
-                        Strengths
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <ul className="space-y-2">
-                        {analysisResults.strengths.map((strength: string, index: number) => (
-                          <li key={index} className="flex items-start gap-2">
-                            <div className="w-2 h-2 bg-green-500 rounded-full mt-2 flex-shrink-0" />
-                            <span className="text-sm text-gray-700">{strength}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </CardContent>
-                  </Card>
+                {subscriptionStatus === 'free' ? (
+                  <PaywallOverlay
+                    title="Unlock Detailed Feedback"
+                    description="Get personalized strengths, improvements, and actionable recommendations"
+                    upgradeText="Upgrade from $7/month"
+                    showUpgrade={true}
+                  >
+                    <div className="grid md:grid-cols-2 gap-6">
+                      {/* Strengths */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-green-600 flex items-center gap-2">
+                            <CheckCircle className="h-5 w-5" />
+                            Strengths
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <ul className="space-y-2">
+                            {analysisResults.strengths.map((strength: string, index: number) => (
+                              <li key={index} className="flex items-start gap-2">
+                                <div className="w-2 h-2 bg-green-500 rounded-full mt-2 flex-shrink-0" />
+                                <span className="text-sm text-gray-700">{strength}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </CardContent>
+                      </Card>
 
-                  {/* Areas for Improvement */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-orange-600 flex items-center gap-2">
-                        <AlertCircle className="h-5 w-5" />
-                        Areas for Improvement
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <ul className="space-y-2">
-                        {analysisResults.improvements.map((improvement: string, index: number) => (
-                          <li key={index} className="flex items-start gap-2">
-                            <div className="w-2 h-2 bg-orange-500 rounded-full mt-2 flex-shrink-0" />
-                            <span className="text-sm text-gray-700">{improvement}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                {/* Detailed Recommendations */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-blue-600 flex items-center gap-2">
-                      <Lightbulb className="h-5 w-5" />
-                      Actionable Recommendations
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      {analysisResults.recommendations.map((recommendation: string, index: number) => (
-                        <div key={index} className="p-4 bg-blue-50 rounded-lg border-l-4 border-blue-500">
-                          <p className="text-sm text-gray-700">{recommendation}</p>
-                        </div>
-                      ))}
+                      {/* Areas for Improvement */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-orange-600 flex items-center gap-2">
+                            <AlertCircle className="h-5 w-5" />
+                            Areas for Improvement
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <ul className="space-y-2">
+                            {analysisResults.improvements.map((improvement: string, index: number) => (
+                              <li key={index} className="flex items-start gap-2">
+                                <div className="w-2 h-2 bg-orange-500 rounded-full mt-2 flex-shrink-0" />
+                                <span className="text-sm text-gray-700">{improvement}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </CardContent>
+                      </Card>
                     </div>
-                  </CardContent>
-                </Card>
+
+                    {/* Detailed Recommendations */}
+                    <Card className="mt-6">
+                      <CardHeader>
+                        <CardTitle className="text-blue-600 flex items-center gap-2">
+                          <Lightbulb className="h-5 w-5" />
+                          Actionable Recommendations
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          {analysisResults.recommendations.map((recommendation: string, index: number) => (
+                            <div key={index} className="p-4 bg-blue-50 rounded-lg border-l-4 border-blue-500">
+                              <p className="text-sm text-gray-700">{recommendation}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </PaywallOverlay>
+                ) : (
+                  <>
+                    <div className="grid md:grid-cols-2 gap-6">
+                      {/* Strengths */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-green-600 flex items-center gap-2">
+                            <CheckCircle className="h-5 w-5" />
+                            Strengths
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <ul className="space-y-2">
+                            {analysisResults.strengths.map((strength: string, index: number) => (
+                              <li key={index} className="flex items-start gap-2">
+                                <div className="w-2 h-2 bg-green-500 rounded-full mt-2 flex-shrink-0" />
+                                <span className="text-sm text-gray-700">{strength}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </CardContent>
+                      </Card>
+
+                      {/* Areas for Improvement */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-orange-600 flex items-center gap-2">
+                            <AlertCircle className="h-5 w-5" />
+                            Areas for Improvement
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <ul className="space-y-2">
+                            {analysisResults.improvements.map((improvement: string, index: number) => (
+                              <li key={index} className="flex items-start gap-2">
+                                <div className="w-2 h-2 bg-orange-500 rounded-full mt-2 flex-shrink-0" />
+                                <span className="text-sm text-gray-700">{improvement}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    {/* Detailed Recommendations */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-blue-600 flex items-center gap-2">
+                          <Lightbulb className="h-5 w-5" />
+                          Actionable Recommendations
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          {analysisResults.recommendations.map((recommendation: string, index: number) => (
+                            <div key={index} className="p-4 bg-blue-50 rounded-lg border-l-4 border-blue-500">
+                              <p className="text-sm text-gray-700">{recommendation}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </>
+                )}
 
                 {/* Save/Error Messages */}
                 {saveError && (

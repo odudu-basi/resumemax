@@ -62,7 +62,13 @@ export default function Home() {
       user_id: user?.id,
     });
 
-    // If not authenticated, send to login then to the feature
+    // Allow unauthenticated users to access onboarding
+    if (targetPath === '/onboarding') {
+      router.push(targetPath);
+      return;
+    }
+
+    // For other features, require authentication
     if (!user) {
       router.push(`/auth/login?returnTo=${encodeURIComponent(targetPath)}`);
       return;
@@ -180,16 +186,17 @@ export default function Home() {
                 AI-Powered Resume Analysis
               </Badge>
               <h1 className="text-4xl font-bold tracking-tight text-black sm:text-6xl">
-                Maximize Your Resume's{" "}
+                Automate Your Job Applications{" "}
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-gray-700 to-black">
-                  Potential
+                  with AI
                 </span>
               </h1>
               <p className="mt-6 text-lg leading-8 text-gray-700 max-w-2xl mx-auto">
-                Get instant, AI-powered feedback on your resume. Discover what recruiters are looking for
-                and optimize your resume to land more interviews.
+                🤖 AI reads job posts, fills out applications, and uploads your resume. 
+                👤 You just review in 30 seconds and hit submit. 
+                ✨ It's that simple - no more copy-paste madness!
               </p>
-              <div className="mt-10 flex items-center justify-center">
+              <div className="mt-10 flex items-center justify-center gap-4">
                 <motion.div
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
@@ -197,14 +204,129 @@ export default function Home() {
                   <Button
                     size="lg"
                     className="text-lg px-8 py-3 bg-gradient-to-r from-gray-800 to-black text-white hover:from-gray-700 hover:to-gray-900"
-                    onClick={() => handleFeatureClick('/dashboard')}
+                    onClick={() => handleFeatureClick('/onboarding')}
                   >
                     Get Started
                   </Button>
                 </motion.div>
+                <motion.div
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <Link href="/smart-jobs">
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      className="text-lg px-8 py-3 border-2 border-gray-800 text-gray-800 hover:bg-gray-800 hover:text-white"
+                    >
+                      Smart Job Search
+                    </Button>
+                  </Link>
+                </motion.div>
               </div>
             </motion.div>
           </div>
+        </div>
+      </section>
+
+      {/* AI Workflow Section */}
+      <section className="relative z-10 py-8">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            className="max-w-4xl mx-auto text-center"
+          >
+            <div className="bg-white/60 backdrop-blur-xl border border-white/50 rounded-3xl p-8 sm:p-12 shadow-2xl">
+              <div className="mb-8">
+                <h2 className="text-3xl sm:text-4xl font-bold text-black mb-4">
+                  Let AI Handle Your Job Applications
+                </h2>
+                <p className="text-xl text-gray-600 font-medium">
+                  You Just Review and Submit ✨
+                </p>
+              </div>
+              
+              <div className="grid md:grid-cols-2 gap-12 items-center mb-8">
+                {/* AI Side */}
+                <div className="relative">
+                  <div className="bg-gradient-to-br from-blue-500 via-purple-600 to-indigo-700 rounded-2xl p-6 text-white shadow-xl">
+                    <div className="flex items-center mb-4">
+                      <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center mr-3">
+                        <span className="text-lg font-bold">🤖</span>
+                      </div>
+                      <h3 className="text-xl font-bold">AI Does All The Work</h3>
+                    </div>
+                    <ul className="space-y-2 text-sm">
+                      <li className="flex items-center">
+                        <span className="mr-2">✓</span>
+                        Reads job requirements
+                      </li>
+                      <li className="flex items-center">
+                        <span className="mr-2">✓</span>
+                        Fills out entire application
+                      </li>
+                      <li className="flex items-center">
+                        <span className="mr-2">✓</span>
+                        Uploads your resume
+                      </li>
+                      <li className="flex items-center">
+                        <span className="mr-2">✓</span>
+                        Answers all questions intelligently
+                      </li>
+                    </ul>
+                  </div>
+                  <div className="absolute -top-2 -right-2 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+                    <span className="text-xs text-white font-bold">AI</span>
+                  </div>
+                </div>
+
+                {/* You Side */}
+                <div className="relative">
+                  <div className="bg-gradient-to-br from-emerald-500 via-teal-600 to-cyan-700 rounded-2xl p-6 text-white shadow-xl">
+                    <div className="flex items-center mb-4">
+                      <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center mr-3">
+                        <span className="text-lg font-bold">👤</span>
+                      </div>
+                      <h3 className="text-xl font-bold">You Just Review & Submit</h3>
+                    </div>
+                    <ul className="space-y-2 text-sm">
+                      <li className="flex items-center">
+                        <span className="mr-2">👀</span>
+                        Quick 30-second review
+                      </li>
+                      <li className="flex items-center">
+                        <span className="mr-2">✏️</span>
+                        Make any final tweaks
+                      </li>
+                      <li className="flex items-center">
+                        <span className="mr-2">🚀</span>
+                        Hit submit and you're done!
+                      </li>
+                      <li className="flex items-center">
+                        <span className="mr-2">☕</span>
+                        Grab coffee while AI works
+                      </li>
+                    </ul>
+                  </div>
+                  <div className="absolute -top-2 -right-2 w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center">
+                    <span className="text-xs text-white font-bold">YOU</span>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Bottom Quote */}
+              <div className="text-center p-6 bg-gradient-to-r from-gray-800 to-black rounded-2xl text-white">
+                <p className="text-2xl font-bold mb-2">
+                  "I went from spending 2 hours on applications to 2 minutes"
+                </p>
+                <p className="text-gray-300">
+                  Stop the copy-paste madness. Let AI handle your job applications while you focus on landing interviews.
+                </p>
+              </div>
+            </div>
+          </motion.div>
         </div>
       </section>
 
@@ -488,7 +610,7 @@ export default function Home() {
                 <Button
                   size="lg"
                   className="text-lg px-8 py-3 bg-white text-black hover:bg-gray-100"
-                  onClick={() => handleFeatureClick('/dashboard')}
+                  onClick={() => handleFeatureClick('/onboarding')}
                 >
                   <Users className="mr-2 h-5 w-5" />
                   Get Started Free
@@ -498,6 +620,96 @@ export default function Home() {
           </motion.div>
         </div>
       </section>
+
+      {/* Footer */}
+      <footer className="relative z-10 border-t border-gray-800/50 bg-black/30 backdrop-blur-sm">
+        <div className="max-w-7xl mx-auto px-6 py-12">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+            {/* Brand Section */}
+            <div className="md:col-span-2">
+              <h3 className="text-xl font-bold text-white mb-3">ResumeMax.ai</h3>
+              <p className="text-gray-400 text-sm max-w-md">
+                AI-powered resume optimization and job application automation.
+                Land your dream job faster with intelligent matching and automated applications.
+              </p>
+              <p className="text-gray-500 text-xs mt-4">
+                Operated by Odanta LLC
+              </p>
+            </div>
+
+            {/* Product Links */}
+            <div>
+              <h4 className="text-sm font-semibold text-white mb-4 uppercase tracking-wider">Product</h4>
+              <ul className="space-y-2">
+                <li>
+                  <button
+                    onClick={() => handleFeatureClick('/dashboard')}
+                    className="text-gray-400 hover:text-white text-sm transition-colors"
+                  >
+                    Dashboard
+                  </button>
+                </li>
+                <li>
+                  <button
+                    onClick={() => handleFeatureClick('/pricing')}
+                    className="text-gray-400 hover:text-white text-sm transition-colors"
+                  >
+                    Pricing
+                  </button>
+                </li>
+                <li>
+                  <button
+                    onClick={() => handleFeatureClick('/onboarding')}
+                    className="text-gray-400 hover:text-white text-sm transition-colors"
+                  >
+                    Get Started
+                  </button>
+                </li>
+              </ul>
+            </div>
+
+            {/* Legal Links */}
+            <div>
+              <h4 className="text-sm font-semibold text-white mb-4 uppercase tracking-wider">Legal</h4>
+              <ul className="space-y-2">
+                <li>
+                  <Link
+                    href="/privacy"
+                    className="text-gray-400 hover:text-white text-sm transition-colors"
+                  >
+                    Privacy Policy
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/terms"
+                    className="text-gray-400 hover:text-white text-sm transition-colors"
+                  >
+                    Terms of Service
+                  </Link>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Bottom Bar */}
+          <div className="mt-12 pt-8 border-t border-gray-800/50">
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+              <p className="text-gray-500 text-sm">
+                &copy; {new Date().getFullYear()} Odanta LLC. All rights reserved.
+              </p>
+              <div className="flex items-center gap-6">
+                <a
+                  href="mailto:support@resumemax.ai"
+                  className="text-gray-400 hover:text-white text-sm transition-colors"
+                >
+                  support@resumemax.ai
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

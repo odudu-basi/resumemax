@@ -26,7 +26,7 @@ export const PLAN_LIMITS = {
     resumeDownloads: 10, // 10 downloads per month
     coverLetterAnalyses: 0,
     resumeTailoring: 25, // 25 tailor sessions per month
-    aiSectionTailoring: 12, // 12 AI section tailoring clicks
+    aiSectionTailoring: -1, // Unlimited AI section tailoring clicks
     templateAccess: false,
     prioritySupport: true,
   },
