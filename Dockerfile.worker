@@ -16,5 +16,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy browser-service code
 COPY browser-service/ .
 
-# Start RQ worker instead of main.py
-CMD ["rq", "worker", "--url", "${REDIS_URL}", "browser-automation"]
+# Start RQ worker - use shell form so environment variables are expanded
+CMD rq worker --url "$REDIS_URL" browser-automation
