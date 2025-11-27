@@ -6,9 +6,6 @@ import asyncio
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
-# Set Playwright browser path BEFORE any playwright imports
-os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "/ms-playwright"
-
 from pydantic import BaseModel
 from browser_use import Agent, Browser, BrowserConfig
 from dotenv import load_dotenv
