@@ -2,7 +2,7 @@
 browser-use==0.1.11
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
-playwright>=1.56.0
+playwright==1.55.0
 langchain==0.3.13
 langchain-openai==0.2.14
 langchain-core==0.3.28
