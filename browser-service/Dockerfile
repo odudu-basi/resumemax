@@ -8,6 +8,9 @@ WORKDIR /app
 ENV PYTHONUNBUFFERED=1
 # Tell Playwright to skip browser download (browsers already in base image)
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+# Force headless mode (no X11 display server on Railway)
+ENV HEADLESS=true
+ENV DISPLAY=:99
 
 # Copy requirements and install Python packages
 COPY requirements.txt .
