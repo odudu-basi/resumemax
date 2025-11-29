@@ -56,10 +56,17 @@ interface JobCardProps {
   job: JobCardData;
   userId: string | null;
   onAutoApply?: (job: JobCardData) => void;
+  onCloudApply?: (job: JobCardData) => void;
   autoApplyLoading?: boolean;
+  cloudApplyLoading?: boolean;
   notification?: {
     type: 'success' | 'error';
     message: string;
+  } | null;
+  cloudNotification?: {
+    type: 'success' | 'error';
+    message: string;
+    liveUrl?: string;
   } | null;
   showAutoApply?: boolean;
   autoApplyEnabled?: boolean;
@@ -70,8 +77,11 @@ export function JobCard({
   job,
   userId,
   onAutoApply,
+  onCloudApply,
   autoApplyLoading = false,
+  cloudApplyLoading = false,
   notification = null,
+  cloudNotification = null,
   showAutoApply = true,
   autoApplyEnabled = true,
   className = "",
@@ -297,6 +307,54 @@ export function JobCard({
                 </>
               )}
             </Button>
+
+            {/* Cloud Apply Button */}
+            <Button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onCloudApply) {
+                  onCloudApply(job);
+                }
+              }}
+              disabled={cloudApplyLoading || (cloudNotification !== null)}
+              className="flex-1 bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700"
+            >
+              {cloudApplyLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Applying...
+                </>
+              ) : (cloudNotification !== null) ? (
+                <>
+                  {cloudNotification.type === 'success' ? (
+                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                  ) : (
+                    <AlertCircle className="mr-2 h-4 w-4" />
+                  )}
+                  {cloudNotification.type === 'success' ? 'Applied' : 'Failed'}
+                </>
+              ) : (
+                <>
+                  <Zap className="mr-2 h-4 w-4" />
+                  Apply
+                </>
+              )}
+            </Button>
+
+            {/* Watch Live Button - Shows when cloud task is in progress or completed with live URL */}
+            {cloudNotification?.liveUrl && (
+              <Button
+                variant="outline"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.open(cloudNotification.liveUrl, '_blank');
+                }}
+                className="border-green-600 text-green-600 hover:bg-green-50"
+              >
+                <Video className="mr-2 h-4 w-4" />
+                Watch Live
+              </Button>
+            )}
 
             {/* View Job Button */}
             <Button

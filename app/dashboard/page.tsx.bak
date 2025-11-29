@@ -879,8 +879,8 @@ function BrowseJobsSection({
         });
 
         // Log the live URL
-        if (result.sessionUrl) {
-          console.log('🔴 Live URL:', result.sessionUrl);
+        if (result.liveUrl) {
+          console.log('🔴 Live URL:', result.liveUrl);
         }
 
         // Set notification with live URL - this makes the Watch Live button appear
@@ -890,7 +890,7 @@ function BrowseJobsSection({
             type: 'success',
             message: `Application in progress... Task ID: ${result.taskId}`,
             timestamp: new Date(),
-            liveUrl: result.sessionUrl
+            liveUrl: result.liveUrl
           }
         }));
 

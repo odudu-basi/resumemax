@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient } from '@supabase/supabase-js';
+import { Stagehand } from '@browserbasehq/stagehand';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -14,9 +15,13 @@ const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 // Force Node.js runtime
 export const runtime = 'nodejs';
 
-// Browser-Use Cloud API Configuration
-const BROWSER_USE_API_KEY = process.env.BROWSER_USE_API_KEY || 'bu_WnyiDxCXABld3jHtqNZgoswRk13vyb3T6q8KXJO8pwY';
-const BROWSER_USE_API_URL = 'https://api.browser-use.com/api';
+// Browserbase Configuration
+const BROWSERBASE_API_KEY = process.env.BROWSERBASE_API_KEY;
+const BROWSERBASE_PROJECT_ID = process.env.BROWSERBASE_PROJECT_ID;
+
+if (!BROWSERBASE_API_KEY || !BROWSERBASE_PROJECT_ID) {
+  console.warn('⚠️ Browserbase credentials not configured');
+}
 
 // Request schema validation
 const CloudApplyRequestSchema = z.object({
@@ -28,182 +33,116 @@ type CloudApplyRequest = z.infer<typeof CloudApplyRequestSchema>;
 
 /**
  * Fetch comprehensive user profile data from database
- * (Reusing same logic as browser-apply)
  */
 async function fetchUserProfileData(userId: string) {
   try {
     console.log('🔍 [Cloud-Apply] Fetching comprehensive user profile for userId:', userId);
 
-    // Initialize variables for all data sources
     let userProfile = null;
     let resume = null;
     let workAuth = null;
     let jobCriteria = null;
-    let experienceEducation = null;
     let skillsCerts = null;
     let languages = [];
-    let appPreferences = null;
-    let demographics = null;
     let educationEntries = [];
     let experienceEntries = [];
 
-    // Fetch from user_profiles table
+    // Fetch user_profiles
     try {
-      let { data, error } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
+      let { data, error } = await supabase.from('user_profiles').select('*').eq('id', userId).single();
       if (error && error.code === '42703') {
-        console.log('🔄 [Cloud-Apply] Trying user_id column instead of id');
-        const result = await supabase
-          .from('user_profiles')
-          .select('*')
-          .eq('user_id', userId)
-          .single();
+        const result = await supabase.from('user_profiles').select('*').eq('user_id', userId).single();
         data = result.data;
         error = result.error;
       }
-
       if (error && error.code !== 'PGRST116') {
         console.error('Error fetching user profile:', error);
       } else {
         userProfile = data;
-        console.log('✅ [Cloud-Apply] User profile fetched:', !!userProfile);
       }
     } catch (error) {
-      console.warn('⚠️ [Cloud-Apply] Could not fetch user profile');
+      console.warn('⚠️ Could not fetch user profile');
     }
 
-    // Fetch from resumes table
+    // Fetch resumes
     try {
-      const { data, error } = await supabase
-        .from('resumes')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
-
+      const { data, error } = await supabase.from('resumes').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(1).single();
       if (error && error.code !== 'PGRST116') {
         console.error('Error fetching resume:', error);
       } else {
         resume = data;
-        console.log('✅ [Cloud-Apply] Resume fetched:', !!resume);
       }
     } catch (error) {
-      console.warn('⚠️ [Cloud-Apply] Could not fetch resume');
+      console.warn('⚠️ Could not fetch resume');
     }
 
-    // Fetch from work_authorization table
+    // Fetch work_authorization
     try {
-      const { data, error } = await supabase
-        .from('work_authorization')
-        .select('*')
-        .eq('user_id', userId)
-        .single();
-
+      const { data, error } = await supabase.from('work_authorization').select('*').eq('user_id', userId).single();
       if (error && error.code !== 'PGRST116') {
         console.error('Error fetching work authorization:', error);
       } else {
         workAuth = data;
-        console.log('✅ [Cloud-Apply] Work authorization fetched:', !!workAuth);
       }
     } catch (error) {
-      console.warn('⚠️ [Cloud-Apply] Could not fetch work authorization');
+      console.warn('⚠️ Could not fetch work authorization');
     }
 
-    // Fetch from job_search_criteria table
+    // Fetch job_search_criteria
     try {
-      const { data, error } = await supabase
-        .from('job_search_criteria')
-        .select('*')
-        .eq('user_id', userId)
-        .single();
-
+      const { data, error } = await supabase.from('job_search_criteria').select('*').eq('user_id', userId).single();
       if (error && error.code !== 'PGRST116') {
-        console.error('Error fetching job search criteria:', error);
+        console.error('Error fetching job criteria:', error);
       } else {
         jobCriteria = data;
-        console.log('✅ [Cloud-Apply] Job criteria fetched:', !!jobCriteria);
       }
     } catch (error) {
-      console.warn('⚠️ [Cloud-Apply] Could not fetch job criteria');
+      console.warn('⚠️ Could not fetch job criteria');
     }
 
-    // Fetch from skills_certifications table
+    // Fetch skills_certifications
     try {
-      const { data, error } = await supabase
-        .from('skills_certifications')
-        .select('*')
-        .eq('user_id', userId)
-        .single();
-
+      const { data, error } = await supabase.from('skills_certifications').select('*').eq('user_id', userId).single();
       if (error && error.code !== 'PGRST116') {
         console.error('Error fetching skills certifications:', error);
       } else {
         skillsCerts = data;
-        console.log('✅ [Cloud-Apply] Skills certifications fetched:', !!skillsCerts);
       }
     } catch (error) {
-      console.warn('⚠️ [Cloud-Apply] Could not fetch skills certifications');
+      console.warn('⚠️ Could not fetch skills certifications');
     }
 
-    // Fetch from language_skills table (multiple records)
+    // Fetch language_skills
     try {
-      const { data, error } = await supabase
-        .from('language_skills')
-        .select('*')
-        .eq('user_id', userId);
-
-      if (error) {
-        console.error('Error fetching language skills:', error);
-      } else {
+      const { data, error } = await supabase.from('language_skills').select('*').eq('user_id', userId);
+      if (!error) {
         languages = data || [];
-        console.log('✅ [Cloud-Apply] Language skills fetched:', languages.length, 'languages');
       }
     } catch (error) {
-      console.warn('⚠️ [Cloud-Apply] Could not fetch language skills');
+      console.warn('⚠️ Could not fetch language skills');
     }
 
-    // Fetch from education_entries table (multiple records)
+    // Fetch education_entries
     try {
-      const { data, error } = await supabase
-        .from('education_entries')
-        .select('*')
-        .eq('user_id', userId)
-        .order('start_year', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching education entries:', error);
-      } else {
+      const { data, error } = await supabase.from('education_entries').select('*').eq('user_id', userId).order('start_year', { ascending: false });
+      if (!error) {
         educationEntries = data || [];
-        console.log('✅ [Cloud-Apply] Education entries fetched:', educationEntries.length, 'entries');
       }
     } catch (error) {
-      console.warn('⚠️ [Cloud-Apply] Could not fetch education entries');
+      console.warn('⚠️ Could not fetch education entries');
     }
 
-    // Fetch from experience_entries table (multiple records)
+    // Fetch experience_entries
     try {
-      const { data, error } = await supabase
-        .from('experience_entries')
-        .select('*')
-        .eq('user_id', userId)
-        .order('start_date', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching experience entries:', error);
-      } else {
+      const { data, error } = await supabase.from('experience_entries').select('*').eq('user_id', userId).order('start_date', { ascending: false });
+      if (!error) {
         experienceEntries = data || [];
-        console.log('✅ [Cloud-Apply] Experience entries fetched:', experienceEntries.length, 'entries');
       }
     } catch (error) {
-      console.warn('⚠️ [Cloud-Apply] Could not fetch experience entries');
+      console.warn('⚠️ Could not fetch experience entries');
     }
 
-    // Parse the structured resume data if available
+    // Parse resume data
     let parsedResumeData = null;
     if (userProfile?.parsed_resume_data) {
       try {
@@ -215,12 +154,12 @@ async function fetchUserProfileData(userId: string) {
       }
     }
 
-    // Build comprehensive profile object
+    // Build profile
     const profile = {
       fullName: userProfile?.full_name || parsedResumeData?.personalInfo?.name || 'John Doe',
       email: userProfile?.email || parsedResumeData?.personalInfo?.email || 'user@example.com',
       phone: userProfile?.phone || parsedResumeData?.personalInfo?.phone || '(555) 123-4567',
-      location: userProfile?.location || parsedResumeData?.personalInfo?.location || jobCriteria?.preferred_locations?.[0] || 'San Francisco, CA',
+      location: userProfile?.location || parsedResumeData?.personalInfo?.location || 'San Francisco, CA',
       linkedinUrl: userProfile?.linkedin_url || parsedResumeData?.personalInfo?.linkedinUrl || null,
       portfolioUrl: userProfile?.portfolio_url || parsedResumeData?.personalInfo?.portfolioUrl || null,
 
@@ -245,15 +184,8 @@ async function fetchUserProfileData(userId: string) {
         languages: languages.map((lang: any) => `${lang.language} (${lang.proficiency_level})`),
       },
 
-      resumeText: resume?.content ?
-        (typeof resume.content === 'string' ? resume.content :
-         typeof resume.content === 'object' && resume.content.text ? resume.content.text :
-         JSON.stringify(resume.content)) : null,
-
       workAuthorized: workAuth?.work_authorized || true,
       requiresSponsorship: workAuth?.visa_sponsorship_required || false,
-      veteranStatus: workAuth?.veteran_status || null,
-      disabilityStatus: workAuth?.disability_status || null,
 
       minSalary: jobCriteria?.min_salary || null,
       yearsOfExperience: parsedResumeData?.yearsOfExperience || experienceEntries.length.toString() || '3',
@@ -268,122 +200,104 @@ async function fetchUserProfileData(userId: string) {
 
 /**
  * POST /api/cloud-apply
- *
- * Initiates a browser-use cloud agent to apply to a job
+ * Initiates a Browserbase + Stagehand session to apply to a job
  */
 export async function POST(request: NextRequest) {
+  let stagehand: any = null;
+
   try {
     const body = await request.json();
     const validatedData = CloudApplyRequestSchema.parse(body);
 
-    console.log('🚀 [Cloud-Apply] Starting cloud application for:', validatedData.jobUrl);
-    console.log('📊 [Cloud-Apply] Fetching user profile data...');
+    console.log('🚀 [Cloud-Apply] Starting Browserbase application for:', validatedData.jobUrl);
 
-    // Fetch comprehensive user profile data
+    // Fetch user profile
     const userProfile = await fetchUserProfileData(validatedData.userId);
+    console.log('✅ [Cloud-Apply] User profile fetched:', userProfile.fullName);
 
-    console.log('✅ [Cloud-Apply] User profile fetched:', {
-      name: userProfile.fullName,
-      email: userProfile.email,
-      experienceCount: userProfile.workExperience?.length || 0,
-      educationCount: userProfile.education?.length || 0,
+    // Initialize Stagehand with Browserbase
+    console.log('🌐 [Cloud-Apply] Initializing Stagehand...');
+    stagehand = new Stagehand({
+      apiKey: BROWSERBASE_API_KEY,
+      projectId: BROWSERBASE_PROJECT_ID,
+      env: 'BROWSERBASE',
+      verbose: 1,
+      debugDom: true,
     });
 
-    // Build detailed task prompt
-    const taskPrompt = `
-Fill out job application at: ${validatedData.jobUrl}
+    await stagehand.init();
+    const sessionUrl = stagehand.browserbaseSessionURL || null;
+    const sessionId = stagehand.browserbaseSessionID || null;
+    console.log('📺 [Cloud-Apply] Session URL:', sessionUrl);
 
-CANDIDATE DATA:
-Name: ${userProfile.fullName}
-Email: ${userProfile.email}
-Phone: ${userProfile.phone}
-Location: ${userProfile.location}
-LinkedIn: ${userProfile.linkedinUrl || 'N/A'}
-Experience: ${userProfile.yearsOfExperience} years
+    // Navigate to job
+    await stagehand.page.goto(validatedData.jobUrl);
 
-Resume:
-${userProfile.resumeText || 'See below'}
+    // Build AI instructions
+    const firstName = userProfile.fullName.split(' ')[0];
+    const lastName = userProfile.fullName.split(' ').slice(1).join(' ');
 
-Work: ${userProfile.workExperience.map((exp: any) => `${exp.title} at ${exp.company}`).join(', ')}
-Education: ${userProfile.education.map((edu: any) => `${edu.degree} in ${edu.field} from ${edu.school}`).join(', ')}
-Skills: ${userProfile.skills.technical.join(', ')}
+    const workExpText = userProfile.workExperience.map((exp: any, i: number) =>
+      `${i + 1}. ${exp.title} at ${exp.company} (${exp.duration})`
+    ).join('\n');
 
-INSTRUCTIONS:
-1. Click "Apply" or "Start Application" if you see it
-2. For EACH field you see:
-   - Click on the input field
-   - Type the value from candidate data above
-   - Press Tab or click next field
-3. Common fields to fill:
-   - First Name: Type "${userProfile.fullName.split(' ')[0]}"
-   - Last Name: Type "${userProfile.fullName.split(' ').slice(1).join(' ')}"
-   - Email: Type "${userProfile.email}"
-   - Phone: Type "${userProfile.phone}"
-   - Location/City: Type "${userProfile.location}"
-   - LinkedIn: Type "${userProfile.linkedinUrl || ''}"
-   - Years of Experience: Type "${userProfile.yearsOfExperience}"
-   - Work Authorization: Click "Yes" or "Authorized"
-   - Visa Sponsorship: Click "No" or "Not required"
-4. For "Why interested?" write: "Excited to apply my [skill from resume] experience to contribute to your team."
-5. Click "Next" or "Continue" to go to next page
-6. On final page, click "Submit"
-7. STOP when you see "Application submitted" or email verification
+    const eduText = userProfile.education.map((edu: any, i: number) =>
+      `${i + 1}. ${edu.degree} in ${edu.field} - ${edu.school} ${edu.year ? `(${edu.year})` : ''}`
+    ).join('\n');
 
-ACTION REQUIREMENTS:
-- CLICK on every input field before typing
-- ACTUALLY TYPE the values - don't just identify them
-- Use the exact values provided above
-- Move through ALL pages of the form
-- Complete the submission
-`.trim();
+    const instructions = `Fill out this job application form completely.
 
-    console.log('📝 [Cloud-Apply] Task prompt created');
-    console.log('🌐 [Cloud-Apply] Calling Browser-Use Cloud API...');
+CANDIDATE INFO:
+- First Name: ${firstName}
+- Last Name: ${lastName}
+- Email: ${userProfile.email}
+- Phone: ${userProfile.phone}
+- Location: ${userProfile.location}
+${userProfile.linkedinUrl ? `- LinkedIn: ${userProfile.linkedinUrl}` : ''}
+- Years Experience: ${userProfile.yearsOfExperience}
 
-    // Call Browser-Use Cloud API
-    const response = await fetch(`${BROWSER_USE_API_URL}/v2/tasks`, {
-      method: 'POST',
-      headers: {
-        'X-Browser-Use-API-Key': BROWSER_USE_API_KEY,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        task: taskPrompt,
-        startUrl: validatedData.jobUrl,
-        secrets: {
-          email: userProfile.email,
-          phone: userProfile.phone,
-        },
-        // allowedDomains removed to allow navigation to all job boards
-        maxSteps: 100,
-        vision: true,
-        thinking: true,
-      }),
-    });
+WORK EXPERIENCE:
+${workExpText}
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ [Cloud-Apply] Browser-Use API error:', errorText);
-      throw new Error(`Browser-Use API returned ${response.status}: ${errorText}`);
-    }
+EDUCATION:
+${eduText}
 
-    const result = await response.json();
+SKILLS: ${userProfile.skills.technical.join(', ')}
 
-    console.log('✅ [Cloud-Apply] Task submitted successfully:', {
-      taskId: result.task_id,
-      liveUrl: result.live_url,
-    });
+STEPS:
+1. Click "Apply" or "Start Application" if present
+2. Fill ALL form fields with the info above
+3. For work authorization: Select "Yes, authorized to work"
+4. For visa sponsorship: Select "No sponsorship required"
+5. For "Why interested?" write 2-3 sentences about relevant experience
+6. Click Next/Continue through all pages
+7. Submit the application on the final page
+
+Complete the application and submit it.`;
+
+    console.log('🤖 [Cloud-Apply] Executing application...');
+    await stagehand.act({ action: instructions });
+    console.log('✅ [Cloud-Apply] Application completed');
+
+    await stagehand.close();
 
     return NextResponse.json({
       success: true,
-      taskId: result.task_id,
-      liveUrl: result.live_url,
-      status: result.status || 'running',
-      message: 'Job application submitted to Browser-Use Cloud successfully',
+      sessionId: sessionId,
+      sessionUrl: sessionUrl,
+      message: 'Application submitted via Browserbase',
     });
 
   } catch (error: any) {
     console.error('❌ [Cloud-Apply] Error:', error);
+
+    if (stagehand) {
+      try {
+        await stagehand.close();
+      } catch (e) {
+        console.error('Error closing stagehand:', e);
+      }
+    }
 
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -400,59 +314,31 @@ ACTION REQUIREMENTS:
 }
 
 /**
- * GET /api/cloud-apply?taskId=xxx
- *
- * Check the status of a cloud application task
+ * GET /api/cloud-apply?sessionId=xxx
+ * Get the live session URL
  */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const taskId = searchParams.get('taskId');
+    const sessionId = searchParams.get('sessionId');
 
-    if (!taskId) {
+    if (!sessionId) {
       return NextResponse.json(
-        { success: false, error: 'taskId query parameter is required' },
+        { success: false, error: 'sessionId required' },
         { status: 400 }
       );
     }
 
-    console.log('🔍 [Cloud-Apply] Checking status for task:', taskId);
-
-    // Call Browser-Use Cloud API to get task status
-    const response = await fetch(`${BROWSER_USE_API_URL}/v2/tasks/${taskId}`, {
-      method: 'GET',
-      headers: {
-        'X-Browser-Use-API-Key': BROWSER_USE_API_KEY,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      if (response.status === 404) {
-        return NextResponse.json(
-          { success: false, error: 'Task not found' },
-          { status: 404 }
-        );
-      }
-
-      const errorText = await response.text();
-      throw new Error(`Browser-Use API returned ${response.status}: ${errorText}`);
-    }
-
-    const result = await response.json();
+    const sessionUrl = `https://www.browserbase.com/sessions/${sessionId}`;
 
     return NextResponse.json({
       success: true,
-      taskId: result.task_id || taskId,
-      status: result.status,
-      liveUrl: result.live_url,
-      result: result.result,
-      error: result.error,
+      sessionId,
+      sessionUrl,
     });
 
   } catch (error: any) {
-    console.error('❌ [Cloud-Apply] Status check error:', error);
-
+    console.error('❌ [Cloud-Apply] Session lookup error:', error);
     return NextResponse.json(
       { success: false, error: error.message || 'Internal server error' },
       { status: 500 }

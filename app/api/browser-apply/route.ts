@@ -543,6 +543,7 @@ export async function POST(request: NextRequest) {
     console.log('📞 [Browser-Apply] Calling Python service at:', PYTHON_SERVICE_URL);
 
     // Call Railway browser service to submit job
+    // Send the complete pythonPayload which has all user/resume data already
     const response = await fetch(`${PYTHON_SERVICE_URL}/jobs/submit`, {
       method: 'POST',
       headers: {
@@ -552,8 +553,8 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         user_id: validatedData.userId,
         job_url: validatedData.jobUrl,
-        user_profile: pythonPayload.userProfile || {},
-        resume_data: pythonPayload.resumeData || {},
+        user_profile: pythonPayload, // Send entire payload as user_profile
+        resume_data: {}, // Resume data is already in pythonPayload
         session_id: sessionId,
         additional_params: {
           headless: validatedData.headless,
