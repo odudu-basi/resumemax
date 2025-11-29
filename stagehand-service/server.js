@@ -7,8 +7,8 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 // Debug: Log environment variables on startup
 console.log("🔍 Environment variables loaded:");
-console.log("BROWSERBASE_API_KEY:", process.env.BROWSERBASE_API_KEY ? "✅ Set (length: " + process.env.BROWSERBASE_API_KEY.length + ")" : "❌ NOT SET");
-console.log("BROWSERBASE_PROJECT_ID:", process.env.BROWSERBASE_PROJECT_ID ? "✅ Set" : "❌ NOT SET");
+console.log("BROWSERBASE_API_KEY:", process.env.BROWSERBASE_API_KEY || "❌ NOT SET");
+console.log("BROWSERBASE_PROJECT_ID:", process.env.BROWSERBASE_PROJECT_ID || "❌ NOT SET");
 console.log("NODE_ENV:", process.env.NODE_ENV);
 console.log("PORT:", PORT);
 
