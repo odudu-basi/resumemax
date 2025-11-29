@@ -5,6 +5,12 @@ const { Stagehand } = require('@browserbasehq/stagehand');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+// Debug: Log environment variables on startup
+console.log("🔍 Environment variables loaded:");
+console.log("BROWSERBASE_API_KEY:", process.env.BROWSERBASE_API_KEY ? "✅ Set (length: " + process.env.BROWSERBASE_API_KEY.length + ")" : "❌ NOT SET");
+console.log("BROWSERBASE_PROJECT_ID:", process.env.BROWSERBASE_PROJECT_ID ? "✅ Set" : "❌ NOT SET");
+console.log("NODE_ENV:", process.env.NODE_ENV);
+console.log("PORT:", PORT);
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
