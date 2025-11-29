@@ -19,7 +19,7 @@ app.post('/apply', async (req, res) => {
   try {
     const { jobUrl, userProfile } = req.body;
 
-    if (\!jobUrl || \!userProfile) {
+    if (!jobUrl || !userProfile) {
       return res.status(400).json({ success: false, error: 'Missing required fields' });
     }
 
@@ -40,29 +40,31 @@ app.post('/apply', async (req, res) => {
     console.log('Session URL:', sessionUrl);
 
     const page = stagehand.page;
-    if (\!page) throw new Error('Failed to get page from Stagehand');
+    if (!page) throw new Error('Failed to get page from Stagehand');
 
     await page.goto(jobUrl, { waitUntil: 'networkidle' });
 
     const firstName = userProfile.fullName.split(' ')[0];
     const lastName = userProfile.fullName.split(' ').slice(1).join(' ');
-    const workExp = userProfile.workExperience.map((e, i) => \`\${i+1}. \${e.title} at \${e.company}\`).join('\\n');
-    const edu = userProfile.education.map((e, i) => \`\${i+1}. \${e.degree} - \${e.school}\`).join('\\n');
+    const workExp = userProfile.workExperience.map((e, i) => `${i+1}. ${e.title} at ${e.company}`).join('\
+');
+    const edu = userProfile.education.map((e, i) => `${i+1}. ${e.degree} - ${e.school}`).join('\
+');
 
-    const instructions = \`Fill out job application.
+    const instructions = `Fill out job application.
 
 CANDIDATE:
-- Name: \${firstName} \${lastName}
-- Email: \${userProfile.email}
-- Phone: \${userProfile.phone}
-- Location: \${userProfile.location}
-\${userProfile.linkedinUrl ? '- LinkedIn: ' + userProfile.linkedinUrl : ''}
+- Name: ${firstName} ${lastName}
+- Email: ${userProfile.email}
+- Phone: ${userProfile.phone}
+- Location: ${userProfile.location}
+${userProfile.linkedinUrl ? '- LinkedIn: ' + userProfile.linkedinUrl : ''}
 
-WORK: \${workExp}
-EDUCATION: \${edu}
-SKILLS: \${userProfile.skills.technical.join(', ')}
+WORK: ${workExp}
+EDUCATION: ${edu}
+SKILLS: ${userProfile.skills.technical.join(', ')}
 
-Fill all fields, click Apply/Next buttons, and submit.\`;
+Fill all fields, click Apply/Next buttons, and submit.`;
 
     await stagehand.act({ action: instructions });
     await stagehand.close();
@@ -79,10 +81,10 @@ Fill all fields, click Apply/Next buttons, and submit.\`;
 });
 
 app.get('/session/:sessionId', (req, res) => {
-  const sessionUrl = \`https://www.browserbase.com/sessions/\${req.params.sessionId}\`;
+  const sessionUrl = `https://www.browserbase.com/sessions/${req.params.sessionId}`;
   res.json({ success: true, sessionId: req.params.sessionId, sessionUrl });
 });
 
 app.listen(PORT, () => {
-  console.log(\`Stagehand API on port \${PORT}\`);
+  console.log(`Stagehand API on port ${PORT}`);
 });
