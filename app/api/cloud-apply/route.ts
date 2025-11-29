@@ -222,7 +222,6 @@ export async function POST(request: NextRequest) {
       projectId: BROWSERBASE_PROJECT_ID,
       env: 'BROWSERBASE',
       verbose: 1,
-      debugDom: true,
     });
 
     await stagehand.init();
