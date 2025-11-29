@@ -10,6 +10,7 @@ console.log("🔍 Environment variables loaded:");
 console.log("BROWSERBASE_API_KEY:", process.env.BROWSERBASE_API_KEY || "❌ NOT SET");
 console.log("BROWSERBASE_PROJECT_ID:", process.env.BROWSERBASE_PROJECT_ID || "❌ NOT SET");
 console.log("NODE_ENV:", process.env.NODE_ENV);
+console.log("OPENAI_API_KEY:", process.env.OPENAI_API_KEY ? "✅ Set (length: " + process.env.OPENAI_API_KEY.length + ")" : "❌ NOT SET");
 console.log("PORT:", PORT);
 
 app.use(cors());
@@ -34,6 +35,7 @@ app.post('/apply', async (req, res) => {
     stagehand = new Stagehand({
       apiKey: process.env.BROWSERBASE_API_KEY,
       projectId: process.env.BROWSERBASE_PROJECT_ID,
+      modelApiKey: process.env.OPENAI_API_KEY,
       env: 'BROWSERBASE',
       verbose: 0,
       enableCaching: true,
