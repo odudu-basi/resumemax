@@ -222,15 +222,21 @@ export async function POST(request: NextRequest) {
       projectId: BROWSERBASE_PROJECT_ID,
       env: 'BROWSERBASE',
       verbose: 1,
+      enableCaching: true,
+      headless: false,
     });
 
     await stagehand.init();
+    
+    // Get page from context
+    const page = stagehand.page;
+    
     const sessionUrl = stagehand.browserbaseSessionURL || null;
     const sessionId = stagehand.browserbaseSessionID || null;
     console.log('📺 [Cloud-Apply] Session URL:', sessionUrl);
 
     // Navigate to job
-    await stagehand.page.goto(validatedData.jobUrl);
+    await page.goto(validatedData.jobUrl);
 
     // Build AI instructions
     const firstName = userProfile.fullName.split(' ')[0];
