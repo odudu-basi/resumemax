@@ -36,6 +36,7 @@ app.post('/apply', async (req, res) => {
       apiKey: process.env.BROWSERBASE_API_KEY,
       projectId: process.env.BROWSERBASE_PROJECT_ID,
       modelApiKey: process.env.OPENAI_API_KEY,
+      model: "gpt-4o",
       env: 'BROWSERBASE',
       verbose: 0,
       enableCaching: true,
@@ -49,7 +50,10 @@ app.post('/apply', async (req, res) => {
     console.log("✅ Stagehand init complete");
     console.log("Page:", stagehand.page ? "✅ exists" : "❌ undefined");
 
-    const page = stagehand.page;
+    // Try multiple ways to get the page
+    const page = stagehand.page || (stagehand.context && stagehand.context.pages && stagehand.context.pages()[0]);
+    console.log("Page from stagehand.page:", stagehand.page ? "exists" : "undefined");
+    console.log("Page from context:", stagehand.context ? "context exists" : "no context");
     if (!page) throw new Error('Failed to get page from Stagehand');
 
     await page.goto(jobUrl, { waitUntil: 'networkidle' });
