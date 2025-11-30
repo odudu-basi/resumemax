@@ -35,8 +35,7 @@ app.post('/apply', async (req, res) => {
     stagehand = new Stagehand({
       apiKey: process.env.BROWSERBASE_API_KEY,
       projectId: process.env.BROWSERBASE_PROJECT_ID,
-      modelApiKey: process.env.OPENAI_API_KEY,
-      model: "gpt-4o",
+      model: "openai/gpt-4o",
       env: 'BROWSERBASE',
       verbose: 0,
       enableCaching: true,
