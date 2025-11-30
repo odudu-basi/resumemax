@@ -47,15 +47,8 @@ app.post('/apply', async (req, res) => {
     const sessionId = stagehand.browserbaseSessionID || null;
     console.log('Session URL:', sessionUrl);
     console.log("✅ Stagehand init complete");
-    console.log("Page:", stagehand.page ? "✅ exists" : "❌ undefined");
 
-    // Try multiple ways to get the page
-    const page = stagehand.page || (stagehand.context && stagehand.context.pages && stagehand.context.pages()[0]);
-    console.log("Page from stagehand.page:", stagehand.page ? "exists" : "undefined");
-    console.log("Page from context:", stagehand.context ? "context exists" : "no context");
-    if (!page) throw new Error('Failed to get page from Stagehand');
-
-    await page.goto(jobUrl, { waitUntil: 'networkidle' });
+    await stagehand.page.goto(jobUrl);
 
     const firstName = userProfile.fullName.split(' ')[0];
     const lastName = userProfile.fullName.split(' ').slice(1).join(' ');
@@ -79,7 +72,7 @@ SKILLS: ${userProfile.skills.technical.join(', ')}
 
 Fill all fields, click Apply/Next buttons, and submit.`;
 
-    await stagehand.act({ action: instructions });
+    await stagehand.act(instructions);
     await stagehand.close();
 
     res.json({ success: true, sessionId, sessionUrl, message: 'Application submitted' });
