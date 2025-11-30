@@ -46,6 +46,8 @@ app.post('/apply', async (req, res) => {
     const sessionUrl = stagehand.browserbaseSessionURL || null;
     const sessionId = stagehand.browserbaseSessionID || null;
     console.log('Session URL:', sessionUrl);
+    console.log("✅ Stagehand init complete");
+    console.log("Page:", stagehand.page ? "✅ exists" : "❌ undefined");
 
     const page = stagehand.page;
     if (!page) throw new Error('Failed to get page from Stagehand');
