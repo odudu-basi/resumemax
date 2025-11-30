@@ -48,7 +48,10 @@ app.post('/apply', async (req, res) => {
     console.log('Session URL:', sessionUrl);
     console.log("✅ Stagehand init complete");
 
-    await stagehand.page.goto(jobUrl);
+    // Get page from context
+    const page = stagehand.context.pages()[0];
+    console.log("📄 Page object:", page ? "exists" : "undefined");
+    await page.goto(jobUrl);
 
     const firstName = userProfile.fullName.split(' ')[0];
     const lastName = userProfile.fullName.split(' ').slice(1).join(' ');
