@@ -2,9 +2,11 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { Stagehand } = require('@browserbasehq/stagehand');
+const { adaptiveFormFill } = require('./adaptive_apply');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
 // Debug: Log environment variables on startup
 console.log("🔍 Environment variables loaded:");
 console.log("BROWSERBASE_API_KEY:", process.env.BROWSERBASE_API_KEY || "❌ NOT SET");
@@ -37,7 +39,7 @@ app.post('/apply', async (req, res) => {
       projectId: process.env.BROWSERBASE_PROJECT_ID,
       model: "openai/gpt-4o",
       env: 'BROWSERBASE',
-      verbose: 0,
+      verbose: 1,
       enableCaching: true,
       headless: false,
     });
@@ -45,43 +47,18 @@ app.post('/apply', async (req, res) => {
     await stagehand.init();
     const sessionUrl = stagehand.browserbaseSessionURL || null;
     const sessionId = stagehand.browserbaseSessionID || null;
-    console.log('Session URL:', sessionUrl);
-    console.log("✅ Stagehand init complete");
+    console.log('✅ Stagehand initialized. Session URL:', sessionUrl);
 
-    // Get page from context
+    // Get page from context and navigate
     const page = stagehand.context.pages()[0];
     console.log("📄 Page object:", page ? "exists" : "undefined");
     await page.goto(jobUrl);
 
-    const firstName = userProfile.fullName.split(' ')[0];
-    const lastName = userProfile.fullName.split(' ').slice(1).join(' ');
-    const workExp = userProfile.workExperience.map((e, i) => `${i+1}. ${e.title} at ${e.company}`).join('\
-');
-    const edu = userProfile.education.map((e, i) => `${i+1}. ${e.degree} - ${e.school}`).join('\
-');
-
-    const instructions = `Fill out job application.
-
-CANDIDATE:
-- Name: ${firstName} ${lastName}
-- Email: ${userProfile.email}
-- Phone: ${userProfile.phone}
-- Location: ${userProfile.location}
-${userProfile.linkedinUrl ? '- LinkedIn: ' + userProfile.linkedinUrl : ''}
-
-WORK: ${workExp}
-EDUCATION: ${edu}
-SKILLS: ${userProfile.skills.technical.join(', ')}
-
-Fill all fields, click Apply/Next buttons, and submit.`;
-
-    await stagehand.act(instructions);
-    await stagehand.close();
-
-    res.json({ success: true, sessionId, sessionUrl, message: 'Application submitted' });
+    // Use adaptive form filling
+    await adaptiveFormFill(stagehand, userProfile, sessionId, sessionUrl, res);
 
   } catch (error) {
-    console.error('Error:', error);
+    console.error('❌ Error:', error);
     if (stagehand) {
       try { await stagehand.close(); } catch (e) {}
     }
