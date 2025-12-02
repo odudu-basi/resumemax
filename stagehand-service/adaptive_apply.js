@@ -530,106 +530,53 @@ Skills:
     let filledCount = 0;
     const totalFields = finalTextFields.length + finalTextareas.length + finalDropdowns.length + finalRadioGroups.length + finalCheckboxes.length + finalFileUploads.length;
 
-    // 5.1: Fill text fields with smart matching
-    console.log('  📝 Filling text fields...');
-    for (const field of finalTextFields) {
+    // 5.1: Fill text fields with batched AI values
+    console.log('  📝 Filling text fields with batched AI values...');
+    for (let i = 0; i < textFieldData.length; i++) {
+      const field = textFieldData[i];
+      const aiValue = textFieldValues[i];
+
       try {
-        const fieldStr = JSON.stringify(field);
-        const selector = field.selector || field.xpath || fieldStr.slice(0, 150);
+        let valueToFill = aiValue;
 
-        const FieldPurposeSchema = z.object({
-          purpose: z.string().describe("What is this field for? (e.g., firstName, lastName, email, phone, linkedin, company, title, school, degree, city, etc)"),
-          confidence: z.string().describe("high, medium, or low confidence")
-        });
-
-        let fieldPurpose;
-        try {
-          fieldPurpose = await stagehand.extract(`Based on this form field element, what is its purpose? Field: ${fieldStr.slice(0, 200)}`, FieldPurposeSchema);
-        } catch (e) {
+        // Skip if no AI value or it's N/A
+        if (!valueToFill || valueToFill.trim() === '' || valueToFill === 'N/A') {
+          console.log(`    ⏭️  Skipping "${field.label}" - no value provided by AI`);
           continue;
         }
 
-        const getValueForPurpose = (purpose) => {
-          const p = (purpose || '').toLowerCase().replace(/[_\s-]/g, '');
-          const mapping = {
-            'firstname': firstName,
-            'first': firstName,
-            'givenname': firstName,
-            'lastname': lastName,
-            'last': lastName,
-            'surname': lastName,
-            'familyname': lastName,
-            'fullname': userProfile.fullName,
-            'name': userProfile.fullName,
-            'email': userProfile.email,
-            'emailaddress': userProfile.email,
-            'phone': userProfile.phone,
-            'phonenumber': userProfile.phone,
-            'telephone': userProfile.phone,
-            'mobile': userProfile.phone,
-            'location': userProfile.location,
-            'city': userProfile.location?.split(',')[0],
-            'state': userProfile.location?.split(',')[1]?.trim(),
-            'address': userProfile.location,
-            'currentlocation': userProfile.location,
-            'linkedin': userProfile.linkedinUrl,
-            'linkedinprofile': userProfile.linkedinUrl,
-            'linkedinurl': userProfile.linkedinUrl,
-            'portfolio': userProfile.portfolioUrl,
-            'website': userProfile.portfolioUrl,
-            'portfoliourl': userProfile.portfolioUrl,
-            'github': userProfile.githubUrl,
-            'company': userProfile.workExperience?.[0]?.company,
-            'currentcompany': userProfile.workExperience?.[0]?.company,
-            'employer': userProfile.workExperience?.[0]?.company,
-            'organization': userProfile.workExperience?.[0]?.company,
-            'jobtitle': userProfile.workExperience?.[0]?.title,
-            'title': userProfile.workExperience?.[0]?.title,
-            'currenttitle': userProfile.workExperience?.[0]?.title,
-            'position': userProfile.workExperience?.[0]?.title,
-            'role': userProfile.workExperience?.[0]?.title,
-            'currentrole': userProfile.workExperience?.[0]?.title,
-            'school': userProfile.education?.[0]?.school,
-            'university': userProfile.education?.[0]?.school,
-            'college': userProfile.education?.[0]?.school,
-            'institution': userProfile.education?.[0]?.school,
-            'degree': userProfile.education?.[0]?.degree,
-            'education': userProfile.education?.[0]?.degree,
-            'major': userProfile.education?.[0]?.degree,
-            'fieldofstudy': userProfile.education?.[0]?.degree,
-            'gpa': userProfile.education?.[0]?.gpa,
-            'graduationyear': userProfile.education?.[0]?.dates?.split('-')[1]?.trim(),
-            'startyear': userProfile.workExperience?.[0]?.dates?.split('-')[0]?.trim(),
-            'skills': userProfile.skills?.technical?.join(', '),
-            'technicalskills': userProfile.skills?.technical?.join(', '),
-          };
-          return mapping[p] || null;
-        };
-
-        const value = getValueForPurpose(fieldPurpose.purpose);
-
-        if (value && value.trim()) {
-          let filled = false;
+        let filled = false;
+        
+        // METHOD 1: Try using the field label
+        try {
+          await stagehand.act(`type "${valueToFill}" into the "${field.label}" field`);
+          filled = true;
+          filledCount++;
+          console.log(`    ✅ Filled "${field.label}": ${valueToFill.substring(0, 40)}...`);
+          await new Promise(resolve => setTimeout(resolve, 300));
+        } catch (e1) {
+          // METHOD 2: Try using the selector
           try {
-            await stagehand.act(`type "${value}" into the ${fieldPurpose.purpose} field`);
+            await stagehand.act(`type "${valueToFill}" into the field: ${field.selector}`);
             filled = true;
-          } catch (e1) {
-            try {
-              await stagehand.act(`type "${value}" into the field: ${selector}`);
-              filled = true;
-            } catch (e2) {
-              // Silent fail
-            }
-          }
-
-          if (filled) {
             filledCount++;
-            console.log(`    ✅ Filled ${fieldPurpose.purpose}: ${value.substring(0, 30)}...`);
+            console.log(`    ✅ Filled "${field.label}": ${valueToFill.substring(0, 40)}... (via selector)`);
             await new Promise(resolve => setTimeout(resolve, 300));
+          } catch (e2) {
+            // METHOD 3: Try generic type-based approach
+            try {
+              await stagehand.act(`type "${valueToFill}" into the ${field.type} field`);
+              filled = true;
+              filledCount++;
+              console.log(`    ✅ Filled "${field.label}": ${valueToFill.substring(0, 40)}... (via type)`);
+              await new Promise(resolve => setTimeout(resolve, 300));
+            } catch (e3) {
+              console.log(`    ❌ Failed to fill "${field.label}"`);
+            }
           }
         }
       } catch (error) {
-        // Silent fail, continue to next field
+        console.log(`    ⚠️ Error filling text field ${i + 1}: ${error.message}`);
       }
     }
 
