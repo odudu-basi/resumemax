@@ -339,15 +339,10 @@ const adaptiveFormFill = async (stagehand, userProfile, sessionId, sessionUrl, r
       success: true,
       sessionId,
       sessionUrl,
-      message: `Application completed. Filled ${filledCount} out of ${totalFields} fields.`,
+      message: `Application completed. Filled ${filledCount} out of ${fieldData.length} fields.`,
       fieldsFilled: filledCount,
-      totalFields: totalFields,
-      breakdown: {
-        textareas: textareaAnswers.length,
-        dropdowns: dropdownSelections.length,
-        radios: radioSelections.length,
-        checkboxes: checkboxDecisions.length
-      }
+      totalFields: fieldData.length,
+      fieldsProcessed: fieldData.length
     });
 
   } catch (error) {
