@@ -5,59 +5,48 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-// Comprehensive adaptive form filling with BATCHED AI calls for efficiency
+// Comprehensive adaptive form filling with Stagehand best practices
 const adaptiveFormFill = async (stagehand, userProfile, sessionId, sessionUrl, res) => {
-  console.log('🤖 Starting multi-phase adaptive form filling with batched AI...');
+  console.log('🤖 Starting optimized adaptive form filling with Stagehand v3...');
 
   const firstName = userProfile.fullName.split(' ')[0] || '';
   const lastName = userProfile.fullName.split(' ').slice(1).join(' ') || '';
 
   try {
-    // ========== PHASE 1: Handle Resume Upload & Fill Basic Contact Info ==========
-    console.log('\n📝 PHASE 1: Handling resume upload and basic contact information...');
+    // ========== PHASE 1: Handle Resume Upload ONLY ==========
+    console.log('\n📎 PHASE 1: Handling resume upload...');
 
-    // 1.1: Handle resume upload if resume file is provided
     if (userProfile.resumeFile || userProfile.resumePath || userProfile.resumeUrl) {
-      console.log('  📎 Looking for resume upload field...');
       try {
         const resumeFilePath = userProfile.resumeFile || userProfile.resumePath;
-        
+
         if (resumeFilePath) {
-          // Upload from local file path - Try multiple methods
+          console.log(`  📄 Attempting to upload resume: ${resumeFilePath}`);
+
+          // Try multiple upload methods with Stagehand's self-healing act()
+          const uploadActions = [
+            `upload the file "${resumeFilePath}" to the resume upload field`,
+            `attach the file "${resumeFilePath}" to the resume field`,
+            `select and upload the file "${resumeFilePath}"`,
+            `upload the file "${resumeFilePath}" to the CV upload field`,
+            `upload the file "${resumeFilePath}" to the file upload field`
+          ];
+
           let uploaded = false;
-          
-          // METHOD 1: Standard upload with "resume" field
-          try {
-            await stagehand.act(`upload the file "${resumeFilePath}" to the resume upload field`);
-            console.log(`  ✅ Uploaded resume from: ${resumeFilePath}`);
-            uploaded = true;
-            await new Promise(resolve => setTimeout(resolve, 1500)); // Wait for upload to process
-          } catch (e1) {
-            // METHOD 2: Try "attach file"
+          for (const action of uploadActions) {
             try {
-              await stagehand.act(`attach the file "${resumeFilePath}" to the resume field`);
-              console.log(`  ✅ Uploaded resume from: ${resumeFilePath} (Method 2)`);
+              await stagehand.act(action);
+              console.log(`  ✅ Resume uploaded successfully`);
               uploaded = true;
-              await new Promise(resolve => setTimeout(resolve, 1500));
-            } catch (e2) {
-              // METHOD 3: Try generic file upload
-              try {
-                await stagehand.act(`select and upload the file "${resumeFilePath}"`);
-                console.log(`  ✅ Uploaded resume from: ${resumeFilePath} (Method 3)`);
-                uploaded = true;
-                await new Promise(resolve => setTimeout(resolve, 1500));
-              } catch (e3) {
-                // METHOD 4: Try CV upload
-                try {
-                  await stagehand.act(`upload the file "${resumeFilePath}" to the CV upload field`);
-                  console.log(`  ✅ Uploaded resume from: ${resumeFilePath} (Method 4)`);
-                  uploaded = true;
-                  await new Promise(resolve => setTimeout(resolve, 1500));
-                } catch (e4) {
-                  console.log(`  ⚠️ Could not upload resume file: ${e4.message}`);
-                }
-              }
+              await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for upload to process
+              break;
+            } catch (error) {
+              continue; // Try next method
             }
+          }
+
+          if (!uploaded) {
+            console.log(`  ⚠️ Could not upload resume - field may not exist on this page`);
           }
         } else if (userProfile.resumeUrl) {
           console.log(`  ℹ️  Resume URL provided: ${userProfile.resumeUrl}`);
@@ -65,115 +54,226 @@ const adaptiveFormFill = async (stagehand, userProfile, sessionId, sessionUrl, r
       } catch (error) {
         console.log(`  ⚠️ Resume upload error: ${error.message}`);
       }
+    } else {
+      console.log('  ℹ️  No resume file provided, skipping upload');
     }
 
-    // 1.2: Fill basic contact information
+    // ========== PHASE 2: Scoped Observe for Form Discovery ==========
+    console.log('\n🔍 PHASE 2: Discovering form structure with scoped observe...');
 
-    const basicFields = [
-      { value: firstName, labels: ['First Name', 'first name', 'First', 'Given Name'] },
-      { value: lastName, labels: ['Last Name', 'last name', 'Last', 'Surname', 'Family Name'] },
-      { value: userProfile.email, labels: ['Email', 'email', 'Email Address', 'E-mail'] },
-      { value: userProfile.phone, labels: ['Phone', 'phone', 'Phone Number', 'Mobile', 'Telephone'] },
-    ];
-
-    for (const field of basicFields) {
-      for (const label of field.labels) {
-        try {
-          await stagehand.act(`type "${field.value}" into the "${label}" field`);
-          console.log(`  ✅ Filled ${label}: ${field.value}`);
-          await new Promise(resolve => setTimeout(resolve, 300));
-          break; // Success, move to next field
-        } catch (error) {
-          // Try next label variation
-          continue;
-        }
-      }
-    }
-
-    // ========== PHASE 2: Discover All Form Elements (Two-Step Approach) ==========
-    console.log('\n🔍 PHASE 2A: Locating application form container...');
-    
-    // Step 1: Find the form first
-    let formContainer = null;
+    // Step 2A: Find the form container
+    let formSelector = null;
     try {
-      formContainer = await stagehand.observe("Find the main job application form on this page where candidates enter their information");
-      console.log(`  ✅ Found form container`);
+      const [formContainer] = await stagehand.observe(
+        "Find the main job application form container where candidates enter their information"
+      );
+
+      if (formContainer && formContainer.selector) {
+        formSelector = formContainer.selector;
+        console.log(`  ✅ Found form container: ${formSelector.substring(0, 80)}...`);
+      } else {
+        console.log(`  ⚠️ Could not find specific form container, will search entire page`);
+      }
     } catch (error) {
-      console.log(`  ⚠️ Could not locate specific form container, will search entire page`);
+      console.log(`  ⚠️ Form container discovery failed: ${error.message}`);
     }
 
-    console.log('\n🔍 PHASE 2B: Discovering ALL form fields (no classification)...');
-    
-    const elements = await stagehand.observe("Find all form fields that need to be filled in this job application: text input boxes, dropdowns, textareas, radio buttons, and checkboxes. Do NOT include submit buttons, apply buttons, or navigation links.");
+    // Step 2B: Discover all form fields (scoped to form if found)
+    console.log('\n  🔍 Discovering all form fields...');
+    const observeOptions = formSelector ? { selector: formSelector } : {};
 
-    console.log(`  Found ${elements.length} form elements`);
+    let formFields = [];
+    try {
+      formFields = await stagehand.observe(
+        "Find all form fields that need to be filled: text inputs, email inputs, phone inputs, dropdowns, textareas, radio buttons, checkboxes, and date fields. Do NOT include submit buttons, apply buttons, or navigation links.",
+        observeOptions
+      );
+      console.log(`  ✅ Discovered ${formFields.length} form elements`);
+    } catch (error) {
+      console.log(`  ⚠️ Field discovery failed: ${error.message}`);
+      throw new Error('Could not discover form fields');
+    }
 
-    // ========== PHASE 3: Extract Labels & Deduplicate ==========
-    console.log('\n📋 PHASE 3: Extracting labels and deduplicating...');
-    
-    const fieldData = [];
-    const seenLabels = new Set();
-    
-    for (const element of elements) {
-      try {
-        const elemStr = JSON.stringify(element);
-        
-        // Extract label and method
-        const FieldSchema = z.object({
-          label: z.string().describe("the label, question, or placeholder text for this field"),
-          method: z.string().describe("the interaction method: 'type' for text inputs/textareas, 'click' for dropdowns/radios/checkboxes")
-        });
+    if (formFields.length === 0) {
+      console.log('  ⚠️ No form fields found - form may be on another page');
+      throw new Error('No form fields discovered');
+    }
 
-        const fieldInfo = await stagehand.extract(`What is the label and interaction method for this form field? Element: ${elemStr.slice(0, 200)}`, FieldSchema);
+    // ========== PHASE 3: Unified Schema Extraction ==========
+    console.log('\n📋 PHASE 3: Extracting complete form schema with single extraction...');
 
-        // Deduplicate by normalized label
-        const normalizedLabel = fieldInfo.label.toLowerCase().trim();
-        if (seenLabels.has(normalizedLabel)) {
-          console.log(`    ⏭️  Skipping duplicate: "${fieldInfo.label}"`);
-          continue;
+    // Define comprehensive Zod schema for ALL field types
+    const FormFieldSchema = z.object({
+      label: z.string().describe("The field label, question text, or placeholder"),
+      fieldType: z.enum([
+        'text', 'email', 'phone', 'number', 'url',
+        'dropdown', 'radio', 'checkbox',
+        'textarea', 'date',
+        'file', 'other'
+      ]).describe("The type of input field"),
+      options: z.array(z.string()).optional().describe("Available options for dropdowns, radios, or checkboxes"),
+      placeholder: z.string().optional().describe("Placeholder text if visible"),
+      required: z.boolean().describe("Whether this field is required"),
+      category: z.enum([
+        'contact',        // name, email, phone, address
+        'experience',     // years of experience, job title
+        'education',      // degree, school, graduation year
+        'authorization',  // work auth, visa sponsorship
+        'skills',         // technical skills, languages
+        'preferences',    // location preference, remote work
+        'essay',          // why do you want to work here, cover letter
+        'other'
+      ]).optional().describe("The category this field belongs to")
+    });
+
+    const FormSchema = z.object({
+      fields: z.array(FormFieldSchema).describe("All form fields discovered on the page")
+    });
+
+    let formData = null;
+    try {
+      // Single extraction pass for ALL fields
+      const extractOptions = formSelector ? { selector: formSelector } : {};
+
+      formData = await stagehand.extract({
+        instruction: `Analyze this job application form and extract information about ALL form fields. For each field, identify:
+- The label or question text
+- The field type (text input, dropdown, checkbox, etc.)
+- Available options for dropdowns/radios/checkboxes
+- Whether the field is required (look for asterisks or 'required' indicators)
+- The category it belongs to (contact info, work experience, education, etc.)
+
+Extract all fields in one comprehensive list.`,
+        schema: FormSchema,
+        ...extractOptions
+      });
+
+      console.log(`  ✅ Extracted schema for ${formData.fields.length} fields`);
+
+      // Log field summary
+      const fieldSummary = formData.fields.map((f, i) =>
+        `    ${i + 1}. "${f.label}" (${f.fieldType}${f.required ? ', required' : ''})`
+      ).join('\n');
+      console.log(`\n  📝 Field Summary:\n${fieldSummary}`);
+
+    } catch (error) {
+      console.log(`  ❌ Schema extraction failed: ${error.message}`);
+      console.log('  🔄 Falling back to per-field extraction...');
+
+      // FALLBACK: Extract per field (original approach)
+      formData = { fields: [] };
+      const seenLabels = new Set();
+
+      for (const element of formFields) {
+        try {
+          const elemStr = JSON.stringify(element).slice(0, 300);
+
+          const fieldInfo = await stagehand.extract({
+            instruction: `Extract the label and field type for this form element: ${elemStr}`,
+            schema: FormFieldSchema
+          });
+
+          const normalizedLabel = fieldInfo.label.toLowerCase().trim();
+          if (!seenLabels.has(normalizedLabel)) {
+            seenLabels.add(normalizedLabel);
+            formData.fields.push(fieldInfo);
+            console.log(`    ✅ Field ${formData.fields.length}: "${fieldInfo.label}" (${fieldInfo.fieldType})`);
+          }
+        } catch (err) {
+          console.log(`    ⚠️ Could not extract field: ${err.message}`);
         }
-        seenLabels.add(normalizedLabel);
-
-        fieldData.push({
-          element: element,
-          label: fieldInfo.label,
-          method: fieldInfo.method.toLowerCase(),
-          index: fieldData.length
-        });
-
-        console.log(`    📌 Field ${fieldData.length}: "${fieldInfo.label}" (${fieldInfo.method})`);
-      } catch (error) {
-        console.log(`    ⚠️ Could not extract field: ${error.message}`);
       }
     }
 
-    console.log(`\n  ✅ Extracted ${fieldData.length} unique fields`);
+    if (formData.fields.length === 0) {
+      throw new Error('No fields extracted from form');
+    }
 
-    // ========== PHASE 4: BATCHED AI CALL - Get All Answers at Once ==========
-    console.log('\n🧠 PHASE 4: Using batched AI call to generate all answers...');
+    // ========== PHASE 4: Batched AI Answer Generation ==========
+    console.log('\n🧠 PHASE 4: Generating answers with batched AI call...');
+
+    // Build comprehensive user context
+    const userContext = `
+USER PROFILE:
+Name: ${userProfile.fullName}
+Email: ${userProfile.email}
+Phone: ${userProfile.phone}
+Location: ${userProfile.location}
+LinkedIn: ${userProfile.linkedinUrl || 'N/A'}
+
+WORK EXPERIENCE:
+${userProfile.workExperience.map((exp, i) => `${i + 1}. ${exp.title} at ${exp.company} (${exp.duration})
+   ${exp.description}`).join('\n')}
+
+EDUCATION:
+${userProfile.education.map((edu, i) => `${i + 1}. ${edu.degree} in ${edu.field} from ${edu.school} (${edu.year})`).join('\n')}
+
+SKILLS:
+Technical: ${userProfile.skills.technical.join(', ')}
+Languages: ${userProfile.skills.languages.join(', ')}
+
+WORK AUTHORIZATION:
+Work Authorized: ${userProfile.workAuthorized ? 'Yes' : 'No'}
+Requires Sponsorship: ${userProfile.requiresSponsorship ? 'Yes' : 'No'}
+
+Years of Experience: ${userProfile.yearsOfExperience}
+`;
 
     let fieldAnswers = [];
 
-    if (fieldData.length > 0) {
+    // Generate answers for all fields in one batched call
+    if (formData.fields.length > 0) {
       try {
-        const fieldQuestions = fieldData.map((f, i) => 
-          `${i + 1}. "${f.label}"`
-        ).join('\n');
+        const fieldQuestions = formData.fields.map((f, i) => {
+          const optionsText = f.options && f.options.length > 0
+            ? ` (Options: ${f.options.join(', ')})`
+            : '';
+          return `${i + 1}. "${f.label}" [${f.fieldType}]${optionsText}`;
+        }).join('\n');
 
         const completion = await openai.chat.completions.create({
           model: "gpt-4o-mini",
           messages: [
             {
               role: "system",
-              content: "You are helping fill out a job application. Provide the BEST ANSWER for each field based on the user's profile. Answer naturally and concisely. Use logical inference when information isn't explicitly stated. Respond in JSON format."
+              content: `You are helping fill out a job application form. Provide the BEST ANSWER for each field based on the user's profile.
+
+RULES:
+1. Answer naturally and accurately based on the user's profile
+2. Use logical inference when information isn't explicitly stated
+3. For dropdowns/radios: Choose from the provided options that best matches the user's profile
+4. For yes/no questions: Answer "Yes" or "No"
+5. For visa sponsorship: Use the user's requiresSponsorship value
+6. For work authorization: Use the user's workAuthorized value
+7. For location/country: Use user's location from profile
+8. For experience: Use exact values from profile
+9. For email/phone: Use exact values provided
+10. Keep text input answers SHORT and DIRECT (under 50 words)
+11. For textarea/essay fields: Provide 2-3 sentences
+12. If the field asks for information not in the profile, make a reasonable inference or say "N/A"
+
+Respond in JSON format.`
             },
             {
               role: "user",
-              content: `${userContext}\n\nPlease provide the best answer for ALL of these form fields:\n\n${fieldQuestions}\n\nIMPORTANT RULES:\n1. Answer naturally and accurately based on the user's profile\n2. Use logical inference: If not explicitly stated, infer from context\n3. For visa sponsorship: Assume NO if not specified\n4. For work authorization: Answer YES if US-based location\n5. For location/country: Use user's location from profile\n6. For yes/no questions: Answer "Yes" or "No"\n7. For experience/education: Use exact values from profile\n8. Keep answers SHORT and DIRECT\n9. For textareas asking for descriptions: Provide 2-3 sentences\n\nRespond ONLY with a JSON object in this exact format:\n{\n  "answers": [\n    "answer for field 1",\n    "answer for field 2",\n    "answer for field 3"\n  ]\n}`
+              content: `${userContext}
+
+Please provide the best answer for ALL of these form fields:
+
+${fieldQuestions}
+
+Respond ONLY with a JSON object in this exact format:
+{
+  "answers": [
+    "answer for field 1",
+    "answer for field 2",
+    "answer for field 3"
+  ]
+}`
             }
           ],
           temperature: 0.3,
-          max_tokens: 2000,
+          max_tokens: 3000,
           response_format: { type: "json_object" }
         });
 
@@ -182,22 +282,31 @@ const adaptiveFormFill = async (stagehand, userProfile, sessionId, sessionUrl, r
         console.log(`  ✅ Generated ${fieldAnswers.length} answers via batched AI call`);
       } catch (error) {
         console.log(`  ⚠️ Batched AI call failed: ${error.message}`);
+        throw new Error('Failed to generate form answers');
       }
     }
 
-    // Also handle textareas separately for longer content
-    const textareaFields = fieldData.filter((f, i) => {
-      const answer = fieldAnswers[i] || '';
-      const label = f.label.toLowerCase();
-      return (label.includes('why') || label.includes('describe') || label.includes('tell us') || 
-              label.includes('experience') || label.includes('cover letter')) && answer.length < 100;
-    });
+    // Handle essay/textarea fields separately for longer, more detailed content
+    const essayFields = formData.fields
+      .map((f, i) => ({ field: f, index: i, answer: fieldAnswers[i] }))
+      .filter(({ field, answer }) => {
+        const label = field.label.toLowerCase();
+        const isEssayType = field.fieldType === 'textarea' ||
+                           field.category === 'essay' ||
+                           label.includes('why') ||
+                           label.includes('describe') ||
+                           label.includes('tell us') ||
+                           label.includes('cover letter') ||
+                           label.includes('additional information');
+        const needsMoreDetail = !answer || answer.length < 100;
+        return isEssayType && needsMoreDetail;
+      });
 
-    if (textareaFields.length > 0) {
-      console.log(`\n  📄 Generating detailed answers for ${textareaFields.length} textarea fields...`);
+    if (essayFields.length > 0) {
+      console.log(`\n  📄 Generating detailed responses for ${essayFields.length} essay fields...`);
       try {
-        const textareaQuestions = textareaFields.map((f) => 
-          `"${f.label}"`
+        const essayQuestions = essayFields.map(({ field }, i) =>
+          `${i + 1}. "${field.label}"`
         ).join('\n');
 
         const completion = await openai.chat.completions.create({
@@ -205,102 +314,143 @@ const adaptiveFormFill = async (stagehand, userProfile, sessionId, sessionUrl, r
           messages: [
             {
               role: "system",
-              content: "You are helping fill out a job application. Generate professional, detailed responses for essay questions. Keep each answer under 500 words."
+              content: `You are helping write thoughtful, professional responses for job application essay questions.
+
+GUIDELINES:
+- Write in first person
+- Be specific and use concrete examples from the user's experience
+- Show enthusiasm and cultural fit
+- Keep each answer between 100-300 words
+- Use professional but conversational tone
+- Highlight relevant skills and achievements`
             },
             {
               role: "user",
-              content: `${userContext}\n\nPlease provide detailed answers for these questions:\n\n${textareaQuestions}\n\nRespond with a JSON object: {"answers": ["answer1", "answer2"]}`
+              content: `${userContext}
+
+Please provide detailed, compelling answers for these essay questions:
+
+${essayQuestions}
+
+Respond with a JSON object: {"answers": ["answer1", "answer2", ...]}`
             }
           ],
           temperature: 0.7,
-          max_tokens: 2000,
+          max_tokens: 3000,
           response_format: { type: "json_object" }
         });
 
         const response = JSON.parse(completion.choices[0].message.content);
         const detailedAnswers = response.answers || [];
-        
-        // Update fieldAnswers with detailed answers
-        let detailedIdx = 0;
-        for (let i = 0; i < fieldData.length; i++) {
-          if (textareaFields.includes(fieldData[i]) && detailedIdx < detailedAnswers.length) {
-            fieldAnswers[i] = detailedAnswers[detailedIdx];
-            detailedIdx++;
+
+        // Update fieldAnswers with detailed essay responses
+        essayFields.forEach(({ index }, i) => {
+          if (i < detailedAnswers.length) {
+            fieldAnswers[index] = detailedAnswers[i];
           }
-        }
-        console.log(`  ✅ Generated ${detailedAnswers.length} detailed textarea answers`);
+        });
+
+        console.log(`  ✅ Generated ${detailedAnswers.length} detailed essay responses`);
       } catch (error) {
-        console.log(`  ⚠️ Detailed textarea AI call failed: ${error.message}`);
+        console.log(`  ⚠️ Essay generation failed: ${error.message}`);
       }
     }
 
-    // ========== PHASE 5: Fill All Fields Using Conditional Logic ==========
-    console.log('\n✍️ PHASE 5: Filling all fields with conditional logic...');
+    // ========== PHASE 5: Fill Fields with Secure Variables ==========
+    console.log('\n✍️ PHASE 5: Filling form fields with secure act() calls...');
 
     let filledCount = 0;
+    let skippedCount = 0;
+    let errorCount = 0;
 
-    for (let i = 0; i < fieldData.length; i++) {
-      const field = fieldData[i];
+    for (let i = 0; i < formData.fields.length; i++) {
+      const field = formData.fields[i];
       const answer = fieldAnswers[i];
 
-      if (!answer || answer.trim() === '' || answer === 'N/A') {
-        console.log(`  ⏭️  Skipping "${field.label}" - no answer`);
+      // Skip empty or N/A answers
+      if (!answer || answer.trim() === '' || answer.trim() === 'N/A') {
+        console.log(`  ⏭️  Skipping "${field.label}" - no answer available`);
+        skippedCount++;
         continue;
       }
 
       try {
+        // Check if field contains sensitive data
+        const sensitiveKeywords = ['email', 'phone', 'ssn', 'social security', 'password', 'salary'];
+        const isSensitive = sensitiveKeywords.some(keyword =>
+          field.label.toLowerCase().includes(keyword)
+        );
+
         let filled = false;
 
-        // CONDITIONAL: Use method to determine how to fill
-        if (field.method === 'type' || field.method.includes('type') || field.method.includes('fill')) {
-          // TEXT INPUT / TEXTAREA - Use type/fill
+        if (isSensitive) {
+          // Use Stagehand's secure variable syntax for sensitive data
+          console.log(`  🔒 Filling sensitive field "${field.label}" with secure variables...`);
           try {
-            await stagehand.act(`fill the "${field.label}" field with "${answer}"`);
+            await stagehand.act(`fill the "${field.label}" field with %secureValue%`, {
+              variables: { secureValue: answer }
+            });
             filled = true;
-            filledCount++;
-            console.log(`  ✅ Filled "${field.label}": ${answer.substring(0, 50)}...`);
-            await new Promise(resolve => setTimeout(resolve, 300));
-          } catch (e1) {
-            try {
-              await stagehand.act(`type "${answer}" into the "${field.label}" field`);
-              filled = true;
-              filledCount++;
-              console.log(`  ✅ Filled "${field.label}" (Method 2)`);
-              await new Promise(resolve => setTimeout(resolve, 300));
-            } catch (e2) {
-              console.log(`  ❌ Failed to fill "${field.label}"`);
-            }
+          } catch (error) {
+            // Fallback without variable syntax
+            await stagehand.act(`type %secureValue% into the "${field.label}" field`, {
+              variables: { secureValue: answer }
+            });
+            filled = true;
           }
-        } else if (field.method === 'click' || field.method.includes('click') || field.method.includes('select')) {
-          // DROPDOWN / RADIO / CHECKBOX - Use select/click
-          try {
+        } else {
+          // Regular fill for non-sensitive fields
+          if (field.fieldType === 'dropdown' || field.fieldType === 'radio') {
+            // For dropdowns and radios, use selection language
             await stagehand.act(`For the field "${field.label}", select the option that best matches: "${answer}"`);
             filled = true;
-            filledCount++;
-            console.log(`  ✅ Selected "${field.label}": ${answer}`);
-            await new Promise(resolve => setTimeout(resolve, 500));
-          } catch (e1) {
-            try {
-              await stagehand.act(`Select "${answer}" for "${field.label}"`);
+          } else if (field.fieldType === 'checkbox') {
+            // For checkboxes, use check/uncheck language
+            const shouldCheck = ['yes', 'true', '1', 'checked'].includes(answer.toLowerCase());
+            if (shouldCheck) {
+              await stagehand.act(`check the "${field.label}" checkbox`);
               filled = true;
-              filledCount++;
-              console.log(`  ✅ Selected "${field.label}" (Method 2)`);
-              await new Promise(resolve => setTimeout(resolve, 500));
-            } catch (e2) {
-              console.log(`  ❌ Failed to select "${field.label}"`);
+            } else {
+              console.log(`  ⏭️  Skipping checkbox "${field.label}" - answer is No/False`);
+              skippedCount++;
+              continue;
             }
+          } else if (field.fieldType === 'textarea') {
+            // For textareas, use fill language
+            await stagehand.act(`fill the "${field.label}" textarea with "${answer}"`);
+            filled = true;
+          } else {
+            // For text inputs (text, email, phone, number, url, date)
+            await stagehand.act(`fill the "${field.label}" field with "${answer}"`);
+            filled = true;
           }
         }
+
+        if (filled) {
+          filledCount++;
+          const displayAnswer = answer.length > 50 ? answer.substring(0, 50) + '...' : answer;
+          console.log(`  ✅ [${filledCount}/${formData.fields.length}] Filled "${field.label}": ${displayAnswer}`);
+
+          // Small delay to allow DOM updates
+          await new Promise(resolve => setTimeout(resolve, 400));
+        }
+
       } catch (error) {
-        console.log(`  ⚠️ Error with field ${i + 1}: ${error.message}`);
+        errorCount++;
+        console.log(`  ❌ Failed to fill "${field.label}": ${error.message}`);
+        // Continue to next field instead of failing entire process
       }
     }
+
+    console.log(`\n  📊 Fill Summary: ${filledCount} filled, ${skippedCount} skipped, ${errorCount} errors`);
 
     // ========== PHASE 6: Submit Application ==========
     console.log('\n🚀 PHASE 6: Submitting application...');
 
+    await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for any final validation
+
     try {
-      const submitVariations = [
+      const submitActions = [
         'click the "Submit Application" button',
         'click the "Submit" button',
         'click the submit button',
@@ -308,51 +458,68 @@ const adaptiveFormFill = async (stagehand, userProfile, sessionId, sessionUrl, r
         'click the apply button',
         'click the "Continue" button',
         'click the "Next" button',
-        'click the button to submit',
-        'click the button to continue'
+        'click the primary submit button at the bottom of the form'
       ];
 
       let submitted = false;
-      for (const action of submitVariations) {
+      for (const action of submitActions) {
         try {
           await stagehand.act(action);
-          console.log(`  ✅ Application submitted successfully with: ${action}`);
+          console.log(`  ✅ Application submitted successfully: ${action}`);
           submitted = true;
           break;
         } catch (error) {
-          continue;
+          continue; // Try next action
         }
       }
 
       if (!submitted) {
-        console.log('  ⚠️ Could not find submit button - application may need manual submission');
+        console.log('  ⚠️ Could not find submit button - application may require manual submission');
       }
     } catch (error) {
       console.log('  ⚠️ Error during submission:', error.message);
     }
 
-    // Wait before closing
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // Wait for submission to process
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
+    console.log('\n✅ Form filling process completed!');
+
+    // Close Stagehand session
     await stagehand.close();
 
+    // Return success response
     res.json({
       success: true,
       sessionId,
       sessionUrl,
-      message: `Application completed. Filled ${filledCount} out of ${fieldData.length} fields.`,
-      fieldsFilled: filledCount,
-      totalFields: fieldData.length,
-      fieldsProcessed: fieldData.length
+      message: `Application completed successfully. Filled ${filledCount} out of ${formData.fields.length} fields.`,
+      stats: {
+        totalFields: formData.fields.length,
+        fieldsFilled: filledCount,
+        fieldsSkipped: skippedCount,
+        fieldsErrored: errorCount,
+        successRate: `${Math.round((filledCount / formData.fields.length) * 100)}%`
+      }
     });
 
   } catch (error) {
-    console.error('❌ Error in adaptive form fill:', error);
+    console.error('\n❌ Fatal error in adaptive form fill:', error);
+
+    // Attempt to close Stagehand session
     try {
       await stagehand.close();
-    } catch (e) {
-      // Ignore close errors
+    } catch (closeError) {
+      console.error('Error closing Stagehand:', closeError.message);
     }
-    throw error;
+
+    // Return error response
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      sessionId,
+      sessionUrl
+    });
   }
 };
 
