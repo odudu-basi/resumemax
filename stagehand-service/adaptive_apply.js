@@ -149,7 +149,34 @@ Skills:
 - Soft: ${userProfile.skills?.soft?.join(', ') || 'N/A'}
 `;
 
-    // 3.1: Extract dropdown information
+    // 3.1: Extract text field information
+    console.log('  📝 Extracting text field labels...');
+    const textFieldData = [];
+    for (const field of finalTextFields.slice(0, 20)) { // Limit to first 20 text fields
+      try {
+        const fieldStr = JSON.stringify(field);
+        const TextFieldSchema = z.object({
+          label: z.string().describe("the label or question for this text input field"),
+          type: z.string().describe("the expected input type: name, email, phone, location, url, date, number, company, title, school, or other")
+        });
+
+        const fieldInfo = await stagehand.extract(`What is the label and what type of information should go in this text field? Element: ${fieldStr.slice(0, 200)}`, TextFieldSchema);
+
+        textFieldData.push({
+          element: field,
+          label: fieldInfo.label,
+          type: fieldInfo.type,
+          selector: field.selector || field.xpath || fieldStr.slice(0, 150),
+          index: textFieldData.length
+        });
+
+        console.log(`    📝 Text field ${textFieldData.length}: "${fieldInfo.label}" (${fieldInfo.type})`);
+      } catch (error) {
+        console.log(`    ⚠️ Could not extract text field: ${error.message}`);
+      }
+    }
+
+    // 3.2: Extract dropdown information
     console.log('  🎯 Extracting dropdown options...');
     const dropdownData = [];
     for (const dropdown of finalDropdowns.slice(0, 15)) { // Limit to first 15 dropdowns
@@ -174,7 +201,7 @@ Skills:
       }
     }
 
-    // 3.2: Extract textarea information
+    // 3.3: Extract textarea information
     console.log('  📄 Extracting textarea questions...');
     const textareaData = [];
     for (const textarea of finalTextareas.slice(0, 10)) { // Limit to first 10 textareas
@@ -201,7 +228,7 @@ Skills:
       }
     }
 
-    // 3.3: Extract radio button information
+    // 3.4: Extract radio button information
     console.log('  🔘 Extracting radio button groups...');
     const radioData = [];
     for (const radio of finalRadioGroups.slice(0, 10)) { // Limit to first 10 radio groups
@@ -227,7 +254,7 @@ Skills:
       }
     }
 
-    // 3.4: Extract checkbox information
+    // 3.5: Extract checkbox information
     console.log('  ☑️  Extracting checkboxes...');
     const checkboxData = [];
     for (const checkbox of finalCheckboxes.slice(0, 15)) { // Limit to first 15 checkboxes
@@ -253,7 +280,8 @@ Skills:
       }
     }
 
-    console.log(`\n  ✅ Extracted: ${dropdownData.length} dropdowns, ${textareaData.length} textareas, ${radioData.length} radios, ${checkboxData.length} checkboxes`);
+    console.log(`
+  ✅ Extracted: ${textFieldData.length} text fields, ${dropdownData.length} dropdowns, ${textareaData.length} textareas, ${radioData.length} radios, ${checkboxData.length} checkboxes`);
 
     // ========== PHASE 4: BATCHED AI CALLS - Make All Decisions at Once ==========
     console.log('\n🧠 PHASE 4: Using batched AI calls for intelligent decisions...');
@@ -295,7 +323,7 @@ Skills:
       }
     }
 
-    // 4.2: BATCHED DROPDOWN AI CALL - Get all selections in one call
+    // 4.3: BATCHED DROPDOWN AI CALL - Get all selections in one call
     if (dropdownData.length > 0) {
       console.log(`  🎯 Making batched AI call for ${dropdownData.length} dropdowns...`);
       try {
@@ -329,7 +357,7 @@ Skills:
       }
     }
 
-    // 4.3: BATCHED RADIO AI CALL - Get all selections in one call
+    // 4.4: BATCHED RADIO AI CALL - Get all selections in one call
     if (radioData.length > 0) {
       console.log(`  🔘 Making batched AI call for ${radioData.length} radio groups...`);
       try {
@@ -363,7 +391,7 @@ Skills:
       }
     }
 
-    // 4.4: BATCHED CHECKBOX AI CALL - Get all decisions in one call
+    // 4.5: BATCHED CHECKBOX AI CALL - Get all decisions in one call
     if (checkboxData.length > 0) {
       console.log(`  ☑️  Making batched AI call for ${checkboxData.length} checkboxes...`);
       try {
