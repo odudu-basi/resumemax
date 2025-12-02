@@ -76,12 +76,7 @@ const sidebarItems = [
     icon: FileText,
     description: 'Upload and manage your resume'
   },
-  {
-    id: 'context',
-    label: 'Context',
-    icon: MessageCircle,
-    description: 'Voice mode and AI assistance'
-  },
+
   {
     id: 'browse-jobs',
     label: 'Browse Jobs',

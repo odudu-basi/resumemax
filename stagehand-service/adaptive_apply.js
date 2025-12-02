@@ -37,11 +37,25 @@ const adaptiveFormFill = async (stagehand, userProfile, sessionId, sessionUrl, r
       }
     }
 
-    // ========== PHASE 2: Discover All Form Elements ==========
-    console.log('\n🔍 PHASE 2: Discovering all form elements...');
+    // ========== PHASE 2: Discover All Form Elements (Two-Step Approach) ==========
+    console.log('\n🔍 PHASE 2A: Locating application form container...');
+    
+    // Step 1: Find the form first
+    let formContainer = null;
+    try {
+      formContainer = await stagehand.observe({
+        instruction: "Find the main job application form on this page where candidates enter their information"
+      });
+      console.log(`  ✅ Found form container`);
+    } catch (error) {
+      console.log(`  ⚠️ Could not locate specific form container, will search entire page`);
+    }
 
+    console.log('\n🔍 PHASE 2B: Discovering form input fields...');
+    
+    // Step 2: Find inputs within the form (or entire page if form not found)
     const elements = await stagehand.observe({
-      instruction: "Find all form input fields, textareas, dropdowns, radio buttons, checkboxes, and file upload buttons on this page"
+      instruction: "Find all input elements that need to be filled out in this job application form: text input boxes where you type information, dropdown select menus where you choose options, large text areas for longer answers, radio button groups for single choices, and checkboxes for yes/no or multiple selections. Do NOT include: submit buttons, apply buttons, upload buttons, download buttons, or any links."
     });
 
     console.log(`  Found ${elements.length} interactive elements`);
@@ -73,7 +87,47 @@ const adaptiveFormFill = async (stagehand, userProfile, sessionId, sessionUrl, r
       }
     }
 
-    console.log(`  📊 Categorized: ${textFields.length} text, ${textareas.length} textarea, ${dropdowns.length} dropdown, ${radioGroups.length} radio, ${checkboxes.length} checkbox, ${fileUploads.length} file`);
+    // Filter out obvious non-form-fields (buttons, links, navigation)
+    console.log(`  🧹 Filtering out non-form elements...`);
+    const filterNonFormFields = (elements, typeName) => {
+      return elements.filter(elem => {
+        const elemStr = JSON.stringify(elem).toLowerCase();
+        
+        // Exclude if description mentions button/link actions
+        if (elem.description) {
+          const desc = elem.description.toLowerCase();
+          if (desc.includes('button to') || desc.includes('link to') || 
+              desc.includes('click') && (desc.includes('submit') || desc.includes('apply'))) {
+            console.log(`    ⏭️  Excluded ${typeName}: "${elem.description}"`);
+            return false;
+          }
+        }
+        
+        // Exclude if method is click and looks like navigation
+        if (elem.method === 'click' && (elemStr.includes('button') || elemStr.includes('link'))) {
+          return false;
+        }
+        
+        return true;
+      });
+    };
+
+    const filteredTextFields = filterNonFormFields(textFields, 'text field');
+    const filteredTextareas = filterNonFormFields(textareas, 'textarea');
+    const filteredDropdowns = filterNonFormFields(dropdowns, 'dropdown');
+    const filteredRadioGroups = filterNonFormFields(radioGroups, 'radio');
+    const filteredCheckboxes = filterNonFormFields(checkboxes, 'checkbox');
+    const filteredFileUploads = filterNonFormFields(fileUploads, 'file upload');
+
+    console.log(`  📊 After filtering: ${filteredTextFields.length} text, ${filteredTextareas.length} textarea, ${filteredDropdowns.length} dropdown, ${filteredRadioGroups.length} radio, ${filteredCheckboxes.length} checkbox, ${filteredFileUploads.length} file`);
+    
+    // Use filtered lists going forward
+    const finalTextFields = filteredTextFields;
+    const finalTextareas = filteredTextareas;
+    const finalDropdowns = filteredDropdowns;
+    const finalRadioGroups = filteredRadioGroups;
+    const finalCheckboxes = filteredCheckboxes;
+    const finalFileUploads = filteredFileUploads;
 
     // ========== PHASE 3: Extract Information from All Elements ==========
     console.log('\n📋 PHASE 3: Extracting information from all form elements...');
@@ -102,7 +156,7 @@ Skills:
     // 3.1: Extract dropdown information
     console.log('  🎯 Extracting dropdown options...');
     const dropdownData = [];
-    for (const dropdown of dropdowns.slice(0, 15)) { // Limit to first 15 dropdowns
+    for (const dropdown of finalDropdowns.slice(0, 15)) { // Limit to first 15 dropdowns
       try {
         const DropdownSchema = z.object({
           label: z.string().describe("the dropdown label or question"),
@@ -130,7 +184,7 @@ Skills:
     // 3.2: Extract textarea information
     console.log('  📄 Extracting textarea questions...');
     const textareaData = [];
-    for (const textarea of textareas.slice(0, 10)) { // Limit to first 10 textareas
+    for (const textarea of finalTextareas.slice(0, 10)) { // Limit to first 10 textareas
       try {
         const textareaStr = JSON.stringify(textarea);
         const TextareaPurposeSchema = z.object({
@@ -160,7 +214,7 @@ Skills:
     // 3.3: Extract radio button information
     console.log('  🔘 Extracting radio button groups...');
     const radioData = [];
-    for (const radio of radioGroups.slice(0, 10)) { // Limit to first 10 radio groups
+    for (const radio of finalRadioGroups.slice(0, 10)) { // Limit to first 10 radio groups
       try {
         const radioStr = JSON.stringify(radio);
         const RadioSchema = z.object({
@@ -189,7 +243,7 @@ Skills:
     // 3.4: Extract checkbox information
     console.log('  ☑️  Extracting checkboxes...');
     const checkboxData = [];
-    for (const checkbox of checkboxes.slice(0, 15)) { // Limit to first 15 checkboxes
+    for (const checkbox of finalCheckboxes.slice(0, 15)) { // Limit to first 15 checkboxes
       try {
         const checkboxStr = JSON.stringify(checkbox);
         const CheckboxSchema = z.object({
@@ -363,11 +417,11 @@ Skills:
     console.log('\n✍️ PHASE 5: Filling all discovered fields with batched AI responses...');
 
     let filledCount = 0;
-    const totalFields = textFields.length + textareas.length + dropdowns.length + radioGroups.length + checkboxes.length + fileUploads.length;
+    const totalFields = finalTextFields.length + finalTextareas.length + finalDropdowns.length + finalRadioGroups.length + finalCheckboxes.length + finalFileUploads.length;
 
     // 5.1: Fill text fields with smart matching
     console.log('  📝 Filling text fields...');
-    for (const field of textFields) {
+    for (const field of finalTextFields) {
       try {
         const fieldStr = JSON.stringify(field);
         const selector = field.selector || field.xpath || fieldStr.slice(0, 150);
@@ -643,7 +697,7 @@ Skills:
     }
 
     // 5.6: Handle file uploads
-    if (fileUploads.length > 0 && userProfile.resumeUrl) {
+    if (finalFileUploads.length > 0 && userProfile.resumeUrl) {
       console.log('  📎 File uploads detected...');
       console.log(`    ℹ️  Note: File upload requires resume file path, not URL. Skipping automated upload.`);
       console.log(`    ℹ️  Resume URL in profile: ${userProfile.resumeUrl}`);
