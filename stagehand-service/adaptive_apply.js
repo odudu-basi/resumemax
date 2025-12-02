@@ -308,11 +308,11 @@ Skills:
           messages: [
             {
               role: "system",
-              content: "You are helping fill out a job application. Select the most appropriate option for each dropdown. Respond in JSON format."
+              content: "You are helping fill out a job application. Select the most appropriate option for each dropdown based on the user's profile. Use logical inference when information isn't explicitly stated. For example: if user is a US citizen or green card holder, they don't need visa sponsorship (select 'No'). Respond in JSON format."
             },
             {
               role: "user",
-              content: `${userContext}\n\nPlease select the best option for ALL of these dropdowns:\n\n${dropdownQuestions}\n\nRespond ONLY with a JSON object in this exact format:\n{\n  "selections": [\n    "exact option text for dropdown 1",\n    "exact option text for dropdown 2",\n    "exact option text for dropdown 3"\n  ]\n}\n\nIMPORTANT: Each selection must be EXACTLY as written in the options list.`
+              content: `${userContext}\n\nPlease select the best option for ALL of these dropdowns:\n\n${dropdownQuestions}\n\nIMPORTANT RULES:\n1. Each selection must be EXACTLY as written in the options list\n2. Use logical inference: If not explicitly stated, infer from context (e.g., US citizen = no visa sponsorship needed)\n3. For visa sponsorship: If user profile doesn't specify, assume they DON'T need sponsorship (select "No" or "I do not require sponsorship")\n4. For authorization questions: If location suggests they can work (e.g., US-based), select "Yes" or "Authorized"\n\nRespond ONLY with a JSON object in this exact format:\n{\n  "selections": [\n    "exact option text for dropdown 1",\n    "exact option text for dropdown 2",\n    "exact option text for dropdown 3"\n  ]\n}`
             }
           ],
           temperature: 0.3,
@@ -560,7 +560,7 @@ Skills:
       }
     }
 
-    // 5.3: Fill dropdowns with batched AI selections
+    // 5.3: Fill dropdowns with batched AI selections (Enhanced with custom dropdown support)
     console.log('  🎯 Filling dropdown fields with batched AI selections...');
     for (let i = 0; i < dropdownData.length; i++) {
       const dropdown = dropdownData[i];
@@ -588,8 +588,11 @@ Skills:
               opt.toLowerCase().includes('bachelor') ||
               opt.toLowerCase().includes('master')
             );
-          } else if (label.includes('authorization') || label.includes('visa') || label.includes('eligible')) {
+          } else if (label.includes('authorization') || label.includes('visa') || label.includes('eligible') || label.includes('sponsorship')) {
             validOption = dropdown.options.find(opt =>
+              opt.toLowerCase().includes('no') ||
+              opt.toLowerCase() === 'no'
+            ) || dropdown.options.find(opt =>
               opt.toLowerCase().includes('yes') ||
               opt.toLowerCase().includes('authorized') ||
               opt.toLowerCase().includes('citizen')
@@ -598,14 +601,61 @@ Skills:
         }
 
         if (validOption) {
+          let filled = false;
+          
+          // METHOD 1: Try standard select approach
           try {
             await stagehand.act(`select "${validOption}" from the "${dropdown.label}" dropdown`);
+            filled = true;
             filledCount++;
-            console.log(`    ✅ Selected "${validOption}" in "${dropdown.label}"`);
+            console.log(`    ✅ Selected "${validOption}" in "${dropdown.label}" (Method 1: standard)`);
             await new Promise(resolve => setTimeout(resolve, 300));
-          } catch (e) {
-            console.log(`    ⚠️ Failed to select dropdown ${i + 1}`);
+          } catch (e1) {
+            console.log(`    ⏭️  Method 1 failed, trying custom dropdown approach...`);
+            
+            // METHOD 2: Multi-step custom dropdown approach
+            try {
+              // Step 1: Click to open the dropdown
+              await stagehand.act(`click on the "${dropdown.label}" dropdown to open it`);
+              await new Promise(resolve => setTimeout(resolve, 800));
+              
+              // Step 2: Click the specific option
+              await stagehand.act(`click on the option "${validOption}"`);
+              await new Promise(resolve => setTimeout(resolve, 300));
+              
+              filled = true;
+              filledCount++;
+              console.log(`    ✅ Selected "${validOption}" in "${dropdown.label}" (Method 2: custom dropdown)`);
+            } catch (e2) {
+              console.log(`    ⏭️  Method 2 failed, trying direct option click...`);
+              
+              // METHOD 3: Direct option selection
+              try {
+                await stagehand.act(`select the option labeled "${validOption}"`);
+                await new Promise(resolve => setTimeout(resolve, 300));
+                
+                filled = true;
+                filledCount++;
+                console.log(`    ✅ Selected "${validOption}" in "${dropdown.label}" (Method 3: direct option)`);
+              } catch (e3) {
+                console.log(`    ⏭️  Method 3 failed, trying alternative phrasing...`);
+                
+                // METHOD 4: Alternative phrasing
+                try {
+                  await stagehand.act(`choose "${validOption}" for the question "${dropdown.label}"`);
+                  await new Promise(resolve => setTimeout(resolve, 300));
+                  
+                  filled = true;
+                  filledCount++;
+                  console.log(`    ✅ Selected "${validOption}" in "${dropdown.label}" (Method 4: alternative)`);
+                } catch (e4) {
+                  console.log(`    ❌ All methods failed for dropdown ${i + 1}: "${dropdown.label}"`);
+                }
+              }
+            }
           }
+        } else {
+          console.log(`    ⚠️ No valid option found for dropdown ${i + 1}: "${dropdown.label}"`);
         }
       } catch (error) {
         console.log(`    ⚠️ Error processing dropdown ${i + 1}: ${error.message}`);
