@@ -70,7 +70,7 @@ const adaptiveFormFill = async (stagehand, userProfile, sessionId, sessionUrl, r
 
       if (formContainer && formContainer.selector) {
         formSelector = formContainer.selector;
-        console.log(`  ✅ Found form container: ${formSelector.substring(0, 80)}...`);
+        console.log(`  ✅ Found form container`);
       } else {
         console.log(`  ⚠️ Could not find specific form container, will search entire page`);
       }
@@ -99,91 +99,95 @@ const adaptiveFormFill = async (stagehand, userProfile, sessionId, sessionUrl, r
       throw new Error('No form fields discovered');
     }
 
-    // ========== PHASE 3: Unified Schema Extraction ==========
-    console.log('\n📋 PHASE 3: Extracting complete form schema with single extraction...');
+    // ========== PHASE 3: Convert Observed Fields to Structured Format ==========
+    console.log('\n📋 PHASE 3: Converting observed fields to structured format...');
 
-    // Define comprehensive Zod schema for ALL field types
-    const FormFieldSchema = z.object({
-      label: z.string().describe("The field label, question text, or placeholder"),
-      fieldType: z.enum([
-        'text', 'email', 'phone', 'number', 'url',
-        'dropdown', 'radio', 'checkbox',
-        'textarea', 'date',
-        'file', 'other'
-      ]).describe("The type of input field"),
-      options: z.array(z.string()).optional().describe("Available options for dropdowns, radios, or checkboxes"),
-      placeholder: z.string().optional().describe("Placeholder text if visible"),
-      required: z.boolean().describe("Whether this field is required"),
-      category: z.enum([
-        'contact',        // name, email, phone, address
-        'experience',     // years of experience, job title
-        'education',      // degree, school, graduation year
-        'authorization',  // work auth, visa sponsorship
-        'skills',         // technical skills, languages
-        'preferences',    // location preference, remote work
-        'essay',          // why do you want to work here, cover letter
-        'other'
-      ]).optional().describe("The category this field belongs to")
-    });
+    // Map observed elements to our field structure
+    const formData = { fields: [] };
+    const seenLabels = new Set();
 
-    const FormSchema = z.object({
-      fields: z.array(FormFieldSchema).describe("All form fields discovered on the page")
-    });
+    for (const element of formFields) {
+      try {
+        // Extract description which contains the label/question
+        const description = element.description || '';
+        const method = element.method || 'fill';
 
-    let formData = null;
-    try {
-      // Single extraction pass for ALL fields
-      const extractOptions = formSelector ? { selector: formSelector } : {};
+        // Parse field type from description and method
+        let fieldType = 'text';
+        const descLower = description.toLowerCase();
 
-      formData = await stagehand.extract({
-        instruction: `Analyze this job application form and extract information about ALL form fields. For each field, identify:
-- The label or question text
-- The field type (text input, dropdown, checkbox, etc.)
-- Available options for dropdowns/radios/checkboxes
-- Whether the field is required (look for asterisks or 'required' indicators)
-- The category it belongs to (contact info, work experience, education, etc.)
-
-Extract all fields in one comprehensive list.`,
-        schema: FormSchema,
-        ...extractOptions
-      });
-
-      console.log(`  ✅ Extracted schema for ${formData.fields.length} fields`);
-
-      // Log field summary
-      const fieldSummary = formData.fields.map((f, i) =>
-        `    ${i + 1}. "${f.label}" (${f.fieldType}${f.required ? ', required' : ''})`
-      ).join('\n');
-      console.log(`\n  📝 Field Summary:\n${fieldSummary}`);
-
-    } catch (error) {
-      console.log(`  ❌ Schema extraction failed: ${error.message}`);
-      console.log('  🔄 Falling back to per-field extraction...');
-
-      // FALLBACK: Extract per field (original approach)
-      formData = { fields: [] };
-      const seenLabels = new Set();
-
-      for (const element of formFields) {
-        try {
-          const elemStr = JSON.stringify(element).slice(0, 300);
-
-          const fieldInfo = await stagehand.extract({
-            instruction: `Extract the label and field type for this form element: ${elemStr}`,
-            schema: FormFieldSchema
-          });
-
-          const normalizedLabel = fieldInfo.label.toLowerCase().trim();
-          if (!seenLabels.has(normalizedLabel)) {
-            seenLabels.add(normalizedLabel);
-            formData.fields.push(fieldInfo);
-            console.log(`    ✅ Field ${formData.fields.length}: "${fieldInfo.label}" (${fieldInfo.fieldType})`);
-          }
-        } catch (err) {
-          console.log(`    ⚠️ Could not extract field: ${err.message}`);
+        if (descLower.includes('dropdown') || method === 'selectOption') {
+          fieldType = 'dropdown';
+        } else if (descLower.includes('textarea')) {
+          fieldType = 'textarea';
+        } else if (descLower.includes('checkbox')) {
+          fieldType = 'checkbox';
+        } else if (descLower.includes('radio')) {
+          fieldType = 'radio';
+        } else if (descLower.includes('email')) {
+          fieldType = 'email';
+        } else if (descLower.includes('phone')) {
+          fieldType = 'phone';
+        } else if (descLower.includes('date')) {
+          fieldType = 'date';
+        } else if (descLower.includes('number')) {
+          fieldType = 'number';
         }
+
+        // Extract label from description (remove "Text input for", "Dropdown for", etc.)
+        let label = description
+          .replace(/^(Text input for|Dropdown for|Textarea for|Checkbox for|Radio for)\s*/i, '')
+          .trim();
+
+        if (!label) {
+          console.log(`  ⚠️ Skipping element with no label`);
+          continue;
+        }
+
+        // Deduplicate by normalized label
+        const normalizedLabel = label.toLowerCase().trim();
+        if (seenLabels.has(normalizedLabel)) {
+          console.log(`  ⏭️  Skipping duplicate: "${label}"`);
+          continue;
+        }
+        seenLabels.add(normalizedLabel);
+
+        // Determine category from label
+        let category = 'other';
+        const labelLower = label.toLowerCase();
+        if (labelLower.includes('name') || labelLower.includes('email') || labelLower.includes('phone') || labelLower.includes('address') || labelLower.includes('linkedin') || labelLower.includes('website') || labelLower.includes('portfolio')) {
+          category = 'contact';
+        } else if (labelLower.includes('experience') || labelLower.includes('years') || labelLower.includes('title') || labelLower.includes('company')) {
+          category = 'experience';
+        } else if (labelLower.includes('education') || labelLower.includes('degree') || labelLower.includes('school') || labelLower.includes('university')) {
+          category = 'education';
+        } else if (labelLower.includes('visa') || labelLower.includes('sponsor') || labelLower.includes('authorization') || labelLower.includes('eligible')) {
+          category = 'authorization';
+        } else if (labelLower.includes('skill') || labelLower.includes('language') || labelLower.includes('proficiency')) {
+          category = 'skills';
+        } else if (labelLower.includes('location') || labelLower.includes('remote') || labelLower.includes('relocation') || labelLower.includes('where')) {
+          category = 'preferences';
+        } else if (labelLower.includes('why') || labelLower.includes('describe') || labelLower.includes('tell us') || labelLower.includes('cover letter') || labelLower.includes('additional information')) {
+          category = 'essay';
+        }
+
+        formData.fields.push({
+          label: label,
+          fieldType: fieldType,
+          method: method,
+          selector: element.selector,
+          required: descLower.includes('required') || descLower.includes('*'),
+          category: category
+        });
+
+        console.log(`  📌 Field ${formData.fields.length}: "${label}" (${fieldType}, ${category})`);
+
+      } catch (error) {
+        console.log(`  ⚠️ Could not process field: ${error.message}`);
       }
     }
+
+    console.log(`\n  ✅ Processed ${formData.fields.length} unique fields`);
 
     if (formData.fields.length === 0) {
       throw new Error('No fields extracted from form');
@@ -225,10 +229,7 @@ Years of Experience: ${userProfile.yearsOfExperience}
     if (formData.fields.length > 0) {
       try {
         const fieldQuestions = formData.fields.map((f, i) => {
-          const optionsText = f.options && f.options.length > 0
-            ? ` (Options: ${f.options.join(', ')})`
-            : '';
-          return `${i + 1}. "${f.label}" [${f.fieldType}]${optionsText}`;
+          return `${i + 1}. "${f.label}" [${f.fieldType}]`;
         }).join('\n');
 
         const completion = await openai.chat.completions.create({
@@ -241,7 +242,7 @@ Years of Experience: ${userProfile.yearsOfExperience}
 RULES:
 1. Answer naturally and accurately based on the user's profile
 2. Use logical inference when information isn't explicitly stated
-3. For dropdowns/radios: Choose from the provided options that best matches the user's profile
+3. For dropdowns/radios: Provide the most appropriate option
 4. For yes/no questions: Answer "Yes" or "No"
 5. For visa sponsorship: Use the user's requiresSponsorship value
 6. For work authorization: Use the user's workAuthorized value
