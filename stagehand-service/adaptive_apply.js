@@ -102,266 +102,62 @@ const adaptiveFormFill = async (stagehand, userProfile, sessionId, sessionUrl, r
       console.log(`  ⚠️ Could not locate specific form container, will search entire page`);
     }
 
-    console.log('\n🔍 PHASE 2B: Discovering form input fields...');
+    console.log('\n🔍 PHASE 2B: Discovering ALL form fields (no classification)...');
     
-    // Step 2: Find inputs within the form (or entire page if form not found)
-    const elements = await stagehand.observe("Find all input elements that need to be filled out in this job application form: text input boxes where you type information, dropdown select menus where you choose options, large text areas for longer answers, radio button groups for single choices, and checkboxes for yes/no or multiple selections. Do NOT include: submit buttons, apply buttons, upload buttons, download buttons, or any links.");
+    const elements = await stagehand.observe("Find all form fields that need to be filled in this job application: text input boxes, dropdowns, textareas, radio buttons, and checkboxes. Do NOT include submit buttons, apply buttons, or navigation links.");
 
-    console.log(`  Found ${elements.length} interactive elements`);
+    console.log(`  Found ${elements.length} form elements`);
 
-    // Categorize elements by type with better parsing
-    const textFields = [];
-    const textareas = [];
-    const dropdowns = [];
-    const radioGroups = [];
-    const checkboxes = [];
-    const fileUploads = [];
-
-    for (const elem of elements) {
-      const elemStr = JSON.stringify(elem).toLowerCase();
-      const elemType = elem.type || '';
-
-      if (elemStr.includes('file') || elemType === 'file') {
-        fileUploads.push(elem);
-      } else if (elemStr.includes('textarea') || elemType === 'textarea') {
-        textareas.push(elem);
-      } else if (elemStr.includes('select') || elemStr.includes('dropdown') || elemType === 'select') {
-        dropdowns.push(elem);
-      } else if (elemStr.includes('radio') || elemType === 'radio') {
-        radioGroups.push(elem);
-      } else if (elemStr.includes('checkbox') || elemType === 'checkbox') {
-        checkboxes.push(elem);
-      } else if (elemStr.includes('input') || elemStr.includes('text') || elemType === 'text') {
-        textFields.push(elem);
-      }
-    }
-
-    // Filter out obvious non-form-fields (buttons, links, navigation)
-    console.log(`  🧹 Filtering out non-form elements...`);
-    const filterNonFormFields = (elements, typeName) => {
-      return elements.filter(elem => {
-        const elemStr = JSON.stringify(elem).toLowerCase();
-        
-        // Exclude if description mentions button/link actions
-        if (elem.description) {
-          const desc = elem.description.toLowerCase();
-          if (desc.includes('button to') || desc.includes('link to') || 
-              desc.includes('click') && (desc.includes('submit') || desc.includes('apply'))) {
-            console.log(`    ⏭️  Excluded ${typeName}: "${elem.description}"`);
-            return false;
-          }
-        }
-        
-        // Exclude if method is click and looks like navigation
-        if (elem.method === 'click' && (elemStr.includes('button') || elemStr.includes('link'))) {
-          return false;
-        }
-        
-        return true;
-      });
-    };
-
-    const filteredTextFields = filterNonFormFields(textFields, 'text field');
-    const filteredTextareas = filterNonFormFields(textareas, 'textarea');
-    const filteredDropdowns = filterNonFormFields(dropdowns, 'dropdown');
-    const filteredRadioGroups = filterNonFormFields(radioGroups, 'radio');
-    const filteredCheckboxes = filterNonFormFields(checkboxes, 'checkbox');
-    const filteredFileUploads = filterNonFormFields(fileUploads, 'file upload');
-
-    console.log(`  📊 After filtering: ${filteredTextFields.length} text, ${filteredTextareas.length} textarea, ${filteredDropdowns.length} dropdown, ${filteredRadioGroups.length} radio, ${filteredCheckboxes.length} checkbox, ${filteredFileUploads.length} file`);
+    // ========== PHASE 3: Extract Labels & Deduplicate ==========
+    console.log('\n📋 PHASE 3: Extracting labels and deduplicating...');
     
-    // Use filtered lists going forward
-    const finalTextFields = filteredTextFields;
-    const finalTextareas = filteredTextareas;
-    const finalDropdowns = filteredDropdowns;
-    const finalRadioGroups = filteredRadioGroups;
-    const finalCheckboxes = filteredCheckboxes;
-    const finalFileUploads = filteredFileUploads;
-
-    // ========== PHASE 3: Extract Information from All Elements ==========
-    console.log('\n📋 PHASE 3: Extracting information from all form elements...');
-
-    // Build user context once for all AI calls
-    const userContext = `
-User Profile:
-- Name: ${userProfile.fullName}
-- Email: ${userProfile.email}
-- Phone: ${userProfile.phone}
-- Location: ${userProfile.location}
-- LinkedIn: ${userProfile.linkedinUrl || 'N/A'}
-- Portfolio: ${userProfile.portfolioUrl || 'N/A'}
-
-Work Experience:
-${userProfile.workExperience?.map((exp, i) => `${i + 1}. ${exp.title} at ${exp.company} (${exp.dates || 'Current'})\n   ${exp.description || ''}`).join('\n') || 'None'}
-
-Education:
-${userProfile.education?.map((edu, i) => `${i + 1}. ${edu.degree} - ${edu.school} (${edu.dates || ''})\n   ${edu.details || ''}`).join('\n') || 'None'}
-
-Skills:
-- Technical: ${userProfile.skills?.technical?.join(', ') || 'N/A'}
-- Soft: ${userProfile.skills?.soft?.join(', ') || 'N/A'}
-`;
-
-    // 3.1: Extract text field information
-    console.log('  📝 Extracting text field labels...');
-    const textFieldData = [];
-    for (const field of finalTextFields.slice(0, 20)) { // Limit to first 20 text fields
+    const fieldData = [];
+    const seenLabels = new Set();
+    
+    for (const element of elements) {
       try {
-        const fieldStr = JSON.stringify(field);
-        const TextFieldSchema = z.object({
-          label: z.string().describe("the label or question for this text input field"),
-          type: z.string().describe("the expected input type: name, email, phone, location, url, date, number, company, title, school, or other")
+        const elemStr = JSON.stringify(element);
+        
+        // Extract label and method
+        const FieldSchema = z.object({
+          label: z.string().describe("the label, question, or placeholder text for this field"),
+          method: z.string().describe("the interaction method: 'type' for text inputs/textareas, 'click' for dropdowns/radios/checkboxes")
         });
 
-        const fieldInfo = await stagehand.extract(`What is the label and what type of information should go in this text field? Element: ${fieldStr.slice(0, 200)}`, TextFieldSchema);
+        const fieldInfo = await stagehand.extract(`What is the label and interaction method for this form field? Element: ${elemStr.slice(0, 200)}`, FieldSchema);
 
-        textFieldData.push({
-          element: field,
-          label: fieldInfo.label,
-          type: fieldInfo.type,
-          selector: field.selector || field.xpath || fieldStr.slice(0, 150),
-          index: textFieldData.length
-        });
-
-        console.log(`    📝 Text field ${textFieldData.length}: "${fieldInfo.label}" (${fieldInfo.type})`);
-      } catch (error) {
-        console.log(`    ⚠️ Could not extract text field: ${error.message}`);
-      }
-    }
-
-    // 3.2: Extract dropdown information with deduplication
-    console.log('  🎯 Extracting dropdown questions (deduplicated)...');
-    const dropdownData = [];
-    const seenLabels = new Set(); // Track labels to avoid duplicates
-    
-    for (const dropdown of finalDropdowns.slice(0, 20)) { // Check up to 20, filter duplicates
-      try {
-        const DropdownSchema = z.object({
-          label: z.string().describe("the dropdown label or question text")
-        });
-
-        const dropdownInfo = await stagehand.extract(`What is the label or question text for this dropdown? Element: ${JSON.stringify(dropdown).slice(0, 200)}`, DropdownSchema);
-
-        // Skip if we've already seen this label (duplicate detection)
-        const normalizedLabel = dropdownInfo.label.toLowerCase().trim();
+        // Deduplicate by normalized label
+        const normalizedLabel = fieldInfo.label.toLowerCase().trim();
         if (seenLabels.has(normalizedLabel)) {
-          console.log(`    ⏭️  Skipping duplicate dropdown: "${dropdownInfo.label}"`);
+          console.log(`    ⏭️  Skipping duplicate: "${fieldInfo.label}"`);
           continue;
         }
         seenLabels.add(normalizedLabel);
 
-        dropdownData.push({
-          element: dropdown,
-          label: dropdownInfo.label,
-          index: dropdownData.length
+        fieldData.push({
+          element: element,
+          label: fieldInfo.label,
+          method: fieldInfo.method.toLowerCase(),
+          index: fieldData.length
         });
 
-        console.log(`    📌 Dropdown ${dropdownData.length}: "${dropdownInfo.label}"`);
-        
-        // Limit to 10 unique dropdowns
-        if (dropdownData.length >= 10) break;
+        console.log(`    📌 Field ${fieldData.length}: "${fieldInfo.label}" (${fieldInfo.method})`);
       } catch (error) {
-        console.log(`    ⚠️ Could not extract dropdown: ${error.message}`);
+        console.log(`    ⚠️ Could not extract field: ${error.message}`);
       }
     }
 
-    // 3.3: Extract textarea information
-    console.log('  📄 Extracting textarea questions...');
-    const textareaData = [];
-    for (const textarea of finalTextareas.slice(0, 10)) { // Limit to first 10 textareas
+    console.log(`\n  ✅ Extracted ${fieldData.length} unique fields`);
+
+    // ========== PHASE 4: BATCHED AI CALL - Get All Answers at Once ==========
+    console.log('\n🧠 PHASE 4: Using batched AI call to generate all answers...');
+
+    let fieldAnswers = [];
+
+    if (fieldData.length > 0) {
       try {
-        const textareaStr = JSON.stringify(textarea);
-        const TextareaPurposeSchema = z.object({
-          question: z.string().describe("What question or prompt is this textarea asking?"),
-          type: z.string().describe("cover letter, why this company, work experience, project description, additional info, or other")
-        });
-
-        const textareaPurpose = await stagehand.extract(`What is this textarea asking for? Element: ${textareaStr.slice(0, 200)}`, TextareaPurposeSchema);
-
-        textareaData.push({
-          element: textarea,
-          selector: textarea.selector || textarea.xpath || textareaStr.slice(0, 150),
-          question: textareaPurpose.question,
-          type: textareaPurpose.type,
-          index: textareaData.length
-        });
-
-        console.log(`    📝 Textarea ${textareaData.length}: "${textareaPurpose.question}"`);
-      } catch (error) {
-        console.log(`    ⚠️ Could not extract textarea: ${error.message}`);
-      }
-    }
-
-    // 3.4: Extract radio button information
-    console.log('  🔘 Extracting radio button groups...');
-    const radioData = [];
-    for (const radio of finalRadioGroups.slice(0, 10)) { // Limit to first 10 radio groups
-      try {
-        const radioStr = JSON.stringify(radio);
-        const RadioSchema = z.object({
-          question: z.string().describe("What question is this radio group asking?"),
-          options: z.array(z.string()).describe("What are the available radio button options?")
-        });
-
-        const radioInfo = await stagehand.extract(`What is this radio button group asking and what are the options? Element: ${radioStr.slice(0, 200)}`, RadioSchema);
-
-        radioData.push({
-          element: radio,
-          question: radioInfo.question,
-          options: radioInfo.options,
-          index: radioData.length
-        });
-
-        console.log(`    ⚪ Radio ${radioData.length}: "${radioInfo.question}"`);
-      } catch (error) {
-        console.log(`    ⚠️ Could not extract radio: ${error.message}`);
-      }
-    }
-
-    // 3.5: Extract checkbox information
-    console.log('  ☑️  Extracting checkboxes...');
-    const checkboxData = [];
-    for (const checkbox of finalCheckboxes.slice(0, 15)) { // Limit to first 15 checkboxes
-      try {
-        const checkboxStr = JSON.stringify(checkbox);
-        const CheckboxSchema = z.object({
-          label: z.string().describe("What does this checkbox say or ask?"),
-          type: z.string().describe("Is this: legal agreement, authorization, preference, or other?")
-        });
-
-        const checkboxInfo = await stagehand.extract(`What is this checkbox for? Element: ${checkboxStr.slice(0, 200)}`, CheckboxSchema);
-
-        checkboxData.push({
-          element: checkbox,
-          label: checkboxInfo.label,
-          type: checkboxInfo.type,
-          index: checkboxData.length
-        });
-
-        console.log(`    ☐ Checkbox ${checkboxData.length}: "${checkboxInfo.label}"`);
-      } catch (error) {
-        console.log(`    ⚠️ Could not extract checkbox: ${error.message}`);
-      }
-    }
-
-    console.log(`
-  ✅ Extracted: ${textFieldData.length} text fields, ${dropdownData.length} dropdowns, ${textareaData.length} textareas, ${radioData.length} radios, ${checkboxData.length} checkboxes`);
-
-    // ========== PHASE 4: BATCHED AI CALLS - Make All Decisions at Once ==========
-    console.log('\n🧠 PHASE 4: Using batched AI calls for intelligent decisions...');
-
-    let textFieldValues = [];
-    let textareaAnswers = [];
-    let dropdownSelections = [];
-    let radioSelections = [];
-    let checkboxDecisions = [];
-
-    // 4.1: BATCHED TEXT FIELD AI CALL - Get all values in one call
-    if (textFieldData.length > 0) {
-      console.log(`  📝 Making batched AI call for ${textFieldData.length} text fields...`);
-      try {
-        const textFieldQuestions = textFieldData.map((t, i) => 
-          `${i + 1}. "${t.label}" (type: ${t.type})`
+        const fieldQuestions = fieldData.map((f, i) => 
+          `${i + 1}. "${f.label}"`
         ).join('\n');
 
         const completion = await openai.chat.completions.create({
@@ -369,43 +165,51 @@ Skills:
           messages: [
             {
               role: "system",
-              content: "You are helping fill out a job application. Provide appropriate values for ALL text fields based on the user's profile. Keep answers concise and relevant. Use 'N/A' if information is not available. Respond in JSON format."
+              content: "You are helping fill out a job application. Provide the BEST ANSWER for each field based on the user's profile. Answer naturally and concisely. Use logical inference when information isn't explicitly stated. Respond in JSON format."
             },
             {
               role: "user",
-              content: `${userContext}\n\nPlease provide values for ALL of these text input fields:\n\n${textFieldQuestions}\n\nRespond ONLY with a JSON object in this exact format:\n{\n  "values": [\n    "value for field 1",\n    "value for field 2",\n    "value for field 3"\n  ]\n}\n\nIMPORTANT RULES:\n1. Use information from the user's profile\n2. Match the expected type (e.g., for 'email' use email address, for 'phone' use phone number)\n3. For URLs, provide full URLs (e.g., https://linkedin.com/in/username)\n4. For names, use appropriate parts (firstName for first name fields, etc.)\n5. If information is not in profile, use 'N/A' or leave empty for optional fields`
+              content: `${userContext}\n\nPlease provide the best answer for ALL of these form fields:\n\n${fieldQuestions}\n\nIMPORTANT RULES:\n1. Answer naturally and accurately based on the user's profile\n2. Use logical inference: If not explicitly stated, infer from context\n3. For visa sponsorship: Assume NO if not specified\n4. For work authorization: Answer YES if US-based location\n5. For location/country: Use user's location from profile\n6. For yes/no questions: Answer "Yes" or "No"\n7. For experience/education: Use exact values from profile\n8. Keep answers SHORT and DIRECT\n9. For textareas asking for descriptions: Provide 2-3 sentences\n\nRespond ONLY with a JSON object in this exact format:\n{\n  "answers": [\n    "answer for field 1",\n    "answer for field 2",\n    "answer for field 3"\n  ]\n}`
             }
           ],
           temperature: 0.3,
-          max_tokens: 1000,
+          max_tokens: 2000,
           response_format: { type: "json_object" }
         });
 
         const response = JSON.parse(completion.choices[0].message.content);
-        textFieldValues = response.values || [];
-        console.log(`    ✅ Generated ${textFieldValues.length} text field values`);
+        fieldAnswers = response.answers || [];
+        console.log(`  ✅ Generated ${fieldAnswers.length} answers via batched AI call`);
       } catch (error) {
-        console.log(`    ⚠️ Batched text field AI call failed: ${error.message}`);
-        console.log(`    ℹ️  Will use fallback for individual text fields`);
+        console.log(`  ⚠️ Batched AI call failed: ${error.message}`);
       }
     }
 
-    // 4.2: BATCHED TEXTAREA AI CALL - Get all answers in one call
-    if (textareaData.length > 0) {
-      console.log(`  📄 Making batched AI call for ${textareaData.length} textareas...`);
+    // Also handle textareas separately for longer content
+    const textareaFields = fieldData.filter((f, i) => {
+      const answer = fieldAnswers[i] || '';
+      const label = f.label.toLowerCase();
+      return (label.includes('why') || label.includes('describe') || label.includes('tell us') || 
+              label.includes('experience') || label.includes('cover letter')) && answer.length < 100;
+    });
+
+    if (textareaFields.length > 0) {
+      console.log(`\n  📄 Generating detailed answers for ${textareaFields.length} textarea fields...`);
       try {
-        const textareaQuestions = textareaData.map((t, i) => `${i + 1}. ${t.question}`).join('\n');
+        const textareaQuestions = textareaFields.map((f) => 
+          `"${f.label}"`
+        ).join('\n');
 
         const completion = await openai.chat.completions.create({
           model: "gpt-4o-mini",
           messages: [
             {
               role: "system",
-              content: "You are helping fill out a job application. Generate professional, concise responses for ALL questions. Keep each answer under 500 words. Respond in JSON format."
+              content: "You are helping fill out a job application. Generate professional, detailed responses for essay questions. Keep each answer under 500 words."
             },
             {
               role: "user",
-              content: `${userContext}\n\nPlease answer ALL of the following application questions:\n\n${textareaQuestions}\n\nRespond ONLY with a JSON object in this exact format:\n{\n  "answers": [\n    "answer to question 1",\n    "answer to question 2",\n    "answer to question 3"\n  ]\n}\n\nProvide professional, compelling answers based on the user's profile. Be specific and use details from their experience.`
+              content: `${userContext}\n\nPlease provide detailed answers for these questions:\n\n${textareaQuestions}\n\nRespond with a JSON object: {"answers": ["answer1", "answer2"]}`
             }
           ],
           temperature: 0.7,
@@ -414,346 +218,83 @@ Skills:
         });
 
         const response = JSON.parse(completion.choices[0].message.content);
-        textareaAnswers = response.answers || [];
-        console.log(`    ✅ Generated ${textareaAnswers.length} textarea answers`);
+        const detailedAnswers = response.answers || [];
+        
+        // Update fieldAnswers with detailed answers
+        let detailedIdx = 0;
+        for (let i = 0; i < fieldData.length; i++) {
+          if (textareaFields.includes(fieldData[i]) && detailedIdx < detailedAnswers.length) {
+            fieldAnswers[i] = detailedAnswers[detailedIdx];
+            detailedIdx++;
+          }
+        }
+        console.log(`  ✅ Generated ${detailedAnswers.length} detailed textarea answers`);
       } catch (error) {
-        console.log(`    ⚠️ Batched textarea AI call failed: ${error.message}`);
-        console.log(`    ℹ️  Will use fallback for individual textareas`);
+        console.log(`  ⚠️ Detailed textarea AI call failed: ${error.message}`);
       }
     }
 
-    // 4.3: BATCHED DROPDOWN AI CALL - Get all selections in one call
-    if (dropdownData.length > 0) {
-      console.log(`  🎯 Making batched AI call for ${dropdownData.length} dropdowns...`);
-      try {
-        const dropdownQuestions = dropdownData.map((d, i) =>
-          `${i + 1}. "${d.label}"\n   Options: ${JSON.stringify(d.options)}`
-        ).join('\n\n');
-
-        const completion = await openai.chat.completions.create({
-          model: "gpt-4o-mini",
-          messages: [
-            {
-              role: "system",
-              content: "You are helping fill out a job application. Select the most appropriate option for each dropdown based on the user's profile. Use logical inference when information isn't explicitly stated. For example: if user is a US citizen or green card holder, they don't need visa sponsorship (select 'No'). Respond in JSON format."
-            },
-            {
-              role: "user",
-              content: `${userContext}\n\nPlease select the best option for ALL of these dropdowns:\n\n${dropdownQuestions}\n\nIMPORTANT RULES:\n1. Each selection must be EXACTLY as written in the options list\n2. Use logical inference: If not explicitly stated, infer from context (e.g., US citizen = no visa sponsorship needed)\n3. For visa sponsorship: If user profile doesn't specify, assume they DON'T need sponsorship (select "No" or "I do not require sponsorship")\n4. For authorization questions: If location suggests they can work (e.g., US-based), select "Yes" or "Authorized"\n\nRespond ONLY with a JSON object in this exact format:\n{\n  "selections": [\n    "exact option text for dropdown 1",\n    "exact option text for dropdown 2",\n    "exact option text for dropdown 3"\n  ]\n}`
-            }
-          ],
-          temperature: 0.3,
-          max_tokens: 1000,
-          response_format: { type: "json_object" }
-        });
-
-        const response = JSON.parse(completion.choices[0].message.content);
-        dropdownSelections = response.selections || [];
-        console.log(`    ✅ Generated ${dropdownSelections.length} dropdown selections`);
-      } catch (error) {
-        console.log(`    ⚠️ Batched dropdown AI call failed: ${error.message}`);
-        console.log(`    ℹ️  Will use fallback for individual dropdowns`);
-      }
-    }
-
-    // 4.4: BATCHED RADIO AI CALL - Get all selections in one call
-    if (radioData.length > 0) {
-      console.log(`  🔘 Making batched AI call for ${radioData.length} radio groups...`);
-      try {
-        const radioQuestions = radioData.map((r, i) =>
-          `${i + 1}. "${r.question}"\n   Options: ${JSON.stringify(r.options)}`
-        ).join('\n\n');
-
-        const completion = await openai.chat.completions.create({
-          model: "gpt-4o-mini",
-          messages: [
-            {
-              role: "system",
-              content: "You are helping fill out a job application. Select the most appropriate radio button for each question. Respond in JSON format."
-            },
-            {
-              role: "user",
-              content: `${userContext}\n\nPlease select the best option for ALL of these radio button groups:\n\n${radioQuestions}\n\nRespond ONLY with a JSON object in this exact format:\n{\n  "selections": [\n    "exact option text for radio 1",\n    "exact option text for radio 2",\n    "exact option text for radio 3"\n  ]\n}\n\nIMPORTANT: Each selection must be EXACTLY as written in the options list.`
-            }
-          ],
-          temperature: 0.3,
-          max_tokens: 500,
-          response_format: { type: "json_object" }
-        });
-
-        const response = JSON.parse(completion.choices[0].message.content);
-        radioSelections = response.selections || [];
-        console.log(`    ✅ Generated ${radioSelections.length} radio selections`);
-      } catch (error) {
-        console.log(`    ⚠️ Batched radio AI call failed: ${error.message}`);
-        console.log(`    ℹ️  Will use fallback for individual radios`);
-      }
-    }
-
-    // 4.5: BATCHED CHECKBOX AI CALL - Get all decisions in one call
-    if (checkboxData.length > 0) {
-      console.log(`  ☑️  Making batched AI call for ${checkboxData.length} checkboxes...`);
-      try {
-        const checkboxQuestions = checkboxData.map((c, i) =>
-          `${i + 1}. "${c.label}" (type: ${c.type})`
-        ).join('\n');
-
-        const completion = await openai.chat.completions.create({
-          model: "gpt-4o-mini",
-          messages: [
-            {
-              role: "system",
-              content: "You are helping fill out a job application. Decide whether each checkbox should be checked. Respond in JSON format."
-            },
-            {
-              role: "user",
-              content: `${userContext}\n\nFor ALL of these checkboxes, decide if they should be checked:\n\n${checkboxQuestions}\n\nRespond ONLY with a JSON object in this exact format:\n{\n  "decisions": [\n    true,\n    false,\n    true\n  ]\n}\n\nUse true for checkboxes that should be checked, false for those that should not.`
-            }
-          ],
-          temperature: 0.3,
-          max_tokens: 300,
-          response_format: { type: "json_object" }
-        });
-
-        const response = JSON.parse(completion.choices[0].message.content);
-        checkboxDecisions = response.decisions || [];
-        console.log(`    ✅ Generated ${checkboxDecisions.length} checkbox decisions`);
-      } catch (error) {
-        console.log(`    ⚠️ Batched checkbox AI call failed: ${error.message}`);
-        console.log(`    ℹ️  Will use fallback for individual checkboxes`);
-      }
-    }
-
-    // ========== PHASE 5: Fill All Fields with Batched AI Responses ==========
-    console.log('\n✍️ PHASE 5: Filling all discovered fields with batched AI responses...');
+    // ========== PHASE 5: Fill All Fields Using Conditional Logic ==========
+    console.log('\n✍️ PHASE 5: Filling all fields with conditional logic...');
 
     let filledCount = 0;
-    const totalFields = finalTextFields.length + finalTextareas.length + finalDropdowns.length + finalRadioGroups.length + finalCheckboxes.length + finalFileUploads.length;
 
-    // 5.1: Fill text fields with batched AI values
-    console.log('  📝 Filling text fields with batched AI values...');
-    for (let i = 0; i < textFieldData.length; i++) {
-      const field = textFieldData[i];
-      const aiValue = textFieldValues[i];
+    for (let i = 0; i < fieldData.length; i++) {
+      const field = fieldData[i];
+      const answer = fieldAnswers[i];
+
+      if (!answer || answer.trim() === '' || answer === 'N/A') {
+        console.log(`  ⏭️  Skipping "${field.label}" - no answer`);
+        continue;
+      }
 
       try {
-        let valueToFill = aiValue;
-
-        // Skip if no AI value or it's N/A
-        if (!valueToFill || valueToFill.trim() === '' || valueToFill === 'N/A') {
-          console.log(`    ⏭️  Skipping "${field.label}" - no value provided by AI`);
-          continue;
-        }
-
         let filled = false;
-        
-        // METHOD 1: Try using the field label
-        try {
-          await stagehand.act(`type "${valueToFill}" into the "${field.label}" field`);
-          filled = true;
-          filledCount++;
-          console.log(`    ✅ Filled "${field.label}": ${valueToFill.substring(0, 40)}...`);
-          await new Promise(resolve => setTimeout(resolve, 300));
-        } catch (e1) {
-          // METHOD 2: Try using the selector
+
+        // CONDITIONAL: Use method to determine how to fill
+        if (field.method === 'type' || field.method.includes('type') || field.method.includes('fill')) {
+          // TEXT INPUT / TEXTAREA - Use type/fill
           try {
-            await stagehand.act(`type "${valueToFill}" into the field: ${field.selector}`);
+            await stagehand.act(`fill the "${field.label}" field with "${answer}"`);
             filled = true;
             filledCount++;
-            console.log(`    ✅ Filled "${field.label}": ${valueToFill.substring(0, 40)}... (via selector)`);
+            console.log(`  ✅ Filled "${field.label}": ${answer.substring(0, 50)}...`);
             await new Promise(resolve => setTimeout(resolve, 300));
-          } catch (e2) {
-            // METHOD 3: Try generic type-based approach
+          } catch (e1) {
             try {
-              await stagehand.act(`type "${valueToFill}" into the ${field.type} field`);
+              await stagehand.act(`type "${answer}" into the "${field.label}" field`);
               filled = true;
               filledCount++;
-              console.log(`    ✅ Filled "${field.label}": ${valueToFill.substring(0, 40)}... (via type)`);
+              console.log(`  ✅ Filled "${field.label}" (Method 2)`);
               await new Promise(resolve => setTimeout(resolve, 300));
-            } catch (e3) {
-              console.log(`    ❌ Failed to fill "${field.label}"`);
+            } catch (e2) {
+              console.log(`  ❌ Failed to fill "${field.label}"`);
             }
           }
-        }
-      } catch (error) {
-        console.log(`    ⚠️ Error filling text field ${i + 1}: ${error.message}`);
-      }
-    }
-
-    // 5.2: Fill textareas with batched AI answers
-    console.log('  📄 Filling textarea fields with batched AI answers...');
-    for (let i = 0; i < textareaData.length; i++) {
-      const textarea = textareaData[i];
-      const aiAnswer = textareaAnswers[i];
-
-      try {
-        let valueToFill = aiAnswer;
-
-        // Fallback if no AI answer
-        if (!valueToFill || valueToFill.trim() === '') {
-          console.log(`    ⚠️ No AI answer for textarea ${i + 1}, using fallback`);
-          if (textarea.type === 'cover letter') {
-            valueToFill = `I am excited to apply for this position. With ${userProfile.workExperience?.[0]?.title} experience at ${userProfile.workExperience?.[0]?.company}, I have developed strong skills in ${userProfile.skills?.technical?.slice(0, 3).join(', ')}. I believe my background aligns well with the requirements of this role.`;
-          } else if (textarea.type === 'work experience') {
-            valueToFill = userProfile.workExperience?.map((e, idx) =>
-              `${idx + 1}. ${e.title} at ${e.company} (${e.dates || 'Current'})\n${e.description || ''}`
-            ).join('\n\n');
-          } else {
-            continue;
-          }
-        }
-
-        let filled = false;
-        // METHOD 1: Try selector first (most precise - we extracted from this exact element)
-        try {
-          await stagehand.act(`type "${valueToFill}" into the field: ${textarea.selector}`);
-          filled = true;
-        } catch (e1) {
-          // METHOD 2: Fallback to semantic description with question context
+        } else if (field.method === 'click' || field.method.includes('click') || field.method.includes('select')) {
+          // DROPDOWN / RADIO / CHECKBOX - Use select/click
           try {
-            await stagehand.act(`type "${valueToFill}" into the textarea for "${textarea.question}"`);
-            filled = true;
-          } catch (e2) {
-            // METHOD 3: Last resort - generic textarea
-            try {
-              await stagehand.act(`type "${valueToFill}" into the textarea`);
-              filled = true;
-            } catch (e3) {
-              // Silent fail
-            }
-          }
-        }
-
-        if (filled) {
-          filledCount++;
-          console.log(`    ✅ Filled textarea ${i + 1}: "${textarea.question.substring(0, 40)}..." (${valueToFill.length} chars)`);
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
-      } catch (error) {
-        console.log(`    ⚠️ Error filling textarea ${i + 1}: ${error.message}`);
-      }
-    }
-
-    // 5.3: Fill dropdowns using act() with AI's freeform answers
-    console.log('  🎯 Filling dropdown fields with AI-generated answers...');
-    for (let i = 0; i < dropdownData.length; i++) {
-      const dropdown = dropdownData[i];
-      const aiAnswer = dropdownSelections[i];
-
-      if (!aiAnswer || aiAnswer.trim() === '') {
-        console.log(`    ⏭️  No AI answer for dropdown ${i + 1}, skipping`);
-        continue;
-      }
-
-      try {
-        let filled = false;
-        
-        // METHOD 1: Let act() choose the best matching option based on AI answer
-        try {
-          await stagehand.act(`For the dropdown question "${dropdown.label}", select the option that best matches: "${aiAnswer}"`);
-          filled = true;
-          filledCount++;
-          console.log(`    ✅ Filled "${dropdown.label}" with best match for "${aiAnswer}"`);
-          await new Promise(resolve => setTimeout(resolve, 500));
-        } catch (e1) {
-          // METHOD 2: More direct instruction
-          try {
-            await stagehand.act(`In the "${dropdown.label}" dropdown, select the option closest to "${aiAnswer}"`);
+            await stagehand.act(`For the field "${field.label}", select the option that best matches: "${answer}"`);
             filled = true;
             filledCount++;
-            console.log(`    ✅ Filled "${dropdown.label}" (Method 2)`);
+            console.log(`  ✅ Selected "${field.label}": ${answer}`);
             await new Promise(resolve => setTimeout(resolve, 500));
-          } catch (e2) {
-            // METHOD 3: Generic dropdown selection
+          } catch (e1) {
             try {
-              await stagehand.act(`Select "${aiAnswer}" from the dropdown for "${dropdown.label}"`);
+              await stagehand.act(`Select "${answer}" for "${field.label}"`);
               filled = true;
               filledCount++;
-              console.log(`    ✅ Filled "${dropdown.label}" (Method 3)`);
+              console.log(`  ✅ Selected "${field.label}" (Method 2)`);
               await new Promise(resolve => setTimeout(resolve, 500));
-            } catch (e3) {
-              console.log(`    ❌ All methods failed for dropdown "${dropdown.label}" with answer "${aiAnswer}"`);
+            } catch (e2) {
+              console.log(`  ❌ Failed to select "${field.label}"`);
             }
           }
         }
       } catch (error) {
-        console.log(`    ⚠️ Error processing dropdown ${i + 1}: ${error.message}`);
+        console.log(`  ⚠️ Error with field ${i + 1}: ${error.message}`);
       }
     }
-
-    // 5.4: Fill radio buttons with batched AI selections
-    console.log('  🔘 Filling radio button groups with batched AI selections...');
-    for (let i = 0; i < radioData.length; i++) {
-      const radio = radioData[i];
-      const aiSelection = radioSelections[i];
-
-      if (!aiSelection || aiSelection.trim() === '') {
-        console.log(`    ⚠️ No AI selection for radio ${i + 1}, skipping`);
-        continue;
-      }
-
-      try {
-        // METHOD 1: Try with question context first (most specific)
-        await stagehand.act(`select the "${aiSelection}" radio button for "${radio.question}"`);
-        filledCount++;
-        console.log(`    ✅ Selected radio "${aiSelection}" for "${radio.question.substring(0, 40)}..."`);
-        await new Promise(resolve => setTimeout(resolve, 300));
-      } catch (e1) {
-        // METHOD 2: Fallback to generic radio button selection
-        try {
-          await stagehand.act(`select the "${aiSelection}" radio button`);
-          filledCount++;
-          console.log(`    ✅ Selected radio "${aiSelection}" (fallback method)`);
-          await new Promise(resolve => setTimeout(resolve, 300));
-        } catch (error) {
-          console.log(`    ⚠️ Failed to select radio ${i + 1}`);
-        }
-      }
-    }
-
-    // 5.5: Fill checkboxes with batched AI decisions
-    console.log('  ☑️  Filling checkboxes with batched AI decisions...');
-    for (let i = 0; i < checkboxData.length; i++) {
-      const checkbox = checkboxData[i];
-      let shouldCheck = checkboxDecisions[i];
-
-      // Auto-check certain types if AI didn't provide decision
-      if (shouldCheck === undefined || shouldCheck === null) {
-        const labelLower = checkbox.label.toLowerCase();
-        if (checkbox.type === 'legal agreement' || labelLower.includes('terms') || labelLower.includes('agree')) {
-          shouldCheck = true;
-        } else if (checkbox.type === 'authorization' || labelLower.includes('authorize') || labelLower.includes('consent')) {
-          shouldCheck = true;
-        } else if (labelLower.includes('eligible') || labelLower.includes('authorized to work')) {
-          shouldCheck = true;
-        } else {
-          console.log(`    ⏭️  No decision for checkbox ${i + 1}, skipping`);
-          continue;
-        }
-      }
-
-      if (shouldCheck) {
-        try {
-          await stagehand.act(`check the checkbox for "${checkbox.label}"`);
-          filledCount++;
-          console.log(`    ✅ Checked: "${checkbox.label.substring(0, 50)}..."`);
-          await new Promise(resolve => setTimeout(resolve, 300));
-        } catch (error) {
-          console.log(`    ⚠️ Failed to check checkbox ${i + 1}`);
-        }
-      } else {
-        console.log(`    ⏭️  Skipped checkbox ${i + 1} (should not check)`);
-      }
-    }
-
-    // 5.6: Handle file uploads
-    if (finalFileUploads.length > 0 && userProfile.resumeUrl) {
-      console.log('  📎 File uploads detected...');
-      console.log(`    ℹ️  Note: File upload requires resume file path, not URL. Skipping automated upload.`);
-      console.log(`    ℹ️  Resume URL in profile: ${userProfile.resumeUrl}`);
-    }
-
-    console.log(`\n📊 Summary: Filled ${filledCount} out of ${totalFields} fields`);
 
     // ========== PHASE 6: Submit Application ==========
     console.log('\n🚀 PHASE 6: Submitting application...');
