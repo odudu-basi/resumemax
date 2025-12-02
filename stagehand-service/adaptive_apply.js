@@ -43,9 +43,7 @@ const adaptiveFormFill = async (stagehand, userProfile, sessionId, sessionUrl, r
     // Step 1: Find the form first
     let formContainer = null;
     try {
-      formContainer = await stagehand.observe({
-        instruction: "Find the main job application form on this page where candidates enter their information"
-      });
+      formContainer = await stagehand.observe("Find the main job application form on this page where candidates enter their information");
       console.log(`  ✅ Found form container`);
     } catch (error) {
       console.log(`  ⚠️ Could not locate specific form container, will search entire page`);
@@ -54,9 +52,7 @@ const adaptiveFormFill = async (stagehand, userProfile, sessionId, sessionUrl, r
     console.log('\n🔍 PHASE 2B: Discovering form input fields...');
     
     // Step 2: Find inputs within the form (or entire page if form not found)
-    const elements = await stagehand.observe({
-      instruction: "Find all input elements that need to be filled out in this job application form: text input boxes where you type information, dropdown select menus where you choose options, large text areas for longer answers, radio button groups for single choices, and checkboxes for yes/no or multiple selections. Do NOT include: submit buttons, apply buttons, upload buttons, download buttons, or any links."
-    });
+    const elements = await stagehand.observe("Find all input elements that need to be filled out in this job application form: text input boxes where you type information, dropdown select menus where you choose options, large text areas for longer answers, radio button groups for single choices, and checkboxes for yes/no or multiple selections. Do NOT include: submit buttons, apply buttons, upload buttons, download buttons, or any links.");
 
     console.log(`  Found ${elements.length} interactive elements`);
 
@@ -163,10 +159,7 @@ Skills:
           options: z.array(z.string()).describe("all available options in this dropdown")
         });
 
-        const dropdownInfo = await stagehand.extract({
-          instruction: `What is the label and what are all the options for this dropdown? Element: ${JSON.stringify(dropdown).slice(0, 200)}`,
-          schema: DropdownSchema
-        });
+        const dropdownInfo = await stagehand.extract(`What is the label and what are all the options for this dropdown? Element: ${JSON.stringify(dropdown).slice(0, 200)}`, DropdownSchema);
 
         dropdownData.push({
           element: dropdown,
@@ -192,10 +185,7 @@ Skills:
           type: z.string().describe("cover letter, why this company, work experience, project description, additional info, or other")
         });
 
-        const textareaPurpose = await stagehand.extract({
-          instruction: `What is this textarea asking for? Element: ${textareaStr.slice(0, 200)}`,
-          schema: TextareaPurposeSchema
-        });
+        const textareaPurpose = await stagehand.extract(`What is this textarea asking for? Element: ${textareaStr.slice(0, 200)}`, TextareaPurposeSchema);
 
         textareaData.push({
           element: textarea,
@@ -222,10 +212,7 @@ Skills:
           options: z.array(z.string()).describe("What are the available radio button options?")
         });
 
-        const radioInfo = await stagehand.extract({
-          instruction: `What is this radio button group asking and what are the options? Element: ${radioStr.slice(0, 200)}`,
-          schema: RadioSchema
-        });
+        const radioInfo = await stagehand.extract(`What is this radio button group asking and what are the options? Element: ${radioStr.slice(0, 200)}`, RadioSchema);
 
         radioData.push({
           element: radio,
@@ -251,10 +238,7 @@ Skills:
           type: z.string().describe("Is this: legal agreement, authorization, preference, or other?")
         });
 
-        const checkboxInfo = await stagehand.extract({
-          instruction: `What is this checkbox for? Element: ${checkboxStr.slice(0, 200)}`,
-          schema: CheckboxSchema
-        });
+        const checkboxInfo = await stagehand.extract(`What is this checkbox for? Element: ${checkboxStr.slice(0, 200)}`, CheckboxSchema);
 
         checkboxData.push({
           element: checkbox,
@@ -433,10 +417,7 @@ Skills:
 
         let fieldPurpose;
         try {
-          fieldPurpose = await stagehand.extract({
-            instruction: `Based on this form field element, what is its purpose? Field: ${fieldStr.slice(0, 200)}`,
-            schema: FieldPurposeSchema
-          });
+          fieldPurpose = await stagehand.extract(`Based on this form field element, what is its purpose? Field: ${fieldStr.slice(0, 200)}`, FieldPurposeSchema);
         } catch (e) {
           continue;
         }
