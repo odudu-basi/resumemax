@@ -13,8 +13,61 @@ const adaptiveFormFill = async (stagehand, userProfile, sessionId, sessionUrl, r
   const lastName = userProfile.fullName.split(' ').slice(1).join(' ') || '';
 
   try {
-    // ========== PHASE 1: Fill Basic Contact Info First ==========
-    console.log('\n📝 PHASE 1: Filling basic contact information...');
+    // ========== PHASE 1: Handle Resume Upload & Fill Basic Contact Info ==========
+    console.log('\n📝 PHASE 1: Handling resume upload and basic contact information...');
+
+    // 1.1: Handle resume upload if resume file is provided
+    if (userProfile.resumeFile || userProfile.resumePath || userProfile.resumeUrl) {
+      console.log('  📎 Looking for resume upload field...');
+      try {
+        const resumeFilePath = userProfile.resumeFile || userProfile.resumePath;
+        
+        if (resumeFilePath) {
+          // Upload from local file path - Try multiple methods
+          let uploaded = false;
+          
+          // METHOD 1: Standard upload with "resume" field
+          try {
+            await stagehand.act(`upload the file "${resumeFilePath}" to the resume upload field`);
+            console.log(`  ✅ Uploaded resume from: ${resumeFilePath}`);
+            uploaded = true;
+            await new Promise(resolve => setTimeout(resolve, 1500)); // Wait for upload to process
+          } catch (e1) {
+            // METHOD 2: Try "attach file"
+            try {
+              await stagehand.act(`attach the file "${resumeFilePath}" to the resume field`);
+              console.log(`  ✅ Uploaded resume from: ${resumeFilePath} (Method 2)`);
+              uploaded = true;
+              await new Promise(resolve => setTimeout(resolve, 1500));
+            } catch (e2) {
+              // METHOD 3: Try generic file upload
+              try {
+                await stagehand.act(`select and upload the file "${resumeFilePath}"`);
+                console.log(`  ✅ Uploaded resume from: ${resumeFilePath} (Method 3)`);
+                uploaded = true;
+                await new Promise(resolve => setTimeout(resolve, 1500));
+              } catch (e3) {
+                // METHOD 4: Try CV upload
+                try {
+                  await stagehand.act(`upload the file "${resumeFilePath}" to the CV upload field`);
+                  console.log(`  ✅ Uploaded resume from: ${resumeFilePath} (Method 4)`);
+                  uploaded = true;
+                  await new Promise(resolve => setTimeout(resolve, 1500));
+                } catch (e4) {
+                  console.log(`  ⚠️ Could not upload resume file: ${e4.message}`);
+                }
+              }
+            }
+          }
+        } else if (userProfile.resumeUrl) {
+          console.log(`  ℹ️  Resume URL provided: ${userProfile.resumeUrl}`);
+        }
+      } catch (error) {
+        console.log(`  ⚠️ Resume upload error: ${error.message}`);
+      }
+    }
+
+    // 1.2: Fill basic contact information
 
     const basicFields = [
       { value: firstName, labels: ['First Name', 'first name', 'First', 'Given Name'] },
@@ -286,12 +339,47 @@ Skills:
     // ========== PHASE 4: BATCHED AI CALLS - Make All Decisions at Once ==========
     console.log('\n🧠 PHASE 4: Using batched AI calls for intelligent decisions...');
 
+    let textFieldValues = [];
     let textareaAnswers = [];
     let dropdownSelections = [];
     let radioSelections = [];
     let checkboxDecisions = [];
 
-    // 4.1: BATCHED TEXTAREA AI CALL - Get all answers in one call
+    // 4.1: BATCHED TEXT FIELD AI CALL - Get all values in one call
+    if (textFieldData.length > 0) {
+      console.log(`  📝 Making batched AI call for ${textFieldData.length} text fields...`);
+      try {
+        const textFieldQuestions = textFieldData.map((t, i) => 
+          `${i + 1}. "${t.label}" (type: ${t.type})`
+        ).join('\n');
+
+        const completion = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages: [
+            {
+              role: "system",
+              content: "You are helping fill out a job application. Provide appropriate values for ALL text fields based on the user's profile. Keep answers concise and relevant. Use 'N/A' if information is not available. Respond in JSON format."
+            },
+            {
+              role: "user",
+              content: `${userContext}\n\nPlease provide values for ALL of these text input fields:\n\n${textFieldQuestions}\n\nRespond ONLY with a JSON object in this exact format:\n{\n  "values": [\n    "value for field 1",\n    "value for field 2",\n    "value for field 3"\n  ]\n}\n\nIMPORTANT RULES:\n1. Use information from the user's profile\n2. Match the expected type (e.g., for 'email' use email address, for 'phone' use phone number)\n3. For URLs, provide full URLs (e.g., https://linkedin.com/in/username)\n4. For names, use appropriate parts (firstName for first name fields, etc.)\n5. If information is not in profile, use 'N/A' or leave empty for optional fields`
+            }
+          ],
+          temperature: 0.3,
+          max_tokens: 1000,
+          response_format: { type: "json_object" }
+        });
+
+        const response = JSON.parse(completion.choices[0].message.content);
+        textFieldValues = response.values || [];
+        console.log(`    ✅ Generated ${textFieldValues.length} text field values`);
+      } catch (error) {
+        console.log(`    ⚠️ Batched text field AI call failed: ${error.message}`);
+        console.log(`    ℹ️  Will use fallback for individual text fields`);
+      }
+    }
+
+    // 4.2: BATCHED TEXTAREA AI CALL - Get all answers in one call
     if (textareaData.length > 0) {
       console.log(`  📄 Making batched AI call for ${textareaData.length} textareas...`);
       try {
