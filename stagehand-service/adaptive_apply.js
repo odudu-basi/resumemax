@@ -229,26 +229,37 @@ Skills:
       }
     }
 
-    // 3.2: Extract dropdown information
-    console.log('  🎯 Extracting dropdown options...');
+    // 3.2: Extract dropdown information with deduplication
+    console.log('  🎯 Extracting dropdown questions (deduplicated)...');
     const dropdownData = [];
-    for (const dropdown of finalDropdowns.slice(0, 15)) { // Limit to first 15 dropdowns
+    const seenLabels = new Set(); // Track labels to avoid duplicates
+    
+    for (const dropdown of finalDropdowns.slice(0, 20)) { // Check up to 20, filter duplicates
       try {
         const DropdownSchema = z.object({
-          label: z.string().describe("the dropdown label or question"),
-          options: z.array(z.string()).describe("all available options in this dropdown")
+          label: z.string().describe("the dropdown label or question text")
         });
 
-        const dropdownInfo = await stagehand.extract(`What is the label and what are all the options for this dropdown? Element: ${JSON.stringify(dropdown).slice(0, 200)}`, DropdownSchema);
+        const dropdownInfo = await stagehand.extract(`What is the label or question text for this dropdown? Element: ${JSON.stringify(dropdown).slice(0, 200)}`, DropdownSchema);
+
+        // Skip if we've already seen this label (duplicate detection)
+        const normalizedLabel = dropdownInfo.label.toLowerCase().trim();
+        if (seenLabels.has(normalizedLabel)) {
+          console.log(`    ⏭️  Skipping duplicate dropdown: "${dropdownInfo.label}"`);
+          continue;
+        }
+        seenLabels.add(normalizedLabel);
 
         dropdownData.push({
           element: dropdown,
           label: dropdownInfo.label,
-          options: dropdownInfo.options,
           index: dropdownData.length
         });
 
-        console.log(`    📌 Dropdown ${dropdownData.length}: "${dropdownInfo.label}" - ${dropdownInfo.options.length} options`);
+        console.log(`    📌 Dropdown ${dropdownData.length}: "${dropdownInfo.label}"`);
+        
+        // Limit to 10 unique dropdowns
+        if (dropdownData.length >= 10) break;
       } catch (error) {
         console.log(`    ⚠️ Could not extract dropdown: ${error.message}`);
       }
@@ -676,102 +687,47 @@ Skills:
       }
     }
 
-    // 5.3: Fill dropdowns with batched AI selections (Enhanced with custom dropdown support)
-    console.log('  🎯 Filling dropdown fields with batched AI selections...');
+    // 5.3: Fill dropdowns using act() with AI's freeform answers
+    console.log('  🎯 Filling dropdown fields with AI-generated answers...');
     for (let i = 0; i < dropdownData.length; i++) {
       const dropdown = dropdownData[i];
-      const aiSelection = dropdownSelections[i];
+      const aiAnswer = dropdownSelections[i];
+
+      if (!aiAnswer || aiAnswer.trim() === '') {
+        console.log(`    ⏭️  No AI answer for dropdown ${i + 1}, skipping`);
+        continue;
+      }
 
       try {
-        // Verify the AI selection is in the options
-        let validOption = dropdown.options.find(opt =>
-          opt.toLowerCase() === (aiSelection || '').toLowerCase() ||
-          opt.toLowerCase().includes((aiSelection || '').toLowerCase()) ||
-          (aiSelection || '').toLowerCase().includes(opt.toLowerCase())
-        );
-
-        // Fallback if no valid AI selection
-        if (!validOption) {
-          console.log(`    ⚠️ AI selection "${aiSelection}" not valid for dropdown ${i + 1}, using fallback`);
-          const label = dropdown.label.toLowerCase();
-          if (label.includes('experience') || label.includes('years')) {
-            const expOptions = dropdown.options.filter(opt => opt.match(/\d+/));
-            validOption = expOptions[Math.min(2, expOptions.length - 1)];
-          } else if (label.includes('education') || label.includes('degree')) {
-            const degreeType = userProfile.education?.[0]?.degree?.toLowerCase() || '';
-            validOption = dropdown.options.find(opt =>
-              degreeType.includes(opt.toLowerCase()) ||
-              opt.toLowerCase().includes('bachelor') ||
-              opt.toLowerCase().includes('master')
-            );
-          } else if (label.includes('authorization') || label.includes('visa') || label.includes('eligible') || label.includes('sponsorship')) {
-            validOption = dropdown.options.find(opt =>
-              opt.toLowerCase().includes('no') ||
-              opt.toLowerCase() === 'no'
-            ) || dropdown.options.find(opt =>
-              opt.toLowerCase().includes('yes') ||
-              opt.toLowerCase().includes('authorized') ||
-              opt.toLowerCase().includes('citizen')
-            );
-          }
-        }
-
-        if (validOption) {
-          let filled = false;
-          
-          // METHOD 1: Try standard select approach
+        let filled = false;
+        
+        // METHOD 1: Let act() choose the best matching option based on AI answer
+        try {
+          await stagehand.act(`For the dropdown question "${dropdown.label}", select the option that best matches: "${aiAnswer}"`);
+          filled = true;
+          filledCount++;
+          console.log(`    ✅ Filled "${dropdown.label}" with best match for "${aiAnswer}"`);
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } catch (e1) {
+          // METHOD 2: More direct instruction
           try {
-            await stagehand.act(`select "${validOption}" from the "${dropdown.label}" dropdown`);
+            await stagehand.act(`In the "${dropdown.label}" dropdown, select the option closest to "${aiAnswer}"`);
             filled = true;
             filledCount++;
-            console.log(`    ✅ Selected "${validOption}" in "${dropdown.label}" (Method 1: standard)`);
-            await new Promise(resolve => setTimeout(resolve, 300));
-          } catch (e1) {
-            console.log(`    ⏭️  Method 1 failed, trying custom dropdown approach...`);
-            
-            // METHOD 2: Multi-step custom dropdown approach
+            console.log(`    ✅ Filled "${dropdown.label}" (Method 2)`);
+            await new Promise(resolve => setTimeout(resolve, 500));
+          } catch (e2) {
+            // METHOD 3: Generic dropdown selection
             try {
-              // Step 1: Click to open the dropdown
-              await stagehand.act(`click on the "${dropdown.label}" dropdown to open it`);
-              await new Promise(resolve => setTimeout(resolve, 800));
-              
-              // Step 2: Click the specific option
-              await stagehand.act(`click on the option "${validOption}"`);
-              await new Promise(resolve => setTimeout(resolve, 300));
-              
+              await stagehand.act(`Select "${aiAnswer}" from the dropdown for "${dropdown.label}"`);
               filled = true;
               filledCount++;
-              console.log(`    ✅ Selected "${validOption}" in "${dropdown.label}" (Method 2: custom dropdown)`);
-            } catch (e2) {
-              console.log(`    ⏭️  Method 2 failed, trying direct option click...`);
-              
-              // METHOD 3: Direct option selection
-              try {
-                await stagehand.act(`select the option labeled "${validOption}"`);
-                await new Promise(resolve => setTimeout(resolve, 300));
-                
-                filled = true;
-                filledCount++;
-                console.log(`    ✅ Selected "${validOption}" in "${dropdown.label}" (Method 3: direct option)`);
-              } catch (e3) {
-                console.log(`    ⏭️  Method 3 failed, trying alternative phrasing...`);
-                
-                // METHOD 4: Alternative phrasing
-                try {
-                  await stagehand.act(`choose "${validOption}" for the question "${dropdown.label}"`);
-                  await new Promise(resolve => setTimeout(resolve, 300));
-                  
-                  filled = true;
-                  filledCount++;
-                  console.log(`    ✅ Selected "${validOption}" in "${dropdown.label}" (Method 4: alternative)`);
-                } catch (e4) {
-                  console.log(`    ❌ All methods failed for dropdown ${i + 1}: "${dropdown.label}"`);
-                }
-              }
+              console.log(`    ✅ Filled "${dropdown.label}" (Method 3)`);
+              await new Promise(resolve => setTimeout(resolve, 500));
+            } catch (e3) {
+              console.log(`    ❌ All methods failed for dropdown "${dropdown.label}" with answer "${aiAnswer}"`);
             }
           }
-        } else {
-          console.log(`    ⚠️ No valid option found for dropdown ${i + 1}: "${dropdown.label}"`);
         }
       } catch (error) {
         console.log(`    ⚠️ Error processing dropdown ${i + 1}: ${error.message}`);
