@@ -101,7 +101,11 @@ async function fetchUserProfileData(userId: string) {
       workAuthorized: workAuth?.work_authorized || true,
       requiresSponsorship: workAuth?.visa_sponsorship_required || false,
       yearsOfExperience: parsedResumeData?.yearsOfExperience || experienceEntries.length.toString() || '3',
-    };
+      
+      // Resume file paths (check multiple possible field names in database)
+      resumeFile: userProfile?.resume_file_path || userProfile?.resume_file || userProfile?.resume_path || null,
+      resumePath: userProfile?.resume_file_path || userProfile?.resume_path || null,
+      resumeUrl: userProfile?.resume_url || userProfile?.resume_link || parsedResumeData?.resumeUrl || null,    };
   } catch (error) {
     console.error('Error fetching profile:', error);
     throw error;
