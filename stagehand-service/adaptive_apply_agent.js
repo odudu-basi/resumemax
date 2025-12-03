@@ -72,7 +72,7 @@ Your task is complete once all visible fields are filled. DO NOT click submit.`
 
     console.log('  ✅ Agent initialized with Computer Use mode');
 
-    // Build detailed instruction with all user data (CONDENSED FORMAT)
+    // Build detailed instruction with all user data (DETAILED FORMAT)
     const agentInstruction = `Fill out this entire job application form with the following user information. DO NOT submit the form - only fill it out.
 
 PERSONAL INFORMATION:
@@ -86,10 +86,12 @@ PERSONAL INFORMATION:
 ${userProfile.resumeFile ? `- Resume File: ${userProfile.resumeFile} (upload if field exists)` : ''}
 ${userProfile.resumeUrl ? `- Resume URL: ${userProfile.resumeUrl}` : ''}
 
-WORK EXPERIENCE:
-${userProfile.workExperience.map((exp, i) => 
-  `${i + 1}. ${exp.title}, ${exp.company} (${exp.duration}) - ${exp.description.substring(0, 100)}...`
-).join('\n')}
+WORK EXPERIENCE (${userProfile.workExperience.length} positions):
+${userProfile.workExperience.map((exp, i) => `
+${i + 1}. ${exp.title} at ${exp.company}
+   Duration: ${exp.duration}
+   Description: ${exp.description}
+`).join('\n')}
 
 EDUCATION:
 ${userProfile.education.map((edu, i) => 
@@ -123,7 +125,7 @@ Begin now. Remember: DO NOT SUBMIT.`;
 
     const agentResult = await agent.execute({
       instruction: agentInstruction,
-      maxSteps: 30, // Reduced from 50 to force efficiency
+      maxSteps: 40, // Enough for complex forms with safety buffer
       highlightCursor: false
     });
 
