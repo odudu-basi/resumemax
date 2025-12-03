@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { Stagehand } = require('@browserbasehq/stagehand');
-const { adaptiveFormFill } = require('./adaptive_apply');
+const { adaptiveFormFillAgent } = require('./adaptive_apply_agent');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -13,6 +13,7 @@ console.log("BROWSERBASE_API_KEY:", process.env.BROWSERBASE_API_KEY || "❌ NOT 
 console.log("BROWSERBASE_PROJECT_ID:", process.env.BROWSERBASE_PROJECT_ID || "❌ NOT SET");
 console.log("NODE_ENV:", process.env.NODE_ENV);
 console.log("OPENAI_API_KEY:", process.env.OPENAI_API_KEY ? "✅ Set (length: " + process.env.OPENAI_API_KEY.length + ")" : "❌ NOT SET");
+console.log("GOOGLE_GENERATIVE_AI_API_KEY:", process.env.GOOGLE_GENERATIVE_AI_API_KEY ? "✅ Set (length: " + process.env.GOOGLE_GENERATIVE_AI_API_KEY.length + ")" : "❌ NOT SET");
 console.log("PORT:", PORT);
 
 app.use(cors());
@@ -32,7 +33,7 @@ app.post('/apply', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Missing required fields' });
     }
 
-    console.log('🚀 Starting application for:', jobUrl);
+    console.log('🚀 Starting agent-based application for:', jobUrl);
 
     stagehand = new Stagehand({
       apiKey: process.env.BROWSERBASE_API_KEY,
@@ -54,8 +55,8 @@ app.post('/apply', async (req, res) => {
     console.log("📄 Page object:", page ? "exists" : "undefined");
     await page.goto(jobUrl);
 
-    // Use adaptive form filling
-    await adaptiveFormFill(stagehand, userProfile, sessionId, sessionUrl, res);
+    // Use agent-based autonomous form filling
+    await adaptiveFormFillAgent(stagehand, userProfile, sessionId, sessionUrl, res);
 
   } catch (error) {
     console.error('❌ Error:', error);
