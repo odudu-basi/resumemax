@@ -83,7 +83,7 @@ PERSONAL INFORMATION:
 - Phone: ${userProfile.phone}
 - Location: ${userProfile.location}
 - LinkedIn: ${userProfile.linkedinUrl || 'Not provided'}
-${userProfile.resumeFile ? `- Resume File: ${userProfile.resumeFile} (upload if field exists)` : ''}
+${userProfile.resumeFile ? `- Resume File: ${userProfile.resumeFile.fileName} (${(userProfile.resumeFile.fileSize / 1024).toFixed(1)} KB) - UPLOAD THIS FILE` : ''}
 ${userProfile.resumeUrl ? `- Resume URL: ${userProfile.resumeUrl}` : ''}
 
 WORK EXPERIENCE (${userProfile.workExperience.length} positions):

@@ -68,7 +68,7 @@ async function fetchUserProfileData(userId: string) {
     } catch (e) {}
 
     try {
-      const { data } = await supabase.from('user_resumes').select('*').eq('user_id', userId).single();
+      const { data } = await supabase.from('user_resumes').select('file_name, file_type, file_size, file_content').eq('user_id', userId).single();
       if (data) userResume = data;
     } catch (e) {}
 
@@ -108,10 +108,15 @@ async function fetchUserProfileData(userId: string) {
       requiresSponsorship: workAuth?.visa_sponsorship_required || false,
       yearsOfExperience: parsedResumeData?.yearsOfExperience || experienceEntries.length.toString() || '3',
       
-      // Resume file paths from user_resumes table
-      resumeFile: userResume?.file_url || userProfile?.resume_file_path || userProfile?.resume_file || null,
-      resumePath: userResume?.file_url || userProfile?.resume_file_path || null,
-      resumeUrl: userResume?.file_url || userProfile?.resume_url || parsedResumeData?.resumeUrl || null,    };
+      // Resume file from user_resumes table (binary content as base64)
+      resumeFile: userResume?.file_content ? {
+        fileName: userResume.file_name,
+        fileType: userResume.file_type,
+        fileSize: userResume.file_size,
+        contentBase64: userResume.file_content.toString('base64')
+      } : null,
+      resumePath: null,
+      resumeUrl: userProfile?.resume_url || parsedResumeData?.resumeUrl || null,    };
   } catch (error) {
     console.error('Error fetching profile:', error);
     throw error;
@@ -126,6 +131,7 @@ export async function POST(request: NextRequest) {
     console.log('🚀 [Cloud-Apply] Fetching user profile...');
     const userProfile = await fetchUserProfileData(validatedData.userId);
     console.log('✅ Profile fetched:', userProfile.fullName);
+    console.log('📄 Resume file:', userProfile.resumeFile || 'NOT PROVIDED');
 
     console.log('📡 Calling Stagehand API...');
     const response = await fetch(`${STAGEHAND_API_URL}/apply`, {
