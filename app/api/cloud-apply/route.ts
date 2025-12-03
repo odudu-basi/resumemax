@@ -31,6 +31,7 @@ async function fetchUserProfileData(userId: string) {
     let languages:any[] = [];
     let educationEntries:any[] = [];
     let experienceEntries:any[] = [];
+    let userResume = null;
 
     try {
       let { data, error } = await supabase.from('user_profiles').select('*').eq('id', userId).single();
@@ -64,6 +65,11 @@ async function fetchUserProfileData(userId: string) {
     try {
       const { data } = await supabase.from('experience_entries').select('*').eq('user_id', userId).order('start_date', { ascending: false });
       if (data) experienceEntries = data;
+    } catch (e) {}
+
+    try {
+      const { data } = await supabase.from('user_resumes').select('*').eq('user_id', userId).single();
+      if (data) userResume = data;
     } catch (e) {}
 
     let parsedResumeData = null;
@@ -102,10 +108,10 @@ async function fetchUserProfileData(userId: string) {
       requiresSponsorship: workAuth?.visa_sponsorship_required || false,
       yearsOfExperience: parsedResumeData?.yearsOfExperience || experienceEntries.length.toString() || '3',
       
-      // Resume file paths (check multiple possible field names in database)
-      resumeFile: userProfile?.resume_file_path || userProfile?.resume_file || userProfile?.resume_path || null,
-      resumePath: userProfile?.resume_file_path || userProfile?.resume_path || null,
-      resumeUrl: userProfile?.resume_url || userProfile?.resume_link || parsedResumeData?.resumeUrl || null,    };
+      // Resume file paths from user_resumes table
+      resumeFile: userResume?.file_url || userProfile?.resume_file_path || userProfile?.resume_file || null,
+      resumePath: userResume?.file_url || userProfile?.resume_file_path || null,
+      resumeUrl: userResume?.file_url || userProfile?.resume_url || parsedResumeData?.resumeUrl || null,    };
   } catch (error) {
     console.error('Error fetching profile:', error);
     throw error;
