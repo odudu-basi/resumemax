@@ -47,22 +47,32 @@ IMPORTANT RULES:
 - For years of experience: Calculate from the work history provided
 - Double-check that contact information matches exactly what was provided
 - If a field is unclear, use your best judgment based on the profile context
+- BE PRECISE with your clicks and interactions - get it right the first time
 - Stop BEFORE clicking any submit/apply/send buttons
 
-AFTER FILLING ALL FIELDS:
-Review to ensure:
-- All visible fields are filled
-- Contact information is accurate
-- Dropdown selections are appropriate
-- No fields were accidentally skipped
-- You have NOT clicked submit
+DROPDOWN/SELECT INTERACTION RULES:
+- When you need to select from a dropdown, FIRST click the dropdown arrow or field to open it
+- WAIT for the dropdown options to appear
+- Then click DIRECTLY on the exact option text you need
+- If the first click doesn't register, click the dropdown arrow again to reopen, then select
+- Do NOT retry more than twice - if it still doesn't work, move on
+- Be VERY precise with your click coordinates - aim for the center of the option text
 
-Then STOP - do not proceed to submission.`
+EFFICIENCY RULES:
+- Get each action right on the FIRST try - think carefully before clicking
+- Do NOT waste steps scrolling unnecessarily
+- Fill fields in the order they appear - scroll down only when needed to see new fields
+- Type accurately and completely the first time - no corrections needed
+- You have limited steps, so be efficient and deliberate with every action
+
+AFTER FILLING ALL FIELDS:
+IMMEDIATELY STOP. Do not scroll to review, do not verify visually, do not check your work.
+Your task is complete once all visible fields are filled. DO NOT click submit.`
     });
 
     console.log('  ✅ Agent initialized with Computer Use mode');
 
-    // Build detailed instruction with all user data
+    // Build detailed instruction with all user data (CONDENSED FORMAT)
     const agentInstruction = `Fill out this entire job application form with the following user information. DO NOT submit the form - only fill it out.
 
 PERSONAL INFORMATION:
@@ -71,46 +81,40 @@ PERSONAL INFORMATION:
 - Last Name: ${lastName}
 - Email: ${userProfile.email}
 - Phone: ${userProfile.phone}
-- Location/Address: ${userProfile.location}
-- LinkedIn Profile: ${userProfile.linkedinUrl || 'Not provided'}
-${userProfile.resumeFile ? `- Resume File Path: ${userProfile.resumeFile} (upload this if there is a resume upload field)` : ''}
+- Location: ${userProfile.location}
+- LinkedIn: ${userProfile.linkedinUrl || 'Not provided'}
+${userProfile.resumeFile ? `- Resume File: ${userProfile.resumeFile} (upload if field exists)` : ''}
 ${userProfile.resumeUrl ? `- Resume URL: ${userProfile.resumeUrl}` : ''}
 
-WORK EXPERIENCE (${userProfile.workExperience.length} positions):
-${userProfile.workExperience.map((exp, i) => `
-${i + 1}. ${exp.title} at ${exp.company}
-   Duration: ${exp.duration}
-   Description: ${exp.description}
-`).join('\n')}
+WORK EXPERIENCE:
+${userProfile.workExperience.map((exp, i) => 
+  `${i + 1}. ${exp.title}, ${exp.company} (${exp.duration}) - ${exp.description.substring(0, 100)}...`
+).join('\n')}
 
-EDUCATION (${userProfile.education.length} entries):
-${userProfile.education.map((edu, i) => `
-${i + 1}. ${edu.degree} in ${edu.field}
-   School: ${edu.school}
-   Graduation Year: ${edu.year}
-`).join('\n')}
+EDUCATION:
+${userProfile.education.map((edu, i) => 
+  `${i + 1}. ${edu.degree} in ${edu.field}, ${edu.school} (${edu.year})`
+).join('\n')}
 
 SKILLS:
-- Technical Skills: ${Array.isArray(userProfile.skills.technical) ? userProfile.skills.technical.join(', ') : userProfile.skills.technical}
+- Technical: ${Array.isArray(userProfile.skills.technical) ? userProfile.skills.technical.join(', ') : userProfile.skills.technical}
 - Languages: ${Array.isArray(userProfile.skills.languages) ? userProfile.skills.languages.join(', ') : userProfile.skills.languages}
 
 WORK AUTHORIZATION:
-- Legally authorized to work in the country: ${userProfile.workAuthorized ? 'Yes' : 'No'}
-- Requires visa sponsorship: ${userProfile.requiresSponsorship ? 'Yes' : 'No'}
+- Authorized to work: ${userProfile.workAuthorized ? 'Yes' : 'No'}
+- Requires sponsorship: ${userProfile.requiresSponsorship ? 'Yes' : 'No'}
 
 YEARS OF EXPERIENCE: ${userProfile.yearsOfExperience} years
 
-SPECIFIC INSTRUCTIONS:
-1. Fill out EVERY field in the application form with the appropriate information above
-2. If there is a resume upload field, upload the file using the path: ${userProfile.resumeFile || 'No file provided'}
-3. For essay questions like "Why do you want to work here?", write professional 2-3 sentence responses based on the user's experience and skills
-4. For preference questions (remote work, willing to relocate, etc.), use reasonable defaults based on location
-5. For salary expectations, if asked, provide a reasonable range or say "Negotiable"
-6. Review all fields to ensure nothing was missed
-7. DO NOT click the submit/apply button - stop after filling all fields
-8. Track which fields you filled successfully
+INSTRUCTIONS:
+1. Fill EVERY field accurately using the above information
+2. For essay questions, write professional 2-3 sentence responses based on experience
+3. For preferences (remote, relocate), use reasonable defaults
+4. For salary, say "Negotiable" if asked
+5. DO NOT click submit/apply - stop after filling all fields
+6. Be efficient - you have limited steps, make each one count
 
-Begin filling the form now. Remember: DO NOT SUBMIT.`;
+Begin now. Remember: DO NOT SUBMIT.`;
 
     console.log('\n🚀 Executing agent to fill form...\n');
 
@@ -119,7 +123,7 @@ Begin filling the form now. Remember: DO NOT SUBMIT.`;
 
     const agentResult = await agent.execute({
       instruction: agentInstruction,
-      maxSteps: 50, // Enough steps for complex forms
+      maxSteps: 30, // Reduced from 50 to force efficiency
       highlightCursor: false
     });
 
