@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const { Stagehand } = require('@browserbasehq/stagehand');
 const { adaptiveFormFillAgent } = require('./adaptive_apply_agent');
+const { hybridFormFill } = require('./adaptive_apply_hybrid');
 const { uploadResumeToForm } = require('./resume_upload_helper');
 const { scrapeJobDetails } = require('./job_desc_scraper');
 
@@ -29,13 +30,14 @@ app.post('/apply', async (req, res) => {
   let stagehand = null;
 
   try {
-    const { jobUrl, userProfile } = req.body;
+    const { jobUrl, userProfile, approach } = req.body;
 
     if (!jobUrl || !userProfile) {
       return res.status(400).json({ success: false, error: 'Missing required fields' });
     }
 
-    console.log('🚀 Starting agent-based application for:', jobUrl);
+    const selectedApproach = approach || 'agent'; // Default to agent mode
+    console.log(`🚀 Starting ${selectedApproach} application for:`, jobUrl);
 
     stagehand = new Stagehand({
       apiKey: process.env.BROWSERBASE_API_KEY,
@@ -68,8 +70,14 @@ app.post('/apply', async (req, res) => {
       }
     }
 
-    // Use agent-based autonomous form filling
-    await adaptiveFormFillAgent(stagehand, userProfile, sessionId, sessionUrl, res);
+    // Route to selected approach
+    if (selectedApproach === 'hybrid') {
+      console.log('🔄 Using HYBRID approach (observe + ChatGPT + agent)');
+      await hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res);
+    } else {
+      console.log('🤖 Using AGENT-ONLY approach');
+      await adaptiveFormFillAgent(stagehand, userProfile, sessionId, sessionUrl, res);
+    }
 
   } catch (error) {
     console.error('❌ Error:', error);
