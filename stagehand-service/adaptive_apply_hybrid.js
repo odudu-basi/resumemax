@@ -279,6 +279,9 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
   const startTime = Date.now();
   let phase1Cost = 0;
   let phase2Cost = 0;
+  let phase1Tokens = { input: 0, output: 0 };
+  let phase2Tokens = { input: 0, output: 0 };
+  let chatGPTTokens = 0;
 
   try {
     // ===== PHASE 1: Traditional Stagehand =====
@@ -316,6 +319,8 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
     if (agentResult.usage) {
       const inputTokens = agentResult.usage.input_tokens || 0;
       const outputTokens = agentResult.usage.output_tokens || 0;
+      phase2Tokens.input = inputTokens;
+      phase2Tokens.output = outputTokens;
       const inputCost = (inputTokens / 1000000) * 1.25;
       const outputCost = (outputTokens / 1000000) * 10;
       phase2Cost = inputCost + outputCost;
@@ -350,16 +355,34 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
       stats: {
         executionTimeSeconds: parseFloat(executionTime),
         totalCost: totalCost.toFixed(4),
+        tokens: {
+          total: phase1Tokens.input + phase1Tokens.output + phase2Tokens.input + phase2Tokens.output,
+          phase1Total: phase1Tokens.input + phase1Tokens.output,
+          phase2Total: phase2Tokens.input + phase2Tokens.output,
+          inputTokens: phase1Tokens.input + phase2Tokens.input,
+          outputTokens: phase1Tokens.output + phase2Tokens.output,
+          chatGPTTokens: chatGPTTokens
+        },
         phase1: {
           cost: phase1Cost.toFixed(4),
           fieldsFilled: fillResults.filledCount,
           fieldsSkipped: fillResults.skippedCount,
-          errors: fillResults.errorCount
+          errors: fillResults.errorCount,
+          tokens: {
+            input: phase1Tokens.input,
+            output: phase1Tokens.output,
+            total: phase1Tokens.input + phase1Tokens.output
+          }
         },
         phase2: {
           cost: phase2Cost.toFixed(4),
           stepsTaken: agentResult.actions ? agentResult.actions.length : 0,
-          success: agentResult.success
+          success: agentResult.success,
+          tokens: {
+            input: phase2Tokens.input,
+            output: phase2Tokens.output,
+            total: phase2Tokens.input + phase2Tokens.output
+          }
         }
       }
     });
