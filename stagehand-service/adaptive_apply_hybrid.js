@@ -1,51 +1,71 @@
 const OpenAI = require('openai');
-
-/**
- * Hybrid Form Filling Approach
- *
- * Phase 1: Traditional Stagehand (observe + extract + ChatGPT + act)
- *   - Observe all form fields (exclude resume)
- *   - Extract field descriptions and labels
- *   - Use ChatGPT to generate intelligent answers
- *   - Fill form using act() with smart dropdown/text logic
- *
- * Phase 2: Agent Review & Completion
- *   - Use agent to review filled form
- *   - Fill any missing fields
- *   - Verify everything is complete (DO NOT SUBMIT)
- */
+const { z } = require('zod');
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
 /**
- * Phase 1: Get intelligent answers from ChatGPT for all form fields
+ * Extract job description from the page
  */
-async function getIntelligentAnswers(fieldDescriptions, userProfile) {
+async function extractJobDescription(stagehand) {
+  console.log('\n📄 Extracting job description...');
+
+  try {
+    const jobDescSchema = z.object({
+      title: z.string().describe("Job title"),
+      description: z.string().describe("Full job description text"),
+      responsibilities: z.string().describe("Key responsibilities"),
+      requirements: z.string().describe("Required qualifications and skills"),
+      company: z.string().describe("Company name")
+    });
+
+    const jobDesc = await stagehand.extract(
+      "Extract the job title, full description, responsibilities, requirements, and company name from this job posting",
+      jobDescSchema
+    );
+
+    console.log(`  ✅ Extracted job: ${jobDesc.title} at ${jobDesc.company}`);
+    return jobDesc;
+
+  } catch (error) {
+    console.error('  ⚠️  Job description extraction failed:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Get intelligent answers from ChatGPT for all form fields
+ */
+async function getIntelligentAnswers(fieldDescriptions, userProfile, jobDescription) {
   console.log('\n🤖 Asking ChatGPT for intelligent field answers...');
 
-  const prompt = `You are a job application assistant. Given a user's profile and a list of form fields, provide the best answer for each field.
+  const jobContext = jobDescription ? `
+JOB CONTEXT:
+Title: ${jobDescription.title}
+Company: ${jobDescription.company}
+Responsibilities: ${jobDescription.responsibilities}
+Requirements: ${jobDescription.requirements}
+` : '';
+
+  const prompt = `You are a job application assistant. Given a user's profile, job context, and form fields, provide the best answer for each field.
 
 USER PROFILE:
 ${JSON.stringify(userProfile, null, 2)}
+
+${jobContext}
 
 FORM FIELDS TO FILL:
 ${fieldDescriptions.map((field, i) => `${i + 1}. ${field.description}`).join('\n')}
 
 INSTRUCTIONS:
 - For each field, provide a concise, accurate answer based on the user profile
-- For essay questions (like "Why do you want to work here?"), write professional 2-3 sentence responses
+- For essay questions (like "Why do you want to work here?"), write professional 2-3 sentence responses tailored to the job description
 - For yes/no questions, answer based on the profile data
 - For dropdowns, choose the most appropriate option
 - If you don't have information for a field, return "SKIP"
 
-Return a JSON object mapping each field description to its answer:
-{
-  "Text input for First Name": "Oduduabasi",
-  "Dropdown for Country": "United States",
-  "Textarea for Why do you want to work here?": "I am passionate about..."
-}`;
+Return JSON mapping each field description to its answer.`;
 
   try {
     const response = await openai.chat.completions.create({
@@ -59,44 +79,40 @@ Return a JSON object mapping each field description to its answer:
     });
 
     const answers = JSON.parse(response.choices[0].message.content);
-
-    const answerCount = Object.keys(answers).length;
-    console.log(`  ✅ Got answers for ${answerCount} fields`);
+    console.log(`  ✅ Got answers for fields`);
     console.log(`  💰 Tokens used: ${response.usage.total_tokens}`);
-
-    return answers;
-
+    return {
+      answers: answers,
+      tokens: response.usage.total_tokens
+    };
   } catch (error) {
     console.error('  ❌ ChatGPT error:', error.message);
-    return {};
+    return { answers: {}, tokens: 0 };
   }
 }
 
 /**
- * Phase 1: Observe and extract all form fields
+ * Observe form fields - returns Action[] with selectors
  */
 async function observeFormFields(stagehand) {
   console.log('\n👀 Phase 1: Observing form fields...');
 
   try {
-    // Observe all form elements EXCEPT resume upload
-    const formFields = await stagehand.observe({
-      instruction: `Find all form input fields, textareas, and dropdowns.
-      EXCLUDE file upload inputs.
-      For each field, describe what it's for (e.g., "Text input for First Name", "Dropdown for Country", etc.)`
-    });
+    // observe() returns Action[] with { description, method, arguments, selector }
+    const actions = await stagehand.observe(
+      "Find all form input fields, textareas, and dropdown selects. Exclude file upload inputs. Describe what each field is for."
+    );
 
-    console.log(`  ✅ Found ${formFields.length} form fields`);
+    console.log(`  ✅ Found ${actions.length} form fields`);
 
-    // Log some examples
-    if (formFields.length > 0) {
+    if (actions.length > 0) {
       console.log('\n  📋 Sample fields:');
-      formFields.slice(0, 5).forEach(field => {
-        console.log(`    - ${field.description}`);
+      actions.slice(0, 5).forEach(action => {
+        console.log(`    - ${action.description} (${action.method})`);
       });
     }
 
-    return formFields;
+    return actions;
 
   } catch (error) {
     console.error('  ❌ Observe failed:', error.message);
@@ -105,20 +121,19 @@ async function observeFormFields(stagehand) {
 }
 
 /**
- * Phase 1: Fill form fields using act() with smart logic
+ * Fill form fields using act() with proper options
  */
-async function fillFormFields(stagehand, fields, answers) {
+async function fillFormFields(stagehand, actions, answers) {
   console.log('\n✍️  Phase 1: Filling form fields...');
 
   let filledCount = 0;
   let skippedCount = 0;
   let errorCount = 0;
 
-  for (const field of fields) {
-    const description = field.description || '';
+  for (const action of actions) {
+    const description = action.description || '';
     const answer = answers[description];
 
-    // Skip if no answer provided
     if (!answer || answer === 'SKIP') {
       console.log(`  ⏭️  Skipping: ${description}`);
       skippedCount++;
@@ -128,24 +143,21 @@ async function fillFormFields(stagehand, fields, answers) {
     try {
       const descLower = description.toLowerCase();
 
-      // DROPDOWN LOGIC: 2-step click
-      if (descLower.includes('dropdown') || descLower.includes('select')) {
+      // DROPDOWN LOGIC: 2-step approach
+      if (descLower.includes('dropdown') || descLower.includes('select') || action.method === 'selectOption') {
         console.log(`  🔽 Filling dropdown: ${description.substring(0, 50)}...`);
 
         try {
           // Step 1: Click to open dropdown
-          await stagehand.act({
-            action: `click the dropdown for ${description}`,
-            modelName: 'gpt-4o'
+          await stagehand.act(`click the ${description}`, {
+            model: "openai/gpt-4o"
           });
 
-          // Small delay for dropdown to open
           await new Promise(resolve => setTimeout(resolve, 500));
 
           // Step 2: Select the option
-          await stagehand.act({
-            action: `select "${answer}" from the dropdown`,
-            modelName: 'gpt-4o'
+          await stagehand.act(`select "${answer}"`, {
+            model: "openai/gpt-4o"
           });
 
           filledCount++;
@@ -157,20 +169,18 @@ async function fillFormFields(stagehand, fields, answers) {
         }
 
       }
-      // TEXT/TEXTAREA LOGIC: Direct entry
+      // TEXT/TEXTAREA LOGIC
       else {
-        console.log(`  📝 Filling text field: ${description.substring(0, 50)}...`);
+        console.log(`  📝 Filling: ${description.substring(0, 50)}...`);
 
-        await stagehand.act({
-          action: `enter "${answer}" in the ${description} field`,
-          modelName: 'gpt-4o'
+        await stagehand.act(`enter "${answer}" in the ${description}`, {
+          model: "openai/gpt-4o"
         });
 
         filledCount++;
         console.log(`    ✅ Entered: ${answer.substring(0, 50)}${answer.length > 50 ? '...' : ''}`);
       }
 
-      // Small delay between fields
       await new Promise(resolve => setTimeout(resolve, 300));
 
     } catch (error) {
@@ -188,7 +198,7 @@ async function fillFormFields(stagehand, fields, answers) {
 }
 
 /**
- * Phase 2: Agent review and completion (NO SUBMIT)
+ * Agent review with work experience included
  */
 async function agentReviewAndComplete(stagehand, userProfile) {
   console.log('\n🤖 Phase 2: Agent review and completion...');
@@ -227,6 +237,18 @@ PERSONAL INFO:
 - Phone: ${userProfile.phone}
 - Location: ${userProfile.location}
 
+WORK EXPERIENCE:
+${userProfile.workExperience.map((exp, i) => `
+${i + 1}. ${exp.title} at ${exp.company}
+   Duration: ${exp.duration}
+   Description: ${exp.description}
+`).join('\n')}
+
+EDUCATION:
+${userProfile.education.map((edu, i) => `
+${i + 1}. ${edu.degree} in ${edu.field}, ${edu.school} (${edu.year})
+`).join('\n')}
+
 WORK AUTHORIZATION:
 - Authorized to work: ${userProfile.workAuthorized ? 'Yes' : 'No'}
 - Requires sponsorship: ${userProfile.requiresSponsorship ? 'Yes' : 'No'}
@@ -235,13 +257,14 @@ YOUR TASK:
 1. Look at the form
 2. Identify any empty or incomplete fields
 3. Fill them with appropriate information from above
-4. DO NOT SUBMIT the form
-5. Stop after filling all missing fields`;
+4. Use work experience details for any career-related questions
+5. DO NOT SUBMIT the form
+6. Stop after filling all missing fields`;
 
   try {
     const result = await agent.execute({
       instruction,
-      maxSteps: 20, // Limited steps since most work is done
+      maxSteps: 20,
       highlightCursor: false
     });
 
@@ -249,30 +272,24 @@ YOUR TASK:
     console.log(`  Steps taken: ${result.actions ? result.actions.length : 'N/A'}`);
     console.log(`  Success: ${result.success}`);
 
-    // Token usage
     if (result.usage) {
       const inputTokens = result.usage.input_tokens || 0;
       const outputTokens = result.usage.output_tokens || 0;
       const inputCost = (inputTokens / 1000000) * 1.25;
       const outputCost = (outputTokens / 1000000) * 10;
       const totalCost = (inputCost + outputCost).toFixed(4);
-
       console.log(`  💰 Phase 2 cost: $${totalCost}`);
       console.log(`     Input tokens: ${inputTokens.toLocaleString()}`);
       console.log(`     Output tokens: ${outputTokens.toLocaleString()}`);
     }
 
     return result;
-
   } catch (error) {
     console.error('  ❌ Phase 2 error:', error.message);
     return { success: false, error: error.message };
   }
 }
 
-/**
- * Main hybrid form fill function
- */
 async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res) {
   console.log('🔄 Starting HYBRID form filling approach...\n');
 
@@ -284,38 +301,41 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
   let chatGPTTokens = 0;
 
   try {
-    // ===== PHASE 1: Traditional Stagehand =====
     console.log('═══════════════════════════════════════');
     console.log('  PHASE 1: Traditional Stagehand');
     console.log('═══════════════════════════════════════');
 
-    // Step 1: Observe form fields
-    const formFields = await observeFormFields(stagehand);
+    // Extract job description first
+    const jobDescription = await extractJobDescription(stagehand);
 
-    if (formFields.length === 0) {
+    // Observe form fields
+    const formActions = await observeFormFields(stagehand);
+    if (formActions.length === 0) {
       throw new Error('No form fields found');
     }
 
-    // Step 2: Get intelligent answers from ChatGPT
-    const answers = await getIntelligentAnswers(formFields, userProfile);
+    // Get intelligent answers from ChatGPT
+    const answersResult = await getIntelligentAnswers(formActions, userProfile, jobDescription);
+    const answers = answersResult.answers;
+    chatGPTTokens = answersResult.tokens;
 
-    // Estimate Phase 1 cost (observe + extract + ChatGPT + act)
-    // This is rough - actual costs will vary
-    phase1Cost = 0.08; // Approximate based on previous multi-phase approach
+    // Estimate Phase 1 tokens
+    const estimatedObserveTokens = 2000;
+    const estimatedActTokens = formActions.length * 500;
+    phase1Tokens.input = estimatedObserveTokens + estimatedActTokens + chatGPTTokens;
+    phase1Tokens.output = 500;
+    phase1Cost = 0.08;
 
-    // Step 3: Fill form with smart logic
-    const fillResults = await fillFormFields(stagehand, formFields, answers);
-
+    // Fill form
+    const fillResults = await fillFormFields(stagehand, formActions, answers);
     console.log(`\n💰 Phase 1 estimated cost: $${phase1Cost.toFixed(2)}`);
 
-    // ===== PHASE 2: Agent Review =====
     console.log('\n═══════════════════════════════════════');
     console.log('  PHASE 2: Agent Review & Completion');
     console.log('═══════════════════════════════════════');
 
     const agentResult = await agentReviewAndComplete(stagehand, userProfile);
 
-    // Calculate Phase 2 cost
     if (agentResult.usage) {
       const inputTokens = agentResult.usage.input_tokens || 0;
       const outputTokens = agentResult.usage.output_tokens || 0;
@@ -328,6 +348,7 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
 
     const totalCost = phase1Cost + phase2Cost;
     const executionTime = ((Date.now() - startTime) / 1000).toFixed(2);
+    const totalTokens = phase1Tokens.input + phase1Tokens.output + phase2Tokens.input + phase2Tokens.output;
 
     console.log('\n═══════════════════════════════════════');
     console.log('  HYBRID APPROACH COMPLETE');
@@ -338,25 +359,33 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
     console.log(`   Phase 2: $${phase2Cost.toFixed(4)}`);
     console.log(`📊 Fields filled (Phase 1): ${fillResults.filledCount}`);
     console.log(`📊 Agent steps (Phase 2): ${agentResult.actions ? agentResult.actions.length : 'N/A'}`);
+    console.log(`\n🔢 Token Usage:`);
+    console.log(`   Total: ${totalTokens.toLocaleString()} tokens`);
+    console.log(`   Phase 1: ${(phase1Tokens.input + phase1Tokens.output).toLocaleString()} tokens`);
+    console.log(`     - ChatGPT: ${chatGPTTokens.toLocaleString()} tokens`);
+    console.log(`   Phase 2: ${(phase2Tokens.input + phase2Tokens.output).toLocaleString()} tokens`);
+    console.log(`     - Input: ${phase2Tokens.input.toLocaleString()}`);
+    console.log(`     - Output: ${phase2Tokens.output.toLocaleString()}`);
 
-    // Wait before closing
     await new Promise(resolve => setTimeout(resolve, 2000));
-
     console.log('\n🔒 Closing Stagehand session...');
     await stagehand.close();
 
-    // Return response
     res.json({
       success: true,
       approach: 'hybrid',
       sessionId,
       sessionUrl,
       message: `Form filled using hybrid approach in ${executionTime}s. Form NOT submitted.`,
+      jobDescription: jobDescription ? {
+        title: jobDescription.title,
+        company: jobDescription.company
+      } : null,
       stats: {
         executionTimeSeconds: parseFloat(executionTime),
         totalCost: totalCost.toFixed(4),
         tokens: {
-          total: phase1Tokens.input + phase1Tokens.output + phase2Tokens.input + phase2Tokens.output,
+          total: totalTokens,
           phase1Total: phase1Tokens.input + phase1Tokens.output,
           phase2Total: phase2Tokens.input + phase2Tokens.output,
           inputTokens: phase1Tokens.input + phase2Tokens.input,
@@ -389,13 +418,11 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
 
   } catch (error) {
     console.error('\n❌ Hybrid form fill error:', error);
-
     try {
       await stagehand.close();
     } catch (closeError) {
       console.error('Error closing Stagehand:', closeError.message);
     }
-
     res.status(500).json({
       success: false,
       error: error.message,
