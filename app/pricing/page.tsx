@@ -32,7 +32,7 @@ const plans = [
     icon: TrendingUp,
     popular: false,
     cta: "Get Started",
-    priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_BASIC
+    priceId: "price_1SOBxFGfV3OgrONkjWcGYa7k"
   },
   {
     id: "pro",
@@ -56,7 +56,7 @@ const plans = [
     icon: Rocket,
     popular: true,
     cta: "Go Pro",
-    priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PRO
+    priceId: "price_1SOBwYGfV3OgrONkSrpIhdBH"
   },
   {
     id: "premium",
@@ -82,7 +82,7 @@ const plans = [
     icon: Crown,
     popular: false,
     cta: "Go Premium",
-    priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM
+    priceId: "price_1SOBxuGfV3OgrONkamx6GPzC"
   }
 ];
 
