@@ -511,6 +511,8 @@ function HomeSection() {
               benefits: scrapedData.benefits,
               sessionId: applyResult.sessionId,
               sessionUrl: applyResult.sessionUrl,
+              sessionVideoUrl: applyResult.sessionVideoUrl, // NEW: Video recording URL
+              filledFields: applyResult.filledFields, // NEW: Extracted form fields  
               coverLetterGenerated: coverLetter ? true : false,
               extractedAt: scrapedData.extractedAt,
             }),

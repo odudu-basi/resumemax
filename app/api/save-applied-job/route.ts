@@ -17,6 +17,8 @@ const AppliedJobSchema = z.object({
   benefits: z.string().optional(),
   sessionId: z.string().optional(),
   sessionUrl: z.string().optional(),
+  sessionVideoUrl: z.string().optional(), // NEW: Video recording URL
+  filledFields: z.record(z.string()).optional(), // NEW: Extracted form fields
   coverLetterGenerated: z.boolean().optional(),
   extractedAt: z.string().optional(),
 });
@@ -53,6 +55,8 @@ export async function POST(request: NextRequest) {
         benefits: validatedData.benefits,
         session_id: validatedData.sessionId,
         session_url: validatedData.sessionUrl,
+        session_video_url: validatedData.sessionVideoUrl, // NEW
+        filled_fields: validatedData.filledFields, // NEW
         cover_letter_generated: validatedData.coverLetterGenerated || false,
         extracted_at: validatedData.extractedAt,
         application_status: 'applied',

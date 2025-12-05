@@ -14,14 +14,12 @@ async function extractJobDescription(stagehand) {
   try {
     const jobDescSchema = z.object({
       title: z.string().describe("Job title"),
-      description: z.string().describe("Full job description text"),
-      responsibilities: z.string().describe("Key responsibilities"),
-      requirements: z.string().describe("Required qualifications and skills"),
-      company: z.string().describe("Company name")
+      company: z.string().describe("Company name"),
+      summary: z.string().describe("A brief 2-3 sentence summary of the role, key responsibilities, and main requirements")
     });
 
     const jobDesc = await stagehand.extract(
-      "Extract the job title, full description, responsibilities, requirements, and company name from this job posting",
+      "Extract the job title, company name, and create a concise 2-3 sentence summary of the role including key responsibilities and main requirements",
       jobDescSchema
     );
 
@@ -38,25 +36,57 @@ async function extractJobDescription(stagehand) {
  * Get intelligent answers from ChatGPT for all form fields
  */
 async function getIntelligentAnswers(fieldDescriptions, userProfile, jobDescription) {
-  console.log('\n🤖 Asking ChatGPT for intelligent field answers...');
+  console.log('
+🤖 Asking ChatGPT for intelligent field answers...');
+  console.log(`  📊 Total fields to process: ${fieldDescriptions.length}`);
 
   const jobContext = jobDescription ? `
 JOB CONTEXT:
 Title: ${jobDescription.title}
 Company: ${jobDescription.company}
-Responsibilities: ${jobDescription.responsibilities}
-Requirements: ${jobDescription.requirements}
+Summary: ${jobDescription.summary}
 ` : '';
 
-  const prompt = `You are a job application assistant. Given a user's profile, job context, and form fields, provide the best answer for each field.
+  // Chunk fields if there are too many (safety measure)
+  const MAX_FIELDS_PER_CALL = 50; // Limit to 50 fields per API call
+  const chunks = [];
+  
+  if (fieldDescriptions.length > MAX_FIELDS_PER_CALL) {
+    console.log(`  ⚠️  Too many fields (${fieldDescriptions.length}), processing in chunks...`);
+    for (let i = 0; i < fieldDescriptions.length; i += MAX_FIELDS_PER_CALL) {
+      chunks.push(fieldDescriptions.slice(i, i + MAX_FIELDS_PER_CALL));
+    }
+  } else {
+    chunks.push(fieldDescriptions);
+  }
+
+  let allAnswers = {};
+  let totalTokens = 0;
+
+  for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+    const chunk = chunks[chunkIndex];
+    console.log(`  🔄 Processing chunk ${chunkIndex + 1}/${chunks.length} (${chunk.length} fields)...`);
+
+    const prompt = `You are a job application assistant. Given a user's profile, job context, and form fields, provide the best answer for each field.
 
 USER PROFILE:
-${JSON.stringify(userProfile, null, 2)}
+Name: ${userProfile.fullName}
+Email: ${userProfile.email}
+Phone: ${userProfile.phone}
+Location: ${userProfile.location}
+Work Authorization: ${userProfile.workAuthorized ? 'Yes' : 'No'}
+Requires Sponsorship: ${userProfile.requiresSponsorship ? 'Yes' : 'No'}
+Years of Experience: ${userProfile.yearsOfExperience}
+LinkedIn: ${userProfile.linkedinUrl || 'N/A'}
+Recent Work: ${(userProfile.workExperience || []).slice(0, 2).map(exp => `${exp.title} at ${exp.company}`).join(', ')}
+Education: ${(userProfile.education || []).slice(0, 2).map(edu => `${edu.degree} in ${edu.field} from ${edu.school}`).join(', ')}
+Top Skills: ${(userProfile.skills?.technical || []).slice(0, 8).join(', ')}
 
 ${jobContext}
 
 FORM FIELDS TO FILL:
-${fieldDescriptions.map((field, i) => `${i + 1}. ${field.description}`).join('\n')}
+${chunk.map((field, i) => `${i + 1}. ${field.description} (${field.method})`).join('
+')}
 
 INSTRUCTIONS:
 - For each field, provide a concise, accurate answer based on the user profile
@@ -67,28 +97,33 @@ INSTRUCTIONS:
 
 Return JSON mapping each field description to its answer.`;
 
-  try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: 'You are a helpful assistant that fills out job application forms accurately.' },
-        { role: 'user', content: prompt }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.7
-    });
+    try {
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'You are a helpful assistant that fills out job application forms accurately.' },
+          { role: 'user', content: prompt }
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.7
+      });
 
-    const answers = JSON.parse(response.choices[0].message.content);
-    console.log(`  ✅ Got answers for fields`);
-    console.log(`  💰 Tokens used: ${response.usage.total_tokens}`);
-    return {
-      answers: answers,
-      tokens: response.usage.total_tokens
-    };
-  } catch (error) {
-    console.error('  ❌ ChatGPT error:', error.message);
-    return { answers: {}, tokens: 0 };
+      const chunkAnswers = JSON.parse(response.choices[0].message.content);
+      allAnswers = { ...allAnswers, ...chunkAnswers };
+      totalTokens += response.usage.total_tokens;
+      console.log(`  ✅ Chunk ${chunkIndex + 1} completed. Tokens: ${response.usage.total_tokens}`);
+    } catch (error) {
+      console.error(`  ❌ ChatGPT error for chunk ${chunkIndex + 1}:`, error.status, error.message);
+      // Continue with other chunks even if one fails
+    }
   }
+
+  console.log(`  ✅ Got answers for ${Object.keys(allAnswers).length} fields`);
+  console.log(`  💰 Total tokens used: ${totalTokens}`);
+  return {
+    answers: allAnswers,
+    tokens: totalTokens
+  };
 }
 
 /**
@@ -227,6 +262,19 @@ IMPORTANT:
   const firstName = userProfile.fullName.split(' ')[0] || '';
   const lastName = userProfile.fullName.split(' ').slice(1).join(' ') || '';
 
+  // Add job context if available
+  const jobContextText = jobDescription ? `
+JOB YOU'RE APPLYING FOR:
+- Position: ${jobDescription.title}
+- Company: ${jobDescription.company}
+- Summary: ${jobDescription.summary}
+
+Use this job context to answer questions like:
+- "Why do you want to work here?" - Reference the company and role
+- "Why are you interested in this position?" - Mention relevant aspects of the role
+- "What interests you about this opportunity?" - Connect your experience to the job
+` : '';
+
   const instruction = `Review this job application form and fill any missing or empty fields with the following user information:
 
 PERSONAL INFO:
@@ -242,24 +290,32 @@ ${userProfile.workExperience.map((exp, i) => `
 ${i + 1}. ${exp.title} at ${exp.company}
    Duration: ${exp.duration}
    Description: ${exp.description}
-`).join('\n')}
+`).join('
+')}
 
 EDUCATION:
 ${userProfile.education.map((edu, i) => `
 ${i + 1}. ${edu.degree} in ${edu.field}, ${edu.school} (${edu.year})
-`).join('\n')}
+`).join('
+')}
 
 WORK AUTHORIZATION:
 - Authorized to work: ${userProfile.workAuthorized ? 'Yes' : 'No'}
 - Requires sponsorship: ${userProfile.requiresSponsorship ? 'Yes' : 'No'}
 
+${jobContextText}
+
 YOUR TASK:
 1. Look at the form
 2. Identify any empty or incomplete fields
 3. Fill them with appropriate information from above
-4. Use work experience details for any career-related questions
-5. DO NOT SUBMIT the form
-6. Stop after filling all missing fields`;
+4. For essay/paragraph questions about motivation or interest, write 2-3 professional sentences that:
+   - Reference the specific company and role
+   - Connect your relevant experience to the job requirements
+   - Show genuine interest based on the job context
+5. For yes/no or dropdown questions, choose the most appropriate answer based on the profile
+6. DO NOT SUBMIT the form
+7. Stop after filling all missing fields`;
 
   try {
     const result = await agent.execute({
@@ -367,6 +423,82 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
     console.log(`     - Input: ${phase2Tokens.input.toLocaleString()}`);
     console.log(`     - Output: ${phase2Tokens.output.toLocaleString()}`);
 
+    // ========== Download session recording and extract filled fields ==========
+    console.log('
+📹 Post-processing: Downloading recording & extracting fields...');
+    let sessionVideoUrl = null;
+    let filledFields = null;
+    
+    try {
+      // Wait for recording to finalize
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      // Download recording from Browserbase
+      const recordingResponse = await fetch(
+        `https://www.browserbase.com/v1/sessions/${sessionId}/recording`,
+        {
+          headers: {
+            'x-bb-api-key': process.env.BROWSERBASE_API_KEY
+          }
+        }
+      );
+      
+      if (recordingResponse.ok) {
+        const videoBuffer = await recordingResponse.arrayBuffer();
+        const videoBlob = Buffer.from(videoBuffer);
+        
+        console.log(`  ✅ Recording downloaded: ${(videoBlob.length / 1024 / 1024).toFixed(2)} MB`);
+        
+        // Upload to Supabase Storage
+        const { createClient } = require('@supabase/supabase-js');
+        const supabase = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL,
+          process.env.SUPABASE_SERVICE_ROLE_KEY
+        );
+        
+        const fileName = `session-recordings/${sessionId}.webm`;
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('application-videos')
+          .upload(fileName, videoBlob, {
+            contentType: 'video/webm',
+            upsert: true
+          });
+        
+        if (uploadError) {
+          console.error('  ❌ Failed to upload to Supabase:', uploadError);
+        } else {
+          const { data: urlData } = supabase.storage
+            .from('application-videos')
+            .getPublicUrl(fileName);
+          
+          sessionVideoUrl = urlData.publicUrl;
+          console.log('  ✅ Video uploaded to Supabase Storage');
+        }
+      } else {
+        console.warn('  ⚠️  Recording not available yet');
+      }
+    } catch (videoError) {
+      console.error('  ❌ Error downloading recording:', videoError.message);
+    }
+    
+    // Extract filled fields from the form
+    console.log('
+📝 Extracting filled form fields...');
+    try {
+      const filledFieldsSchema = z.record(z.string());
+      
+      filledFields = await stagehand.extract(
+        "Extract all filled form fields. Return a JSON object where keys are field labels and values are what was filled.",
+        filledFieldsSchema
+      );
+      
+      const fieldCount = Object.keys(filledFields || {}).length;
+      console.log(`  ✅ Extracted ${fieldCount} filled fields`);
+    } catch (extractError) {
+      console.error('  ❌ Error extracting fields:', extractError.message);
+    }
+    // ========== END POST-PROCESSING ==========
+
     await new Promise(resolve => setTimeout(resolve, 2000));
     console.log('\n🔒 Closing Stagehand session...');
     await stagehand.close();
@@ -376,6 +508,8 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
       approach: 'hybrid',
       sessionId,
       sessionUrl,
+      sessionVideoUrl,
+      filledFields,
       message: `Form filled using hybrid approach in ${executionTime}s. Form NOT submitted.`,
       jobDescription: jobDescription ? {
         title: jobDescription.title,
