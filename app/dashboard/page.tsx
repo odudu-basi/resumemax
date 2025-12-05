@@ -91,12 +91,7 @@ const sidebarItems = [
   //   icon: FileText,
   //   description: 'Review applications before submission'
   // },
-  {
-    id: 'submitted-applications',
-    label: 'Submitted Applications',
-    icon: Send,
-    description: 'Track your submitted applications'
-  },
+
   {
     id: 'pricing',
     label: 'Pricing',
@@ -2766,7 +2761,7 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
     }
   }
 
-  // Fetch all onboarding data
+// Fetch all onboarding data
   async function loadData() {
     if (!user) return;
     setLoading(true);
@@ -2829,6 +2824,58 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
         blacklisted_companies: ap.blacklisted_companies || [],
       });
 
+      // Load education_entries from database
+      try {
+        const { data: educationData, error: educationError } = await supabase
+          .from('education_entries')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('start_year', { ascending: false });
+        
+        if (!educationError && educationData && educationData.length > 0) {
+          setEducationEntries(educationData.map((e: any) => ({
+            school: e.school || '',
+            startYear: e.start_year || '',
+            endYear: e.end_year || '',
+            major: e.major || '',
+            degree: e.degree || ''
+          })));
+        } else {
+          // If no data, set a default empty entry
+          setEducationEntries([{ school: '', startYear: '', endYear: '', major: '', degree: '' }]);
+        }
+      } catch (error) {
+        console.error('Failed to load education entries:', error);
+        setEducationEntries([{ school: '', startYear: '', endYear: '', major: '', degree: '' }]);
+      }
+
+      // Load experience_entries from database
+      try {
+        const { data: experienceData, error: experienceError } = await supabase
+          .from('experience_entries')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('start_date', { ascending: false });
+        
+        if (!experienceError && experienceData && experienceData.length > 0) {
+          setExperienceEntries(experienceData.map((x: any) => ({
+            company: x.company || '',
+            role: x.role || '',
+            startDate: x.start_date || '',
+            endDate: x.end_date || '',
+            reason: x.reason_for_leaving || '',
+            current: x.is_current || false,
+            description: x.description || ''
+          })));
+        } else {
+          // If no data, set a default empty entry
+          setExperienceEntries([{ company: '', role: '', startDate: '', endDate: '', reason: '', current: false, description: '' }]);
+        }
+      } catch (error) {
+        console.error('Failed to load experience entries:', error);
+        setExperienceEntries([{ company: '', role: '', startDate: '', endDate: '', reason: '', current: false, description: '' }]);
+      }
+
       // Load demographics data separately
       try {
         const { data: session } = await supabase.auth.getSession();
@@ -2860,8 +2907,10 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
       console.error('Failed to load profile:', e);
     } finally {
       setLoading(false);
+      setProfileDataLoaded(true);
     }
   }
+
 
   // Save handlers per section
   async function saveStep2() {
@@ -3230,9 +3279,12 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
     checkResume();
   }, [user?.id, supabase]);
 
-  // Load on mount
+  // Load on mount (with caching)
   useEffect(() => {
-    loadData();
+    // Only load data if not already loaded or if user changed
+    if (!profileDataLoaded || user?.id) {
+      loadData();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
@@ -4028,6 +4080,7 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('home');
+  const [profileDataLoaded, setProfileDataLoaded] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user, signOut, loading } = useAuth();
   const router = useRouter();
@@ -4572,10 +4625,6 @@ export default function Dashboard() {
       return <ReviewApplicationsSection />;
     }
 
-    // Render Submitted Applications section
-    if (activeTab === 'submitted-applications') {
-      return <SubmittedApplicationsSection />;
-    }
 
     // Render Resume section
     if (activeTab === 'resume') {
@@ -4711,7 +4760,6 @@ export default function Dashboard() {
               return (
                 <button
                   key={item.id}
-                  data-tab={item.id}
                   onClick={() => {
                     setActiveTab(item.id);
                     setSidebarOpen(false);
@@ -4866,7 +4914,6 @@ export default function Dashboard() {
               return (
                 <button
                   key={item.id}
-                  data-tab={item.id}
                   onClick={() => {
                     setActiveTab(item.id);
                     setSidebarOpen(false);
