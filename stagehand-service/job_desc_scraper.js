@@ -19,7 +19,7 @@ const scrapeJobDetails = async (stagehand, jobUrl) => {
     console.log("✅ Page loaded successfully");
 
     // Wait a moment for dynamic content to load
-    await page.waitForTimeout(2000);
+    await page.waitForLoadState("networkidle");
 
     // Define schema for job details extraction
     const jobDetailsSchema = z.object({
