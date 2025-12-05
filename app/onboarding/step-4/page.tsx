@@ -75,9 +75,7 @@ export default function OnboardingStep4() {
   };
 
   const isFormValid = () => {
-    return formData.jobTitles.length > 0 && 
-           formData.industries.length > 0 && 
-           formData.locations.length > 0 && 
+    return formData.locations.length > 0 && 
            formData.minSalary && 
            formData.jobType && 
            formData.startTime;
@@ -100,15 +98,10 @@ export default function OnboardingStep4() {
         transition={{ duration: 0.5 }}
         className="sticky top-4 z-50 flex justify-center px-4 py-4"
       >
-        <div className="flex items-center justify-between w-full max-w-6xl px-8 py-4 bg-black/60 backdrop-blur-xl border border-white/30 rounded-full shadow-2xl">
+        <div className="flex items-center justify-start w-full max-w-6xl px-8 py-4 bg-black/60 backdrop-blur-xl border border-white/30 rounded-full shadow-2xl">
           <Link href="/" className="flex items-center gap-3">
             <Image src="/logo.png" alt="ResumeMax Logo" width={32} height={32} className="h-8 w-8" />
             <span className="text-lg font-bold text-white">ResumeMax</span>
-          </Link>
-          <Link href="/auth/login">
-            <Button variant="ghost" size="sm" className="text-white hover:bg-white/20">
-              Skip Onboarding
-            </Button>
           </Link>
         </div>
       </motion.nav>
@@ -141,70 +134,6 @@ export default function OnboardingStep4() {
                   <CardTitle className="text-2xl text-center">Your Job Preferences</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  {/* Desired Job Titles */}
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">
-                      Desired job titles *
-                    </Label>
-                    <Select onValueChange={(value) => handleMultiSelect('jobTitles', value)}>
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Select job titles you're interested in" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {jobTitles.map((title) => (
-                          <SelectItem key={title} value={title} disabled={formData.jobTitles.includes(title)}>
-                            {title}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {formData.jobTitles.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {formData.jobTitles.map((title) => (
-                          <Badge key={title} variant="secondary" className="flex items-center gap-1">
-                            {title}
-                            <X 
-                              className="h-3 w-3 cursor-pointer" 
-                              onClick={() => removeItem('jobTitles', title)}
-                            />
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Target Industries */}
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">
-                      Target industries *
-                    </Label>
-                    <Select onValueChange={(value) => handleMultiSelect('industries', value)}>
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Select industries you're interested in" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {industries.map((industry) => (
-                          <SelectItem key={industry} value={industry} disabled={formData.industries.includes(industry)}>
-                            {industry}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {formData.industries.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {formData.industries.map((industry) => (
-                          <Badge key={industry} variant="secondary" className="flex items-center gap-1">
-                            {industry}
-                            <X 
-                              className="h-3 w-3 cursor-pointer" 
-                              onClick={() => removeItem('industries', industry)}
-                            />
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
                   {/* Preferred Locations */}
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">

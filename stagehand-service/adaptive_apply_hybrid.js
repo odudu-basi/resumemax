@@ -84,8 +84,7 @@ Top Skills: ${(userProfile.skills?.technical || []).slice(0, 8).join(', ')}
 ${jobContext}
 
 FORM FIELDS TO FILL:
-${chunk.map((field, i) => `${i + 1}. ${field.description} (${field.method})`).join('
-')}
+${chunk.map((field, i) => `${i + 1}. ${field.description} (${field.method})`).join('\n')}
 
 INSTRUCTIONS:
 - For each field, provide a concise, accurate answer based on the user profile
@@ -289,14 +288,12 @@ ${userProfile.workExperience.map((exp, i) => `
 ${i + 1}. ${exp.title} at ${exp.company}
    Duration: ${exp.duration}
    Description: ${exp.description}
-`).join('
-')}
+`).join('\n')}
 
 EDUCATION:
 ${userProfile.education.map((edu, i) => `
 ${i + 1}. ${edu.degree} in ${edu.field}, ${edu.school} (${edu.year})
-`).join('
-')}
+`).join('\n')}
 
 WORK AUTHORIZATION:
 - Authorized to work: ${userProfile.workAuthorized ? 'Yes' : 'No'}
