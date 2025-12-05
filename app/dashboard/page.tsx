@@ -328,8 +328,25 @@ function HomeSection() {
       return;
     }
 
+    // Validate user is logged in
+    if (!user || !user.id) {
+      toast.error('Please log in to apply for jobs');
+      return;
+    }
+
     const jobId = `home_${Date.now()}`;
     const currentJobUrl = jobLink.trim();
+
+    // Validate URL format before proceeding
+    try {
+      new URL(currentJobUrl);
+    } catch (urlError) {
+      toast.error('Invalid URL format', {
+        description: 'Please enter a valid job listing URL',
+        duration: 5000,
+      });
+      return;
+    }
 
     // Clear input immediately
     setJobLink("");
@@ -409,21 +426,67 @@ function HomeSection() {
         // Continue without cover letter if generation fails
       }
 
+      // Step 3: Validate data before cloud apply
+      console.log('🔍 Validating data before cloud apply...', {
+        jobUrl: currentJobUrl,
+        userId: user.id,
+        isValidUrl: !!currentJobUrl && currentJobUrl.startsWith('http'),
+        hasUserId: !!user.id
+      });
+
+      if (!currentJobUrl || !currentJobUrl.startsWith('http')) {
+        throw new Error('Invalid job URL for application');
+      }
+
+      if (!user.id) {
+        throw new Error('User ID is missing. Please log in again.');
+      }
+
       // Step 3: Automatically trigger cloud apply
       console.log('🚀 Auto-triggering cloud apply for:', currentJobUrl);
       setCloudApplyJobLoading(prev => ({ ...prev, [jobId]: true }));
 
+      // Log the exact payload being sent
+      const payload = {
+        jobUrl: currentJobUrl,
+        userId: user?.id,
+        coverLetter: coverLetter,
+      };
+      console.log('📤 Sending to cloud-apply API:', {
+        jobUrl: payload.jobUrl,
+        userId: payload.userId,
+        hasCoverLetter: !!payload.coverLetter,
+        jobUrlType: typeof payload.jobUrl,
+        userIdType: typeof payload.userId
+      });
+
       const applyResponse = await fetch('/api/cloud-apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jobUrl: currentJobUrl,
-          userId: user?.id,
-          coverLetter: coverLetter,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const applyResult = await applyResponse.json();
+
+      // Enhanced error handling for validation errors
+      if (!applyResponse.ok) {
+        console.error('❌ API Response Error:', {
+          status: applyResponse.status,
+          result: applyResult
+        });
+        
+        let errorMessage = applyResult.error || 'Application failed';
+        
+        // Add validation details if available
+        if (applyResult.details && Array.isArray(applyResult.details)) {
+          const validationIssues = applyResult.details.map((issue: any) => 
+            `${issue.path?.join('.') || 'field'}: ${issue.message}`
+          ).join(', ');
+          errorMessage += ` (${validationIssues})`;
+        }
+        
+        throw new Error(errorMessage);
+      }
 
       if (applyResult.success) {
         console.log('✅ Application started:', applyResult);

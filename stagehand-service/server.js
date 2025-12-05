@@ -30,7 +30,7 @@ app.post('/apply', async (req, res) => {
   let stagehand = null;
 
   try {
-    const { jobUrl, userProfile, approach } = req.body;
+    const { jobUrl, userProfile, approach, coverLetter } = req.body;
 
     if (!jobUrl || !userProfile) {
       return res.status(400).json({ success: false, error: 'Missing required fields' });

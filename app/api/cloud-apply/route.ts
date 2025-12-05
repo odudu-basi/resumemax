@@ -16,10 +16,20 @@ export const runtime = 'nodejs';
 // Stagehand API URL (Railway service)
 const STAGEHAND_API_URL = process.env.STAGEHAND_API_URL || 'http://localhost:3001';
 
+// Cover letter can be either a string or an object with PDF data
+const CoverLetterSchema = z.union([
+  z.string(),
+  z.object({
+    fileName: z.string(),
+    fileType: z.string(),
+    contentBase64: z.string(),
+  }),
+]).optional().nullable();
+
 const CloudApplyRequestSchema = z.object({
   jobUrl: z.string().url(),
   userId: z.string(),
-  coverLetter: z.string().optional(),
+  coverLetter: CoverLetterSchema,
 });
 
 async function fetchUserProfileData(userId: string) {
@@ -127,8 +137,17 @@ async function fetchUserProfileData(userId: string) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    console.log('📥 [Cloud-Apply] Received request body:', {
+      jobUrl: body.jobUrl,
+      userId: body.userId,
+      hasCoverLetter: !!body.coverLetter,
+      coverLetterType: body.coverLetter ? (typeof body.coverLetter === 'object' ? 'object' : 'string') : 'null'
+    });
+    
     const validatedData = CloudApplyRequestSchema.parse(body);
     const coverLetter = validatedData.coverLetter || null;
+    
+    console.log('✅ [Cloud-Apply] Validation successful');
 
     // Step 1: Check if user has credits before proceeding
     console.log('🔍 [Cloud-Apply] Checking credits for user:', validatedData.userId);
