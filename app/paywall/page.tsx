@@ -2,145 +2,110 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Check, 
-  Zap, 
-  Star, 
+import {
+  Check,
+  Zap,
+  Star,
   Crown,
   Loader2,
-  ArrowRight
+  ArrowRight,
+  Rocket,
+  TrendingUp
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 
-const pricingPlans = {
-  weekly: [
-    {
-      id: 'basic-weekly',
-      name: 'Basic',
-      price: 6,
-      period: 'week',
-      jobs: 10,
-      priceId: 'price_1SOBvoGfV3OgrONkrH31ZPzs',
-      icon: Zap,
-      popular: false,
-        features: [
-          '10 auto-apply uses per week',
-          'AI-powered form filling',
-          'Resume optimization',
-          'Basic support',
-          'Application tracking'
-        ]
-    },
-    {
-      id: 'student-weekly',
-      name: 'Student',
-      price: 10,
-      period: 'week',
-      jobs: 20,
-      priceId: 'price_1SOBxFGfV3OgrONkjWcGYa7k',
-      icon: Star,
-      popular: true,
-        features: [
-          '20 auto-apply uses per week',
-          'AI-powered form filling',
-          'Resume optimization',
-          'Priority support',
-          'Application tracking',
-          'Interview preparation tips'
-        ]
-    }
-  ],
-  monthly: [
-    {
-      id: 'basic-monthly',
-      name: 'Basic',
-      price: 20,
-      period: 'month',
-      jobs: 30,
-      priceId: 'price_1SOBwYGfV3OgrONkSrpIhdBH',
-      icon: Zap,
-      popular: false,
-        features: [
-          '30 auto-apply uses per month',
-          'AI-powered form filling',
-          'Resume optimization',
-          'Basic support',
-          'Application tracking'
-        ]
-    },
-    {
-      id: 'student-monthly',
-      name: 'Student',
-      price: 35,
-      period: 'month',
-      jobs: 80,
-      priceId: 'price_1SOBxuGfV3OgrONkamx6GPzC',
-      icon: Star,
-      popular: true,
-        features: [
-          '80 auto-apply uses per month',
-          'AI-powered form filling',
-          'Resume optimization',
-          'Priority support',
-          'Application tracking',
-          'Interview preparation tips',
-          'Career coaching resources'
-        ]
-    },
-    {
-      id: 'desperate-monthly',
-      name: 'Desperate',
-      price: 100,
-      period: 'month',
-      jobs: 200,
-      priceId: 'price_1SOByyGfV3OgrONk3Yvj3Sdh',
-      icon: Crown,
-      popular: false,
-        features: [
-          '200 auto-apply uses per month',
-          'AI-powered form filling',
-          'Resume optimization',
-          'Premium support',
-          'Application tracking',
-          'Interview preparation tips',
-          'Career coaching resources',
-          'Personal job search consultant',
-          'Custom application strategies'
-        ]
-    }
-  ]
-};
+const pricingPlans = [
+  {
+    id: 'basic',
+    name: 'Basic',
+    price: 10,
+    period: 'week',
+    applications: 20,
+    priceId: 'price_1SOBxFGfV3OgrONkjWcGYa7k',
+    icon: TrendingUp,
+    popular: false,
+    features: [
+      '20 job applications per week',
+      'AI-powered application filling',
+      'Advanced resume parsing',
+      'Application tracking dashboard',
+      'Cover letter generation',
+      'Email notifications',
+      'Priority support'
+    ]
+  },
+  {
+    id: 'pro',
+    name: 'Pro',
+    price: 20,
+    period: 'month',
+    applications: 30,
+    priceId: 'price_1SOBwYGfV3OgrONkSrpIhdBH',
+    icon: Rocket,
+    popular: true,
+    features: [
+      '30 job applications per month',
+      'AI-powered application filling',
+      'Advanced resume parsing',
+      'Application tracking dashboard',
+      'Cover letter generation',
+      'Email notifications',
+      'Priority support',
+      'Resume optimization tips',
+      'Interview preparation guides'
+    ]
+  },
+  {
+    id: 'premium',
+    name: 'Premium',
+    price: 35,
+    period: 'month',
+    applications: 80,
+    priceId: 'price_1SOBxuGfV3OgrONkamx6GPzC',
+    icon: Crown,
+    popular: false,
+    features: [
+      '80 job applications per month',
+      'AI-powered application filling',
+      'Advanced resume parsing',
+      'Application tracking dashboard',
+      'Cover letter generation',
+      'Email notifications',
+      'Priority support',
+      'Resume optimization tips',
+      'Interview preparation guides',
+      'LinkedIn profile optimization',
+      'Dedicated account manager'
+    ]
+  }
+];
 
 export default function PaywallPage() {
-  const [activeTab, setActiveTab] = useState<'weekly' | 'monthly'>('monthly');
-  const [loading, setLoading] = useState<string | null>(null);
   const { user } = useAuth();
   const router = useRouter();
+  const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
 
-  const handleSubscribe = async (priceId: string, planName: string) => {
+  const handleUpgrade = async (plan: typeof pricingPlans[0]) => {
     if (!user) {
-      router.push('/auth/login?returnTo=/paywall');
+      router.push('/auth/login');
       return;
     }
 
-    setLoading(priceId);
+    setLoadingPlan(plan.id);
 
     try {
       const response = await fetch('/api/stripe/checkout', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          priceId,
+          priceId: plan.priceId,
           userId: user.id,
-          planName,
-          successUrl: `${window.location.origin}/dashboard?subscription=success`,
-          cancelUrl: `${window.location.origin}/paywall?subscription=cancelled`,
+          planName: plan.name,
+          autoApplyLimit: plan.applications
         }),
       });
 
@@ -149,204 +114,145 @@ export default function PaywallPage() {
       if (data.url) {
         window.location.href = data.url;
       } else {
-        console.error('No checkout URL received');
-        setLoading(null);
+        throw new Error(data.error || 'Failed to create checkout session');
       }
-    } catch (error) {
-      console.error('Error creating checkout session:', error);
-      setLoading(null);
+    } catch (error: any) {
+      console.error('Error:', error);
+      alert(error.message || 'Something went wrong. Please try again.');
+    } finally {
+      setLoadingPlan(null);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 py-12 px-4">
-      <div className="max-w-6xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-white via-gray-50 to-gray-100 flex items-center justify-center p-4">
+      <div className="w-full max-w-7xl">
         {/* Header */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
           className="text-center mb-12"
         >
-          <Badge variant="secondary" className="mb-4">
-            <Crown className="mr-1 h-3 w-3" />
-            Choose Your Plan
+          <Badge className="mb-4 bg-gradient-to-r from-gray-800 to-black text-white px-4 py-1">
+            Unlock Full Access
           </Badge>
-          <h1 className="text-4xl font-bold tracking-tight text-gray-900 mb-4">
-            Unlock Your Job Search Potential
+          <h1 className="text-4xl md:text-5xl font-bold text-black mb-4">
+            You've used all your free applications
           </h1>
-          <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-            Let AI handle the tedious work while you focus on landing interviews. 
-            Choose the plan that fits your job search intensity.
+          <p className="text-lg md:text-xl text-gray-700 max-w-2xl mx-auto">
+            Upgrade now to continue applying to jobs with AI-powered automation
           </p>
         </motion.div>
 
-        {/* Tab Navigation */}
-        <div className="flex justify-center mb-8">
-          <div className="bg-gray-100 p-1 rounded-lg">
-            <button
-              onClick={() => setActiveTab('weekly')}
-              className={`px-6 py-2 rounded-md font-medium transition-all ${
-                activeTab === 'weekly'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Weekly Plans
-            </button>
-            <button
-              onClick={() => setActiveTab('monthly')}
-              className={`px-6 py-2 rounded-md font-medium transition-all ${
-                activeTab === 'monthly'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Monthly Plans
-            </button>
-          </div>
-        </div>
-
         {/* Pricing Cards */}
-        <motion.div
-          key={activeTab}
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-          className="grid gap-8 md:grid-cols-2 lg:grid-cols-3 max-w-5xl mx-auto"
-        >
-          {pricingPlans[activeTab].map((plan, index) => {
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+          {pricingPlans.map((plan, index) => {
             const Icon = plan.icon;
-            const isLoading = loading === plan.priceId;
-            
+
             return (
-              <Card
+              <motion.div
                 key={plan.id}
-                className={`relative hover:shadow-xl transition-all duration-300 ${
-                  plan.popular
-                    ? 'ring-2 ring-blue-500 shadow-lg scale-105'
-                    : plan.name === 'Desperate'
-                    ? 'ring-2 ring-red-500 bg-red-50/30 hover:shadow-lg'
-                    : 'hover:shadow-lg'
-                }`}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: index * 0.1 }}
+                className="relative"
               >
                 {plan.popular && (
-                  <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                    <Badge className="bg-blue-500 text-white px-4 py-1">
+                  <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 z-10">
+                    <Badge className="bg-gradient-to-r from-gray-800 to-black text-white px-4 py-1">
                       Most Popular
                     </Badge>
                   </div>
                 )}
-                {/* Trial badge for Student/Basic monthly */}
-                {activeTab === 'monthly' && (plan.id === 'basic-monthly' || plan.id === 'student-monthly') && (
-                  <div className="absolute -top-3 right-3">
-                    <Badge className="bg-green-600 text-white px-3 py-1">
-                      3-day free trial
-                    </Badge>
-                  </div>
-                )}
-
-                <CardHeader className="text-center pb-4">
-                  <div className="flex justify-center mb-4">
-                    <div className={`p-3 rounded-full ${
-                      plan.popular 
-                        ? 'bg-blue-100 text-blue-600' 
-                        : plan.name === 'Desperate'
-                        ? 'bg-red-100 text-red-600'
-                        : 'bg-gray-100 text-gray-600'
-                    }`}>
-                      <Icon className="h-6 w-6" />
+                <Card className={`h-full transition-all hover:shadow-xl ${
+                  plan.popular
+                    ? 'ring-2 ring-gray-800 shadow-lg'
+                    : 'border-gray-200'
+                }`}>
+                  <CardHeader>
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                        plan.popular ? 'bg-gray-100' : 'bg-gray-50'
+                      }`}>
+                        <Icon className="h-5 w-5 text-gray-800" />
+                      </div>
+                      <CardTitle className="text-2xl">{plan.name}</CardTitle>
                     </div>
-                  </div>
-                  
-                  <CardTitle className="text-2xl font-bold text-gray-900">
-                    {plan.name}
-                  </CardTitle>
-                  
-                  <div className="mt-4">
-                    <span className="text-4xl font-bold text-gray-900">
-                      ${plan.price}
-                    </span>
-                    <span className="text-gray-600">/{plan.period}</span>
-                  </div>
-                  {activeTab === 'monthly' && (plan.id === 'basic-monthly' || plan.id === 'student-monthly') && (
-                    <p className="text-xs text-green-700 mt-1">Try it free for 3 days, then ${plan.price}/{plan.period}</p>
-                  )}
-                  
-                  <p className="text-sm text-gray-600 mt-2">
-                    {plan.jobs} auto-apply uses per {plan.period}
-                  </p>
-                </CardHeader>
 
-                <CardContent className="space-y-6">
-                  <ul className="space-y-3">
-                    {plan.features.map((feature, i) => (
-                      <li key={i} className="flex items-start gap-3">
-                        <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
-                        <span className="text-sm text-gray-700">{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
+                    <div className="flex items-baseline gap-1 mb-2">
+                      <span className="text-4xl font-bold text-gray-900">${plan.price}</span>
+                      <span className="text-gray-600">/{plan.period}</span>
+                    </div>
 
-                  <Button
-                    onClick={() => handleSubscribe(plan.priceId, plan.name)}
-                    disabled={isLoading}
-                    className={`w-full ${
-                      plan.popular
-                        ? 'bg-blue-600 hover:bg-blue-700'
-                        : plan.name === 'Desperate'
-                        ? 'bg-red-600 hover:bg-red-700'
-                        : 'bg-gray-900 hover:bg-gray-800'
-                    }`}
-                    size="lg"
-                  >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        Get Started
-                        <ArrowRight className="ml-2 h-4 w-4" />
-                      </>
-                    )}
-                  </Button>
-                </CardContent>
-              </Card>
+                    <Badge variant="outline" className="text-base font-semibold w-fit">
+                      {plan.applications} applications/month
+                    </Badge>
+
+                    <CardDescription className="text-base mt-3">
+                      Perfect for {plan.applications < 30 ? 'focused' : plan.applications < 100 ? 'active' : 'power'} job searching
+                    </CardDescription>
+                  </CardHeader>
+
+                  <CardContent>
+                    <Button
+                      onClick={() => handleUpgrade(plan)}
+                      disabled={loadingPlan === plan.id}
+                      className={`w-full mb-6 ${
+                        plan.popular
+                          ? 'bg-gradient-to-r from-gray-800 to-black hover:from-gray-900 hover:to-black'
+                          : 'bg-gray-800 hover:bg-gray-900'
+                      }`}
+                      size="lg"
+                    >
+                      {loadingPlan === plan.id ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          Upgrade Now
+                          <ArrowRight className="ml-2 h-4 w-4" />
+                        </>
+                      )}
+                    </Button>
+
+                    <div className="space-y-3">
+                      <p className="font-semibold text-sm text-gray-900">Includes:</p>
+                      <ul className="space-y-2.5">
+                        {plan.features.map((feature, i) => (
+                          <li key={i} className="flex items-start gap-2">
+                            <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                            <span className="text-sm text-gray-700">{feature}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
             );
           })}
-        </motion.div>
+        </div>
 
-        {/* Bottom CTA */}
+        {/* Footer */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="text-center mt-16"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.6, delay: 0.4 }}
+          className="text-center"
         >
-          <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-2xl p-8 max-w-3xl mx-auto">
-            <h3 className="text-2xl font-bold text-gray-900 mb-4">
-              Ready to Transform Your Job Search?
-            </h3>
-            <p className="text-gray-600 mb-6">
-              Join thousands of job seekers who have automated their applications 
-              and landed their dream jobs faster than ever before.
-            </p>
-            <div className="flex items-center justify-center gap-8 text-sm text-gray-600">
-              <div className="flex items-center gap-2">
-                <Check className="h-4 w-4 text-green-600" />
-                <span>Cancel anytime</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Check className="h-4 w-4 text-green-600" />
-                <span>No setup fees</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Check className="h-4 w-4 text-green-600" />
-                <span>Instant access</span>
-              </div>
-            </div>
-          </div>
+          <p className="text-gray-600 mb-2">
+            All plans include a 7-day money-back guarantee
+          </p>
+          <Button
+            variant="ghost"
+            onClick={() => router.push('/dashboard')}
+            className="text-gray-700 hover:text-gray-900"
+          >
+            Return to Dashboard
+          </Button>
         </motion.div>
       </div>
     </div>

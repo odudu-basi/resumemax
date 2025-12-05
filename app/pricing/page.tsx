@@ -40,9 +40,9 @@ const plans = [
     price: "$20",
     period: "per month",
     description: "Best for active job seekers",
-    applications: 50,
+    applications: 30,
     features: [
-      "50 job applications per month",
+      "30 job applications per month",
       "AI-powered application filling",
       "Advanced resume parsing",
       "Application tracking dashboard",
@@ -64,9 +64,9 @@ const plans = [
     price: "$35",
     period: "per month",
     description: "Maximum application power",
-    applications: 100,
+    applications: 80,
     features: [
-      "100 job applications per month",
+      "80 job applications per month",
       "AI-powered application filling",
       "Advanced resume parsing",
       "Application tracking dashboard",
