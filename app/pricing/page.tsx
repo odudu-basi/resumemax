@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Check, Star, Zap, Crown, Users, Loader2, Home as HomeIcon, LogOut } from "lucide-react";
+import { Check, Star, Zap, Crown, Users, Loader2, Home as HomeIcon, LogOut, Rocket, TrendingUp } from "lucide-react";
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/src/contexts/AuthContext";
@@ -13,66 +13,98 @@ import Image from "next/image";
 
 const plans = [
   {
-    id: "unlimited",
-    name: "Unlimited",
-    price: "$15",
-    period: "per month",
-    description: "For power users and professionals",
+    id: "basic",
+    name: "Basic",
+    price: "$10",
+    period: "per week",
+    description: "Perfect for getting started",
+    applications: 20,
     features: [
-      "Unlimited resume analyses",
-      "Unlimited PDF downloads",
-      "Advanced AI-powered feedback",
-      "Industry-specific recommendations",
-      "Cover letter analysis",
-      "Resume templates access",
+      "20 job applications per week",
+      "AI-powered application filling",
+      "Advanced resume parsing",
+      "Application tracking dashboard",
+      "Cover letter generation",
+      "Email notifications",
+      "Priority support"
+    ],
+    limitations: [],
+    icon: TrendingUp,
+    popular: false,
+    cta: "Get Started",
+    priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_BASIC
+  },
+  {
+    id: "pro",
+    name: "Pro",
+    price: "$20",
+    period: "per month",
+    description: "Best for active job seekers",
+    applications: 50,
+    features: [
+      "50 job applications per month",
+      "AI-powered application filling",
+      "Advanced resume parsing",
+      "Application tracking dashboard",
+      "Cover letter generation",
+      "Email notifications",
       "Priority support",
-      "Advanced keyword optimization",
-      "Export to multiple formats"
+      "Resume optimization tips",
+      "Interview preparation guides"
+    ],
+    limitations: [],
+    icon: Rocket,
+    popular: true,
+    cta: "Go Pro",
+    priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PRO
+  },
+  {
+    id: "premium",
+    name: "Premium",
+    price: "$35",
+    period: "per month",
+    description: "Maximum application power",
+    applications: 100,
+    features: [
+      "100 job applications per month",
+      "AI-powered application filling",
+      "Advanced resume parsing",
+      "Application tracking dashboard",
+      "Cover letter generation",
+      "Email notifications",
+      "Priority support",
+      "Resume optimization tips",
+      "Interview preparation guides",
+      "LinkedIn profile optimization",
+      "Dedicated account manager"
     ],
     limitations: [],
     icon: Crown,
-    popular: true,
-    cta: "Go Unlimited",
-    priceId: "price_1SLoMuGfV3OgrONkCc9AOPqX"
-  },
-  {
-    id: "basic",
-    name: "Basic",
-    price: "$7",
-    period: "per month",
-    description: "Great for job seekers who need more analyses",
-    features: [
-      "25 resume analyses per month",
-      "10 PDF downloads per month",
-      "Detailed AI-powered feedback",
-      "Keyword optimization suggestions",
-      "ATS optimization score",
-      "Resume format recommendations",
-      "Priority email support"
-    ],
-    limitations: [],
-    icon: Zap,
     popular: false,
-    cta: "Start Basic Plan",
-    priceId: "price_1SLoMAGfV3OgrONkMEAyWnAG"
+    cta: "Go Premium",
+    priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM
   }
 ];
 
 const faqs = [
   {
-    question: "How accurate is the AI analysis?",
-    answer: "Our AI has been trained on thousands of successful resumes and recruiter feedback. It provides 94% accuracy in identifying areas for improvement and has helped users increase their interview rates by an average of 32%."
+    question: "How do application credits work?",
+    answer: "Each plan comes with a monthly allowance of job applications. Credits are used when you successfully submit an application through our AI-powered system. Credits reset at the beginning of each billing cycle."
+  },
+  {
+    question: "What happens when I run out of credits?",
+    answer: "When you run out of application credits, you'll be prompted to upgrade to a higher tier. You can upgrade at any time, and unused credits from your previous plan will be added to your new plan's allowance."
   },
   {
     question: "Can I cancel my subscription anytime?",
     answer: "Yes, you can cancel your subscription at any time. There are no long-term commitments, and you'll continue to have access to your plan features until the end of your billing period."
   },
   {
-    question: "What file formats do you support?",
-    answer: "We support PDF, DOC, and DOCX formats. For best results, we recommend uploading your resume as a PDF to preserve formatting."
+    question: "Do my credits roll over to the next month?",
+    answer: "No, credits reset monthly on your billing cycle. This ensures you always have a fresh allocation of applications each month. We recommend using your credits strategically throughout the month."
   },
   {
-    question: "Is my resume data secure?",
+    question: "Is my data secure?",
     answer: "Absolutely. We use enterprise-grade encryption and never share your personal information. Your resume data is processed securely and can be deleted from our servers at any time upon request."
   }
 ];
@@ -107,186 +139,137 @@ export default function PricingPage() {
     fetchSubscription();
   }, [user?.id]);
 
-  // Track pricing page view
-  useEffect(() => {
-    MixpanelService.trackPricingPageViewed({
-      user_id: user?.id,
-      referrer_page: document.referrer || 'direct',
-    });
-  }, [user?.id]);
-
   const handlePlanSelect = async (plan: typeof plans[0]) => {
     if (!user) {
-      // Redirect to signup if not authenticated
-      window.location.href = `/auth/signup?returnTo=${encodeURIComponent('/pricing')}`;
+      window.location.href = '/auth/login';
       return;
     }
 
-    if (plan.id === 'free') {
-      // Free plan - redirect to dashboard
+    // Free plan - just redirect to dashboard
+    if (plan.id === 'free' || !plan.priceId) {
       window.location.href = '/dashboard';
       return;
     }
 
-    if (!plan.priceId) {
-      console.error('No price ID for plan:', plan.name);
-      return;
-    }
-
     setLoadingPlan(plan.id);
+    MixpanelService.track('Pricing Plan Selected', {
+      plan_name: plan.name,
+      plan_price: plan.price,
+      user_id: user.id
+    });
 
     try {
       const response = await fetch('/api/stripe/checkout', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          plan: plan.id,
+          priceId: plan.priceId,
           userId: user.id,
-          userEmail: user.email,
+          planName: plan.name
         }),
       });
 
       const data = await response.json();
 
-      if (!response.ok) {
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
         throw new Error(data.error || 'Failed to create checkout session');
       }
-
-      // Redirect to Stripe Checkout
-      window.location.href = data.url;
-    } catch (error) {
-      console.error('Checkout error:', error);
-      alert('Failed to start checkout. Please try again.');
+    } catch (error: any) {
+      console.error('Error:', error);
+      alert(error.message || 'Something went wrong. Please try again.');
     } finally {
       setLoadingPlan(null);
     }
   };
+
+  const handleSignOut = async () => {
+    await signOut();
+    window.location.href = '/';
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-gray-50 via-30% via-gray-200 via-60% to-black relative overflow-hidden">
-      {/* Decorative gradient orbs */}
-      <div className="absolute top-0 left-0 w-96 h-96 bg-gradient-radial from-gray-300/30 to-transparent rounded-full blur-3xl"></div>
-      <div className="absolute bottom-0 right-0 w-[600px] h-[600px] bg-gradient-radial from-gray-800/20 to-transparent rounded-full blur-3xl"></div>
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-gradient-radial from-gray-400/10 to-transparent rounded-full blur-3xl"></div>
-
-      {/* Subtle grid pattern overlay */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]"></div>
-
-      {/* Glassmorphic Navbar */}
-      <motion.nav
-        initial={{ y: -20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 0.5 }}
-        className="sticky top-4 z-50 flex justify-center px-4 py-4"
-      >
-        <div className="flex items-center justify-between w-full max-w-6xl px-8 py-4 bg-black/60 backdrop-blur-xl border border-white/30 rounded-full shadow-2xl">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-3">
-            <Image src="/logo.png" alt="ResumeMax Logo" width={32} height={32} className="h-8 w-8" />
-            <span className="text-lg font-bold text-white">ResumeMax</span>
-          </Link>
-
-          {/* Navigation Links */}
-          <div className="hidden md:flex items-center gap-2">
-            <Link href="/#features">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-white hover:bg-white/20"
-              >
-                Features
-              </Button>
+    <div className="min-h-screen bg-gradient-to-br from-white via-gray-50 to-gray-100">
+      {/* Navbar */}
+      <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-200">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            {/* Logo */}
+            <Link href="/" className="flex items-center space-x-2">
+              <div className="w-8 h-8 bg-gradient-to-r from-gray-800 to-black rounded-lg flex items-center justify-center">
+                <Image
+                  src="/icon.png"
+                  alt="ResumeMax"
+                  width={24}
+                  height={24}
+                  className="w-6 h-6"
+                />
+              </div>
+              <span className="text-xl font-bold text-gray-900">ResumeMax</span>
             </Link>
-            <Link href="/pricing">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-white hover:bg-white/20"
-              >
-                Pricing
-              </Button>
-            </Link>
-          </div>
 
-          {/* User Section */}
-          <div className="flex items-center gap-3">
-            {user ? (
-              <>
-                <Link href="/dashboard">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-white hover:bg-white/20 flex items-center gap-2"
-                  >
-                    <HomeIcon className="h-4 w-4" />
-                    <span className="hidden sm:inline">Dashboard</span>
+            {/* Right side */}
+            <div className="flex items-center gap-4">
+              {user ? (
+                <>
+                  <Link href="/dashboard">
+                    <Button variant="ghost" size="sm">
+                      <HomeIcon className="h-4 w-4 mr-2" />
+                      Dashboard
+                    </Button>
+                  </Link>
+                  <Button variant="ghost" size="sm" onClick={handleSignOut}>
+                    <LogOut className="h-4 w-4 mr-2" />
+                    Sign Out
                   </Button>
-                </Link>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => signOut()}
-                  className="text-white hover:bg-white/20 flex items-center gap-2"
-                >
-                  <LogOut className="h-4 w-4" />
-                  <span className="hidden sm:inline">Sign Out</span>
-                </Button>
-              </>
-            ) : (
-              <>
-                <Link href="/auth/login">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-white hover:bg-white/20"
-                  >
-                    Sign In
-                  </Button>
-                </Link>
-                <Link href="/auth/signup">
-                  <Button
-                    size="sm"
-                    className="bg-white text-black hover:bg-gray-100"
-                  >
-                    Sign Up
-                  </Button>
-                </Link>
-              </>
-            )}
+                </>
+              ) : (
+                <>
+                  <Link href="/auth/login">
+                    <Button variant="ghost" size="sm">
+                      Sign In
+                    </Button>
+                  </Link>
+                  <Link href="/auth/signup">
+                    <Button size="sm" className="bg-gradient-to-r from-gray-800 to-black">
+                      Get Started
+                    </Button>
+                  </Link>
+                </>
+              )}
+            </div>
           </div>
         </div>
-      </motion.nav>
+      </nav>
 
-      {/* Header */}
-      <section className="relative z-10 container mx-auto px-4 sm:px-6 lg:px-8 py-16">
+      {/* Main Content */}
+      <section className="container mx-auto px-4 sm:px-6 lg:px-8 py-16">
+        {/* Header */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
           className="text-center mb-16"
         >
-          <Badge variant="secondary" className="mb-4">
-            <Star className="mr-1 h-3 w-3" />
-            Pricing Plans
-          </Badge>
-          <h1 className="text-4xl font-bold text-black sm:text-5xl">
-            Choose Your Plan
+          <h1 className="text-5xl font-bold text-black mb-4">
+            Simple, Transparent Pricing
           </h1>
-          <p className="mt-4 text-lg text-gray-700 max-w-2xl mx-auto">
-            Start free and upgrade as you grow. All plans include our core AI analysis features.
+          <p className="text-xl text-gray-700 max-w-2xl mx-auto">
+            Choose the plan that fits your job search needs. All plans include AI-powered applications.
           </p>
         </motion.div>
 
         {/* Pricing Cards */}
-        <div className="grid gap-8 lg:grid-cols-2 max-w-4xl mx-auto mb-16">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-16">
           {plans.map((plan, index) => {
             const Icon = plan.icon;
-            const isCurrentPlan = currentPlan?.toLowerCase() === plan.id.toLowerCase();
+            const isCurrentPlan = currentPlan?.toLowerCase() === plan.name.toLowerCase();
+            const isFree = plan.id === 'free';
 
             return (
               <motion.div
-                key={plan.name}
+                key={plan.id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: index * 0.1 }}
@@ -316,9 +299,11 @@ export default function PricingPage() {
                   <CardHeader>
                     <div className="flex items-center gap-2 mb-2">
                       <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                        isCurrentPlan ? 'bg-green-100' : 'bg-gray-100'
+                        isCurrentPlan ? 'bg-green-100' : isFree ? 'bg-blue-100' : 'bg-gray-100'
                       }`}>
-                        <Icon className={`h-4 w-4 ${isCurrentPlan ? 'text-green-700' : 'text-gray-800'}`} />
+                        <Icon className={`h-4 w-4 ${
+                          isCurrentPlan ? 'text-green-700' : isFree ? 'text-blue-600' : 'text-gray-800'
+                        }`} />
                       </div>
                       <CardTitle className="text-xl">{plan.name}</CardTitle>
                     </div>
@@ -326,7 +311,12 @@ export default function PricingPage() {
                       <span className="text-3xl font-bold">{plan.price}</span>
                       <span className="text-gray-600">/{plan.period}</span>
                     </div>
-                    <CardDescription className="text-base">
+                    <div className="mt-2">
+                      <Badge variant="outline" className="text-base font-semibold">
+                        {plan.applications} applications/month
+                      </Badge>
+                    </div>
+                    <CardDescription className="text-base mt-2">
                       {plan.description}
                     </CardDescription>
                   </CardHeader>
@@ -337,11 +327,13 @@ export default function PricingPage() {
                       className={`w-full ${
                         isCurrentPlan
                           ? 'bg-green-600/50 border-green-600 cursor-default'
+                          : isFree
+                          ? 'bg-blue-600 hover:bg-blue-700'
                           : plan.popular
                           ? 'bg-gradient-to-r from-gray-800 to-black'
                           : 'border-gray-800 text-gray-800 hover:bg-gray-50'
                       }`}
-                      variant={isCurrentPlan || plan.popular ? "default" : "outline"}
+                      variant={isCurrentPlan || plan.popular || isFree ? "default" : "outline"}
                     >
                       {loadingPlan === plan.id ? (
                         <>
@@ -373,81 +365,6 @@ export default function PricingPage() {
           })}
         </div>
 
-        {/* Features Comparison */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.4 }}
-          className="mb-16"
-        >
-          <Card className="bg-white/80 backdrop-blur-sm border-gray-200">
-            <CardHeader>
-              <CardTitle className="text-center">Feature Comparison</CardTitle>
-              <CardDescription className="text-center">
-                Compare all features across our plans
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-3 px-4">Feature</th>
-                      <th className="text-center py-3 px-4">Free</th>
-                      <th className="text-center py-3 px-4">Basic</th>
-                      <th className="text-center py-3 px-4">Unlimited</th>
-                    </tr>
-                  </thead>
-                  <tbody className="text-sm">
-                    <tr className="border-b">
-                      <td className="py-3 px-4">Resume analyses per month</td>
-                      <td className="text-center py-3 px-4">3</td>
-                      <td className="text-center py-3 px-4">25</td>
-                      <td className="text-center py-3 px-4">Unlimited</td>
-                    </tr>
-                    <tr className="border-b">
-                      <td className="py-3 px-4">PDF downloads per month</td>
-                      <td className="text-center py-3 px-4">0</td>
-                      <td className="text-center py-3 px-4">10</td>
-                      <td className="text-center py-3 px-4">Unlimited</td>
-                    </tr>
-                    <tr className="border-b">
-                      <td className="py-3 px-4">AI-powered feedback</td>
-                      <td className="text-center py-3 px-4">Basic</td>
-                      <td className="text-center py-3 px-4">Detailed</td>
-                      <td className="text-center py-3 px-4">Advanced</td>
-                    </tr>
-                    <tr className="border-b">
-                      <td className="py-3 px-4">Keyword optimization</td>
-                      <td className="text-center py-3 px-4">-</td>
-                      <td className="text-center py-3 px-4"><Check className="h-4 w-4 text-green-600 mx-auto" /></td>
-                      <td className="text-center py-3 px-4"><Check className="h-4 w-4 text-green-600 mx-auto" /></td>
-                    </tr>
-                    <tr className="border-b">
-                      <td className="py-3 px-4">Cover letter analysis</td>
-                      <td className="text-center py-3 px-4">-</td>
-                      <td className="text-center py-3 px-4">-</td>
-                      <td className="text-center py-3 px-4"><Check className="h-4 w-4 text-green-600 mx-auto" /></td>
-                    </tr>
-                    <tr className="border-b">
-                      <td className="py-3 px-4">Resume templates</td>
-                      <td className="text-center py-3 px-4">-</td>
-                      <td className="text-center py-3 px-4">-</td>
-                      <td className="text-center py-3 px-4"><Check className="h-4 w-4 text-green-600 mx-auto" /></td>
-                    </tr>
-                    <tr>
-                      <td className="py-3 px-4">Priority support</td>
-                      <td className="text-center py-3 px-4">-</td>
-                      <td className="text-center py-3 px-4"><Check className="h-4 w-4 text-green-600 mx-auto" /></td>
-                      <td className="text-center py-3 px-4"><Check className="h-4 w-4 text-green-600 mx-auto" /></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
         {/* FAQ Section */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -462,8 +379,8 @@ export default function PricingPage() {
               Got questions? We've got answers.
             </p>
           </div>
-          
-          <div className="grid gap-6 md:grid-cols-2">
+
+          <div className="grid gap-6 md:grid-cols-2 max-w-5xl mx-auto">
             {faqs.map((faq, index) => (
               <motion.div
                 key={index}
