@@ -10,13 +10,16 @@ const scrapeJobDetails = async (stagehand, jobUrl) => {
   console.log('🔍 Starting job details extraction for:', jobUrl);
 
   try {
+    // Get the page from Stagehand context (v3 API)
+    const page = stagehand.context.pages()[0];
+    
     // Navigate to the job URL
     console.log("📄 Navigating to job URL...");
-    await stagehand.page.goto(jobUrl, { waitUntil: 'domcontentloaded' });
+    await page.goto(jobUrl, { waitUntil: 'domcontentloaded' });
     console.log("✅ Page loaded successfully");
 
     // Wait a moment for dynamic content to load
-    await stagehand.page.waitForTimeout(2000);
+    await page.waitForTimeout(2000);
 
     // Define schema for job details extraction
     const jobDetailsSchema = z.object({
