@@ -282,7 +282,7 @@ function HomeSection() {
     try {
       // Step 1: Scrape job details
       console.log('🔍 Scraping job details from:', currentJobUrl);
-      const scrapeResponse = await fetch('http://localhost:3001/scrape-job-details', {
+      const scrapeResponse = await fetch(`${process.env.NEXT_PUBLIC_STAGEHAND_API_URL}/scrape-job-details`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ jobUrl: currentJobUrl }),
