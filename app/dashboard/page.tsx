@@ -247,6 +247,8 @@ function HomeJobCard({
 function HomeSection() {
   const { user } = useAuth();
   const [jobLink, setJobLink] = useState("");
+  const [showProfileIncompleteModal, setShowProfileIncompleteModal] = useState(false);
+  const [missingFields, setMissingFields] = useState<string[]>([]);
   const [homeJobs, setHomeJobs] = useState<any[]>([]);
   const [cloudApplyJobLoading, setCloudApplyJobLoading] = useState<Record<string, boolean>>({});
   const [cloudNotifications, setCloudNotifications] = useState<Record<string, any>>({});
@@ -322,9 +324,58 @@ function HomeSection() {
     }
   };
 
+
+  // Check if user profile is complete before applying
+  const validateProfile = async () => {
+    if (!user?.id) return { isValid: false, missing: ['Login required'] };
+
+    const supabase = await createSupabaseClient();
+    const missing: string[] = [];
+
+    try {
+      // Check for experience
+      const { data: experience } = await supabase
+        .from('experience_entries')
+        .select('id')
+        .eq('user_id', user.id)
+        .limit(1);
+
+      if (!experience || experience.length === 0) {
+        missing.push('Work Experience');
+      }
+
+      // Check for education
+      const { data: education } = await supabase
+        .from('education_entries')
+        .select('id')
+        .eq('user_id', user.id)
+        .limit(1);
+
+      if (!education || education.length === 0) {
+        missing.push('Education');
+      }
+
+      return {
+        isValid: missing.length === 0,
+        missing
+      };
+    } catch (error) {
+      console.error('Error validating profile:', error);
+      return { isValid: true, missing: [] }; // Allow apply on error
+    }
+  };
+
   const handleApply = async () => {
     if (!jobLink.trim()) {
       toast.error('Please enter a job link');
+      return;
+    }
+
+    // Check if profile is complete
+    const profileCheck = await validateProfile();
+    if (!profileCheck.isValid) {
+      setMissingFields(profileCheck.missing);
+      setShowProfileIncompleteModal(true);
       return;
     }
 
@@ -573,6 +624,59 @@ function HomeSection() {
 
   return (
     <div className="space-y-6">
+      {/* Profile Incomplete Modal */}
+      {showProfileIncompleteModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6"
+          >
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-orange-100 rounded-full">
+                <AlertCircle className="h-6 w-6 text-orange-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-xl font-bold text-gray-900 mb-2">
+                  Complete Your Profile First
+                </h3>
+                <p className="text-gray-600 mb-4">
+                  Please add the following information to your profile before using 1-click apply:
+                </p>
+                <ul className="space-y-2 mb-6">
+                  {missingFields.map((field) => (
+                    <li key={field} className="flex items-center gap-2 text-gray-700">
+                      <div className="h-2 w-2 bg-orange-500 rounded-full" />
+                      <span className="font-medium">{field}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="flex gap-3">
+                  <Button
+                    onClick={() => {
+                      setShowProfileIncompleteModal(false);
+                      // Switch to profile tab
+                      const profileTab = document.querySelector('[data-tab="profile"]') as HTMLElement;
+                      profileTab?.click();
+                    }}
+                    className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
+                  >
+                    Go to Profile
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowProfileIncompleteModal(false)}
+                    className="flex-1"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
       {/* Gmail Setup Banner/Card */}
       {!workEmail ? (
         <Card className="bg-gradient-to-br from-blue-900/50 to-purple-900/30 backdrop-blur-xl border-blue-700/50 shadow-2xl">
@@ -4607,6 +4711,7 @@ export default function Dashboard() {
               return (
                 <button
                   key={item.id}
+                  data-tab={item.id}
                   onClick={() => {
                     setActiveTab(item.id);
                     setSidebarOpen(false);
@@ -4761,6 +4866,7 @@ export default function Dashboard() {
               return (
                 <button
                   key={item.id}
+                  data-tab={item.id}
                   onClick={() => {
                     setActiveTab(item.id);
                     setSidebarOpen(false);
