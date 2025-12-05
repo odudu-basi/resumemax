@@ -181,20 +181,15 @@ export default function Home() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8 }}
             >
-              <Badge variant="secondary" className="mb-4">
-                <Star className="mr-1 h-3 w-3" />
-                AI-Powered Resume Analysis
-              </Badge>
               <h1 className="text-4xl font-bold tracking-tight text-black sm:text-6xl">
-                Automate Your Job Applications{" "}
+                Apply to Jobs Accurately{" "}
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-gray-700 to-black">
                   with AI
                 </span>
               </h1>
               <p className="mt-6 text-lg leading-8 text-gray-700 max-w-2xl mx-auto">
-                🤖 AI reads job posts, fills out applications, and uploads your resume. 
-                👤 You just review in 30 seconds and hit submit. 
-                ✨ It's that simple - no more copy-paste madness!
+                Paste any job link. AI extracts every detail, tailors your application, and completes forms with precision.
+                No more manual data entry. No more copy-paste chaos. Just accurate, instant applications.
               </p>
               <div className="mt-10 flex items-center justify-center gap-4">
                 <motion.div
