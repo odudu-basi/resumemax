@@ -11,20 +11,29 @@ async function getGoogleAuth() {
       throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY environment variable is not set');
     }
 
+    console.log('🔍 Service account key length:', serviceAccountKey.length);
     const credentials = JSON.parse(serviceAccountKey);
+    console.log('✅ Parsed credentials, client_email:', credentials.client_email);
 
-    const jwtClient = new google.auth.JWT(
-      credentials.client_email,
-      undefined,
-      credentials.private_key,
-      [
+    // Ensure private key has proper newlines
+    const privateKey = credentials.private_key.replace(/\\n/g, '\n');
+    console.log('🔑 Private key exists:', !!privateKey);
+    console.log('🔑 Private key length:', privateKey?.length);
+    console.log('🔑 Private key starts with:', privateKey?.substring(0, 30));
+
+    const jwtClient = new google.auth.JWT({
+      email: credentials.client_email,
+      key: privateKey,
+      scopes: [
         'https://www.googleapis.com/auth/admin.directory.user',
         'https://www.googleapis.com/auth/admin.directory.user.alias',
       ],
-      process.env.GOOGLE_ADMIN_EMAIL
-    );
+      subject: process.env.GOOGLE_ADMIN_EMAIL
+    });
 
+    console.log('📡 Attempting to authorize...');
     await jwtClient.authorize();
+    console.log('✅ Authorization successful');
     return jwtClient;
   } catch (error) {
     console.error('Error initializing Google Auth:', error);

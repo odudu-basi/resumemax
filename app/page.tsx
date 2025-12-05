@@ -3,11 +3,11 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { FileText, BarChart3, Zap, CheckCircle, Star, Users, Home as HomeIcon, LogOut } from "lucide-react";
+import { FileText, BarChart3, Zap, CheckCircle, Star, Users, Home as HomeIcon, LogOut, Sparkles, MousePointer, FileEdit, ShieldCheck, Brain } from "lucide-react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import MixpanelService from "@/src/lib/mixpanel";
 import MixpanelTest from "@/src/components/MixpanelTest";
 import Link from "next/link";
@@ -15,19 +15,24 @@ import Image from "next/image";
 
 const features = [
   {
-    icon: BarChart3,
-    title: "AI-Powered Analysis",
-    description: "Get detailed insights on your resume's strengths and weaknesses with advanced AI technology."
+    icon: MousePointer,
+    title: "1-Click Apply",
+    description: "Paste any job link and apply in seconds. AI extracts details, fills forms, and uploads your documents automatically."
   },
   {
-    icon: Zap,
-    title: "Instant Results",
-    description: "Receive comprehensive feedback and scoring within seconds of uploading your resume."
+    icon: FileEdit,
+    title: "Tailored Cover Letters",
+    description: "AI generates truthful, personalized cover letters based on your actual experience for every application."
   },
   {
-    icon: CheckCircle,
-    title: "Actionable Recommendations",
-    description: "Get specific suggestions to improve your resume and increase your chances of landing interviews."
+    icon: ShieldCheck,
+    title: "No Duplicate Applications",
+    description: "Never apply to the same job twice. Smart tracking prevents duplicate submissions automatically."
+  },
+  {
+    icon: Brain,
+    title: "Resume-Based Answers",
+    description: "All application questions are answered intelligently using your resume data and profile information."
   }
 ];
 
@@ -35,7 +40,6 @@ const features = [
 export default function Home() {
   const { user, signOut } = useAuth();
   const router = useRouter();
-  const [activeVideoTab, setActiveVideoTab] = useState<'create' | 'tailor'>('create');
 
   // Track page view
   useEffect(() => {
@@ -137,6 +141,16 @@ export default function Home() {
                     <span className="hidden sm:inline">Dashboard</span>
                   </Button>
                 </Link>
+                <Link href="/onboarding">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-white hover:bg-white/20 flex items-center gap-2"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    <span className="hidden sm:inline">Onboarding</span>
+                  </Button>
+                </Link>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -184,7 +198,7 @@ export default function Home() {
               <h1 className="text-4xl font-bold tracking-tight text-black sm:text-6xl">
                 Apply to Jobs Accurately{" "}
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-gray-700 to-black">
-                  with AI
+                  in Seconds Not Hours
                 </span>
               </h1>
               <p className="mt-6 text-lg leading-8 text-gray-700 max-w-2xl mx-auto">
@@ -239,7 +253,7 @@ export default function Home() {
                   Let AI Handle Your Job Applications
                 </h2>
                 <p className="text-xl text-gray-600 font-medium">
-                  You Just Review and Submit ✨
+                  You Just Apply ✨
                 </p>
               </div>
               
@@ -284,24 +298,24 @@ export default function Home() {
                       <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center mr-3">
                         <span className="text-lg font-bold">👤</span>
                       </div>
-                      <h3 className="text-xl font-bold">You Just Review & Submit</h3>
+                      <h3 className="text-xl font-bold">You Just Apply</h3>
                     </div>
                     <ul className="space-y-2 text-sm">
                       <li className="flex items-center">
-                        <span className="mr-2">👀</span>
-                        Quick 30-second review
+                        <span className="mr-2">🔍</span>
+                        Find the job
                       </li>
                       <li className="flex items-center">
-                        <span className="mr-2">✏️</span>
-                        Make any final tweaks
+                        <span className="mr-2">📋</span>
+                        Paste the link
                       </li>
                       <li className="flex items-center">
                         <span className="mr-2">🚀</span>
-                        Hit submit and you're done!
+                        Click apply
                       </li>
                       <li className="flex items-center">
                         <span className="mr-2">☕</span>
-                        Grab coffee while AI works
+                        Grab a coffee and let AI handle the rest
                       </li>
                     </ul>
                   </div>
@@ -320,80 +334,6 @@ export default function Home() {
                   Stop the copy-paste madness. Let AI handle your job applications while you focus on landing interviews.
                 </p>
               </div>
-            </div>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* Video Showcase Section */}
-      <section className="relative z-10 py-20">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
-            className="max-w-5xl mx-auto"
-          >
-            <div className="text-center mb-8 sm:mb-12 px-4">
-              <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-black mb-3 sm:mb-4">
-                See ResumeMax in Action
-              </h2>
-              <p className="text-base sm:text-lg text-gray-700">
-                Watch how our AI-powered tools can transform your resume
-              </p>
-            </div>
-
-            {/* Glassmorphic Tab Buttons */}
-            <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4 mb-8 px-4">
-              <button
-                onClick={() => setActiveVideoTab('create')}
-                className={`px-6 sm:px-8 py-3 sm:py-4 rounded-2xl font-semibold transition-all duration-300 min-h-[48px] ${
-                  activeVideoTab === 'create'
-                    ? 'bg-black/80 text-white backdrop-blur-xl border border-white/30 shadow-2xl sm:scale-105'
-                    : 'bg-white/60 text-gray-800 backdrop-blur-sm border border-gray-200 hover:bg-white/80 hover:shadow-lg'
-                }`}
-              >
-                Create Resume
-              </button>
-              <button
-                onClick={() => setActiveVideoTab('tailor')}
-                className={`px-6 sm:px-8 py-3 sm:py-4 rounded-2xl font-semibold transition-all duration-300 min-h-[48px] ${
-                  activeVideoTab === 'tailor'
-                    ? 'bg-black/80 text-white backdrop-blur-xl border border-white/30 shadow-2xl sm:scale-105'
-                    : 'bg-white/60 text-gray-800 backdrop-blur-sm border border-gray-200 hover:bg-white/80 hover:shadow-lg'
-                }`}
-              >
-                Tailor Resume
-              </button>
-            </div>
-
-            {/* Video Container with Glassmorphic Effect */}
-            <div className="relative rounded-3xl overflow-hidden bg-white/40 backdrop-blur-xl border border-white/50 shadow-2xl p-2">
-              <div className="relative rounded-2xl overflow-hidden bg-black">
-                <video
-                  key={activeVideoTab}
-                  className="w-full h-auto"
-                  controls
-                  playsInline
-                  preload="metadata"
-                  src={activeVideoTab === 'create' ? '/create-resume-demo.mp4' : '/tailor-resume-demo.mov'}
-                >
-                  <source
-                    src={activeVideoTab === 'create' ? '/create-resume-demo.mp4' : '/tailor-resume-demo.mov'}
-                    type={activeVideoTab === 'create' ? 'video/mp4' : 'video/quicktime'}
-                  />
-                  Your browser does not support the video tag.
-                </video>
-              </div>
-            </div>
-
-            {/* Video Description */}
-            <div className="mt-8 text-center px-4">
-              <p className="text-base sm:text-lg text-gray-700">
-                {activeVideoTab === 'create'
-                  ? 'Watch how easy it is to build a professional resume from scratch with AI-powered suggestions and templates.'
-                  : 'See how our AI optimizes your existing resume for specific job opportunities with keyword matching and ATS optimization.'}
-              </p>
             </div>
           </motion.div>
         </div>
@@ -591,11 +531,10 @@ export default function Home() {
             className="text-center"
           >
             <h2 className="text-3xl font-bold text-white sm:text-4xl">
-              Ready to Optimize Your Resume?
+              Start Applying to Jobs Accurately in Seconds Not Hours
             </h2>
             <p className="mt-4 text-lg text-gray-300 max-w-2xl mx-auto">
-              Join thousands of job seekers who have improved their resumes with ResumeMax.
-              Get started today and land your dream job faster.
+              Join thousands using AI to land their dream jobs faster with intelligent auto-apply.
             </p>
             <div className="mt-8">
               <motion.div
