@@ -428,6 +428,42 @@ function HomeSection() {
       if (applyResult.success) {
         console.log('✅ Application started:', applyResult);
 
+        // Step 4: Save applied job to database
+        try {
+          console.log('💾 Saving applied job to database...');
+          const saveJobResponse = await fetch('/api/save-applied-job', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId: user?.id,
+              jobUrl: currentJobUrl,
+              jobTitle: scrapedData.jobTitle,
+              companyName: scrapedData.companyName,
+              location: scrapedData.location,
+              jobType: scrapedData.jobType,
+              salaryRange: scrapedData.salaryRange,
+              datePosted: scrapedData.datePosted,
+              jobDescription: scrapedData.jobDescription,
+              requirements: scrapedData.requirements,
+              benefits: scrapedData.benefits,
+              sessionId: applyResult.sessionId,
+              sessionUrl: applyResult.sessionUrl,
+              coverLetterGenerated: coverLetter ? true : false,
+              extractedAt: scrapedData.extractedAt,
+            }),
+          });
+
+          const saveJobResult = await saveJobResponse.json();
+          if (saveJobResult.success) {
+            console.log('✅ Applied job saved to database');
+          } else {
+            console.warn('⚠️  Failed to save job to database:', saveJobResult.error);
+          }
+        } catch (saveError) {
+          console.error('⚠️  Error saving job to database:', saveError);
+          // Don't fail the application flow if database save fails
+        }
+
         // Set notification with session info
         setCloudNotifications(prev => ({
           ...prev,
