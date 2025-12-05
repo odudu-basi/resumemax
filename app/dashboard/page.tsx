@@ -56,8 +56,6 @@ import Image from "next/image";
 import type { EnhancedJobListing } from "@/src/types/user-profile";
 import { JobCard } from "@/components/JobCard";
 import { createSupabaseClient } from "@/src/lib/supabase";
-import VoiceBubble from "@/src/components/VoiceBubble";
-import SpeechConversation from "@/src/components/SpeechConversation";
 import { useAutoApplySessions } from "@/src/hooks/useAutoApplySessions";
 import { useSubmittedApplications } from "@/src/hooks/useSubmittedApplications";
 import { GmailConnectionBanner } from "@/src/components/GmailConnectionBanner";
@@ -82,19 +80,18 @@ const sidebarItems = [
     icon: FileText,
     description: 'Upload and manage your resume'
   },
-
-  {
-    id: 'browse-jobs',
-    label: 'Browse Jobs',
-    icon: Search,
-    description: 'Search and discover Greenhouse job opportunities'
-  },
-  {
-    id: 'review-applications',
-    label: 'Review Applications',
-    icon: FileText,
-    description: 'Review applications before submission'
-  },
+  // {
+  //   id: 'browse-jobs',
+  //   label: 'Browse Jobs',
+  //   icon: Search,
+  //   description: 'Search and discover Greenhouse job opportunities'
+  // },
+  // {
+  //   id: 'review-applications',
+  //   label: 'Review Applications',
+  //   icon: FileText,
+  //   description: 'Review applications before submission'
+  // },
   {
     id: 'submitted-applications',
     label: 'Submitted Applications',
@@ -108,6 +105,7 @@ const sidebarItems = [
     description: 'View and manage your subscription'
   }
 ];
+
 
 // Browse Jobs Section Component
 // Home Section Component
@@ -254,6 +252,77 @@ function HomeSection() {
   const [cloudApplyJobLoading, setCloudApplyJobLoading] = useState<Record<string, boolean>>({});
   const [cloudNotifications, setCloudNotifications] = useState<Record<string, any>>({});
 
+  // Gmail account setup states
+  const [showGmailSetup, setShowGmailSetup] = useState(false);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [workEmail, setWorkEmail] = useState<string | null>(null);
+  const [isCreatingEmail, setIsCreatingEmail] = useState(false);
+  const [gmailPassword, setGmailPassword] = useState<string | null>(null);
+
+  // Load work email on mount
+  useEffect(() => {
+    const loadWorkEmail = async () => {
+      if (!user?.id) return;
+
+      const supabase = await createSupabaseClient();
+      const { data } = await supabase
+        .from('user_profiles')
+        .select('work_email, first_name, last_name')
+        .eq('user_id', user.id)
+        .single();
+
+      if (data?.work_email) {
+        setWorkEmail(data.work_email);
+      }
+      if (data?.first_name) setFirstName(data.first_name);
+      if (data?.last_name) setLastName(data.last_name);
+    };
+
+    loadWorkEmail();
+  }, [user?.id]);
+
+  const handleCreateGmailAccount = async () => {
+    if (!firstName.trim() || !lastName.trim()) {
+      toast.error('Please enter your first and last name');
+      return;
+    }
+
+    setIsCreatingEmail(true);
+    try {
+      const response = await fetch('/api/create-gmail-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user?.id,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setWorkEmail(result.email);
+        setShowGmailSetup(false);
+
+        if (result.alreadyExists) {
+          toast.success(`Your work email is: ${result.email}`);
+        } else {
+          setGmailPassword(result.password);
+          toast.success(`Gmail account created! Email: ${result.email}`);
+        }
+      } else {
+        toast.error(result.error || 'Failed to create Gmail account');
+      }
+    } catch (error: any) {
+      console.error('Error creating Gmail account:', error);
+      toast.error('Failed to create Gmail account');
+    } finally {
+      setIsCreatingEmail(false);
+    }
+  };
+
   const handleApply = async () => {
     if (!jobLink.trim()) {
       toast.error('Please enter a job link');
@@ -374,6 +443,108 @@ function HomeSection() {
 
   return (
     <div className="space-y-6">
+      {/* Gmail Setup Banner/Card */}
+      {!workEmail ? (
+        <Card className="bg-gradient-to-br from-blue-900/50 to-purple-900/30 backdrop-blur-xl border-blue-700/50 shadow-2xl">
+          <CardHeader>
+            <CardTitle className="text-2xl font-bold text-white flex items-center gap-2">
+              <MessageCircle className="h-6 w-6" />
+              Setup Your Work Inbox
+            </CardTitle>
+            <CardDescription className="text-blue-100">
+              Get a professional @nuclei-mail.com email address for job applications
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {!showGmailSetup ? (
+              <div className="flex items-center justify-between">
+                <p className="text-white">Create your professional email to streamline job applications</p>
+                <Button
+                  onClick={() => setShowGmailSetup(true)}
+                  className="bg-white text-blue-900 hover:bg-blue-50"
+                >
+                  <MessageCircle className="h-4 w-4 mr-2" />
+                  Setup Inbox
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-white">First Name</Label>
+                    <Input
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      placeholder="John"
+                      className="bg-gray-800/50 border-gray-600 text-white"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-white">Last Name</Label>
+                    <Input
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      placeholder="Doe"
+                      className="bg-gray-800/50 border-gray-600 text-white"
+                    />
+                  </div>
+                </div>
+                <p className="text-sm text-blue-100">
+                  Your email will be: {firstName && lastName ? `${firstName.toLowerCase()}.${lastName.toLowerCase()}@nuclei-mail.com` : 'firstname.lastname@nuclei-mail.com'}
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleCreateGmailAccount}
+                    disabled={isCreatingEmail || !firstName.trim() || !lastName.trim()}
+                    className="bg-white text-blue-900 hover:bg-blue-50"
+                  >
+                    {isCreatingEmail ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="h-4 w-4 mr-2" />
+                        Create Email
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    onClick={() => setShowGmailSetup(false)}
+                    variant="outline"
+                    className="border-white text-white hover:bg-white/10"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="bg-gradient-to-br from-green-900/50 to-emerald-900/30 backdrop-blur-xl border-green-700/50">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <CheckCircle2 className="h-6 w-6 text-green-400" />
+                <div>
+                  <p className="text-white font-semibold">Work Email Active</p>
+                  <p className="text-green-100 text-sm">{workEmail}</p>
+                </div>
+              </div>
+              {gmailPassword && (
+                <div className="bg-yellow-900/50 border border-yellow-700 rounded-lg p-3 max-w-md">
+                  <p className="text-yellow-100 text-xs font-semibold mb-1">Temporary Password:</p>
+                  <p className="text-white font-mono text-sm">{gmailPassword}</p>
+                  <p className="text-yellow-200 text-xs mt-1">Save this password! You'll need to change it on first login.</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Input Section */}
       <Card className="bg-gradient-to-br from-gray-900/50 to-gray-800/30 backdrop-blur-xl border-gray-700/50 shadow-2xl">
         <CardHeader>
@@ -2215,45 +2386,6 @@ function PricingSection() {
               </div>
             </div>
           </div>
-        </CardContent>
-      </Card>
-      
-      {/* Voice Mode Bubble (below resume section) */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Voice Mode</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <VoiceBubble
-            title="Talk about your resume"
-            hint="Tap the bubble and speak. For example: “Summarize my experience.”"
-          />
-        </CardContent>
-      </Card>
-      
-      {/* Voice Mode Bubble (below resume section) */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Voice Mode</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <VoiceBubble
-            title="Talk about your resume"
-            hint="Tap the bubble and speak. For example: “Summarize my experience.”"
-          />
-        </CardContent>
-      </Card>
-      
-      {/* Voice Mode Bubble (below resume section) */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Voice Mode</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <VoiceBubble
-            title="Talk about your resume"
-            hint="Tap the bubble and speak. For example: “Summarize my experience.”"
-          />
         </CardContent>
       </Card>
     </div>
@@ -4160,10 +4292,6 @@ export default function Dashboard() {
       return <ResumeSection />;
     }
 
-    // Render Context section
-    if (activeTab === 'context') {
-      return <SpeechConversation />;
-    }
 
     // Render Pricing section
     if (activeTab === 'pricing') {
@@ -4499,7 +4627,6 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* VoiceBubble replaces previous voice widget */}
-    </div>
+          </div>
   );
 }
