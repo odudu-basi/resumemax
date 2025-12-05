@@ -36,8 +36,7 @@ async function extractJobDescription(stagehand) {
  * Get intelligent answers from ChatGPT for all form fields
  */
 async function getIntelligentAnswers(fieldDescriptions, userProfile, jobDescription) {
-  console.log('
-🤖 Asking ChatGPT for intelligent field answers...');
+  console.log('\n🤖 Asking ChatGPT for intelligent field answers...');
   console.log(`  📊 Total fields to process: ${fieldDescriptions.length}`);
 
   const jobContext = jobDescription ? `
@@ -424,8 +423,7 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
     console.log(`     - Output: ${phase2Tokens.output.toLocaleString()}`);
 
     // ========== Download session recording and extract filled fields ==========
-    console.log('
-📹 Post-processing: Downloading recording & extracting fields...');
+    console.log('\n📹 Post-processing: Downloading recording & extracting fields...');
     let sessionVideoUrl = null;
     let filledFields = null;
     
@@ -482,8 +480,7 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
     }
     
     // Extract filled fields from the form
-    console.log('
-📝 Extracting filled form fields...');
+    console.log('\n📝 Extracting filled form fields...');
     try {
       const filledFieldsSchema = z.record(z.string());
       
