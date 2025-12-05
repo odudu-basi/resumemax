@@ -380,7 +380,36 @@ function HomeSection() {
         } : job
       ));
 
-      // Step 2: Automatically trigger cloud apply
+      // Step 2: Generate tailored cover letter
+      console.log('✍️ Generating tailored cover letter...');
+      let coverLetter = null;
+      
+      try {
+        const coverLetterResponse = await fetch('/api/generate-tailored-cover-letter', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user?.id,
+            jobDescription: scrapedData.jobDescription,
+            jobTitle: scrapedData.jobTitle,
+            companyName: scrapedData.companyName,
+            requirements: scrapedData.requirements,
+          }),
+        });
+
+        const coverLetterData = await coverLetterResponse.json();
+        if (coverLetterData.success) {
+          coverLetter = coverLetterData.coverLetterPDF; // PDF with base64
+          console.log('✅ Cover letter generated and converted to PDF');
+        } else {
+          console.log('⚠️  Cover letter generation failed, continuing without it');
+        }
+      } catch (coverLetterError) {
+        console.error('⚠️  Cover letter generation error:', coverLetterError);
+        // Continue without cover letter if generation fails
+      }
+
+      // Step 3: Automatically trigger cloud apply
       console.log('🚀 Auto-triggering cloud apply for:', currentJobUrl);
       setCloudApplyJobLoading(prev => ({ ...prev, [jobId]: true }));
 
@@ -390,6 +419,7 @@ function HomeSection() {
         body: JSON.stringify({
           jobUrl: currentJobUrl,
           userId: user?.id,
+          coverLetter: coverLetter,
         }),
       });
 
@@ -3805,6 +3835,11 @@ export default function Dashboard() {
   const [notifications, setNotifications] = useState<Record<string, any>>({});
   const [cloudNotifications, setCloudNotifications] = useState<Record<string, any>>({});
   const [searchProgress, setSearchProgress] = useState<string>('');
+  // Credit tracking state
+  const [creditsRemaining, setCreditsRemaining] = useState<number>(0);
+  const [creditsLimit, setCreditsLimit] = useState<number>(5);
+  const [planName, setPlanName] = useState<string>('Free');
+  const [loadingCredits, setLoadingCredits] = useState(true);
 
   // Resume state
   const [resumeFile, setResumeFile] = useState<File | null>(null);
@@ -4034,6 +4069,57 @@ export default function Dashboard() {
       loadResume(); // Load resume data regardless of active tab
     }
   }, [user?.id, loadResume]);
+
+  // Fetch user credits
+  useEffect(() => {
+    const fetchCredits = async () => {
+      if (!user?.id) {
+        setLoadingCredits(false);
+        return;
+      }
+
+      try {
+        const supabase = createSupabaseClient();
+        const { data, error } = await supabase.rpc('check_auto_apply_credits', {
+          p_user_id: user.id
+        });
+
+        if (error) {
+          // RPC error - set default free tier values
+          setCreditsRemaining(5);
+          setCreditsLimit(5);
+          setPlanName('Free');
+          setLoadingCredits(false);
+          return;
+        }
+
+        if (data && data.length > 0) {
+          const creditInfo = data[0];
+          setCreditsRemaining(creditInfo.credits_remaining || 0);
+          setCreditsLimit(creditInfo.credits_limit || 5);
+          setPlanName(creditInfo.plan_name || 'Free');
+        } else {
+          // No data returned, set defaults
+          setCreditsRemaining(5);
+          setCreditsLimit(5);
+          setPlanName('Free');
+        }
+      } catch (error) {
+        // Exception - set default free tier values
+        setCreditsRemaining(5);
+        setCreditsLimit(5);
+        setPlanName('Free');
+      } finally {
+        setLoadingCredits(false);
+      }
+    };
+
+    fetchCredits();
+    
+    // Refresh credits every 30 seconds
+    const interval = setInterval(fetchCredits, 30000);
+    return () => clearInterval(interval);
+  }, [user?.id]);
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -4368,6 +4454,49 @@ export default function Dashboard() {
             </div>
           </div>
 
+          {/* Credit Counter */}
+          <div className="p-4 border-b border-gray-200">
+            <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold text-gray-700">Applications</span>
+                <Badge variant="outline" className="text-xs">
+                  {planName}
+                </Badge>
+              </div>
+              {loadingCredits ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                  <span className="text-sm text-gray-500">Loading...</span>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-baseline gap-1 mb-2">
+                    <span className="text-2xl font-bold text-gray-900">{creditsRemaining}</span>
+                    <span className="text-sm text-gray-500">/ {creditsLimit}</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
+                    <div 
+                      className={`h-2 rounded-full transition-all ${
+                        creditsRemaining === 0 ? 'bg-red-500' : 
+                        creditsRemaining < creditsLimit * 0.3 ? 'bg-yellow-500' : 
+                        'bg-green-500'
+                      }`}
+                      style={{ width: `${(creditsRemaining / creditsLimit) * 100}%` }}
+                    />
+                  </div>
+                  {planName === 'Free' && (
+                    <Link href="/pricing">
+                      <Button size="sm" className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-xs">
+                        <Crown className="h-3 w-3 mr-1" />
+                        Upgrade Plan
+                      </Button>
+                    </Link>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+
           {/* Navigation */}
           <nav className="flex-1 p-4 space-y-2">
             {sidebarItems.map((item) => {
@@ -4479,6 +4608,49 @@ export default function Dashboard() {
             </div>
           </div>
 
+          {/* Credit Counter */}
+          <div className="p-4 border-b border-gray-200">
+            <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold text-gray-700">Applications</span>
+                <Badge variant="outline" className="text-xs">
+                  {planName}
+                </Badge>
+              </div>
+              {loadingCredits ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                  <span className="text-sm text-gray-500">Loading...</span>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-baseline gap-1 mb-2">
+                    <span className="text-2xl font-bold text-gray-900">{creditsRemaining}</span>
+                    <span className="text-sm text-gray-500">/ {creditsLimit}</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
+                    <div 
+                      className={`h-2 rounded-full transition-all ${
+                        creditsRemaining === 0 ? 'bg-red-500' : 
+                        creditsRemaining < creditsLimit * 0.3 ? 'bg-yellow-500' : 
+                        'bg-green-500'
+                      }`}
+                      style={{ width: `${(creditsRemaining / creditsLimit) * 100}%` }}
+                    />
+                  </div>
+                  {planName === 'Free' && (
+                    <Link href="/pricing">
+                      <Button size="sm" className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-xs">
+                        <Crown className="h-3 w-3 mr-1" />
+                        Upgrade Plan
+                      </Button>
+                    </Link>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+
           {/* Navigation */}
           <nav className="flex-1 p-4 space-y-2">
             {sidebarItems.map((item) => {
@@ -4585,42 +4757,6 @@ export default function Dashboard() {
           </motion.div>
         </main>
 
-        {/* Stats Cards (shown on profile tab) */}
-        {activeTab === 'profile' && (
-          <div className="px-4 pb-8 lg:px-8">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-gray-600">Applications Submitted</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-gray-900">0</div>
-                  <p className="text-xs text-gray-500">This week</p>
-                </CardContent>
-              </Card>
-              
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-gray-600">Profile Completion</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-green-600">100%</div>
-                  <p className="text-xs text-gray-500">Onboarding complete</p>
-                </CardContent>
-              </Card>
-              
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-gray-600">Jobs Matched</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-blue-600">0</div>
-                  <p className="text-xs text-gray-500">Waiting for jobs</p>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        )}
       </div>
 
           </div>

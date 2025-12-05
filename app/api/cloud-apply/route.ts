@@ -19,6 +19,7 @@ const STAGEHAND_API_URL = process.env.STAGEHAND_API_URL || 'http://localhost:300
 const CloudApplyRequestSchema = z.object({
   jobUrl: z.string().url(),
   userId: z.string(),
+  coverLetter: z.string().optional(),
 });
 
 async function fetchUserProfileData(userId: string) {
@@ -127,6 +128,41 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const validatedData = CloudApplyRequestSchema.parse(body);
+    const coverLetter = validatedData.coverLetter || null;
+
+    // Step 1: Check if user has credits before proceeding
+    console.log('🔍 [Cloud-Apply] Checking credits for user:', validatedData.userId);
+    const { data: creditData, error: creditError } = await supabase.rpc('check_auto_apply_credits', {
+      p_user_id: validatedData.userId
+    });
+
+    if (creditError) {
+      console.error('❌ Error checking credits:', creditError);
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Failed to verify credits',
+          needsUpgrade: true
+        },
+        { status: 403 }
+      );
+    }
+
+    if (!creditData || creditData.length === 0 || !creditData[0].has_credits) {
+      console.warn('⚠️ User has no credits remaining');
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'No application credits remaining. Please upgrade your plan.',
+          needsUpgrade: true,
+          creditsRemaining: creditData?.[0]?.credits_remaining || 0,
+          planName: creditData?.[0]?.plan_name || 'Free'
+        },
+        { status: 403 }
+      );
+    }
+
+    console.log('✅ Credits available:', creditData[0].credits_remaining);
 
     console.log('🚀 [Cloud-Apply] Fetching user profile...');
     const userProfile = await fetchUserProfileData(validatedData.userId);
@@ -140,6 +176,7 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         jobUrl: validatedData.jobUrl,
         userProfile,
+        coverLetter: coverLetter,
       }),
     });
 
@@ -152,11 +189,38 @@ export async function POST(request: NextRequest) {
 
     console.log('✅ Application submitted:', result);
 
+    // Step 2: Deduct credit after successful submission
+    console.log('💳 [Cloud-Apply] Deducting credit for user:', validatedData.userId);
+    const { data: deductData, error: deductError } = await supabase.rpc('consume_auto_apply_credit', {
+      p_user_id: validatedData.userId,
+      p_job_id: validatedData.jobUrl, // Using job URL as unique identifier
+      p_job_url: validatedData.jobUrl,
+      p_company_name: result.companyName || 'Unknown Company',
+      p_job_title: result.jobTitle || 'Unknown Position'
+    });
+
+    if (deductError) {
+      console.error('⚠️ Warning: Failed to deduct credit:', deductError);
+      // Don't fail the request, just log the error
+      // The application was successful, so we return success to the user
+    } else if (deductData && deductData.length > 0 && deductData[0].success) {
+      console.log('✅ Credit deducted successfully. Remaining:', deductData[0].credits_remaining);
+    } else {
+      console.warn('⚠️ Credit deduction returned non-success:', deductData?.[0]?.message);
+    }
+
+    // Fetch updated credit info to return to client
+    const { data: updatedCredits } = await supabase.rpc('check_auto_apply_credits', {
+      p_user_id: validatedData.userId
+    });
+
     return NextResponse.json({
       success: true,
       sessionId: result.sessionId,
       sessionUrl: result.sessionUrl,
       message: result.message,
+      creditsRemaining: updatedCredits?.[0]?.credits_remaining,
+      creditsLimit: updatedCredits?.[0]?.credits_limit
     });
 
   } catch (error: any) {

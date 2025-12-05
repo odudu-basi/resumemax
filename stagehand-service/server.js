@@ -70,6 +70,17 @@ app.post('/apply', async (req, res) => {
       }
     }
 
+    // Pre-upload cover letter if available (right after resume)
+    if (coverLetter && coverLetter.contentBase64) {
+      console.log('📝 Attempting to pre-upload cover letter PDF...');
+      const coverLetterUploaded = await uploadResumeToForm(page, coverLetter); // Use same upload method
+      if (coverLetterUploaded) {
+        console.log('✅ Cover letter pre-uploaded successfully');
+      } else {
+        console.log('⚠️  Cover letter pre-upload failed');
+      }
+    }
+
     // Route to selected approach
     if (selectedApproach === 'hybrid') {
       console.log('🔄 Using HYBRID approach (observe + ChatGPT + agent)');
