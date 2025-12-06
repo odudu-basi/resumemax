@@ -172,14 +172,6 @@ export default function Home() {
                     Sign In
                   </Button>
                 </Link>
-                <Link href="/auth/signup">
-                  <Button
-                    size="sm"
-                    className="bg-white text-black hover:bg-gray-100"
-                  >
-                    Sign Up
-                  </Button>
-                </Link>
               </>
             )}
           </div>
