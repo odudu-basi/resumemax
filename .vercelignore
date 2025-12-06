@@ -8,6 +8,16 @@ stagehand-service/node_modules
 **/*.bak*
 **/*.backup*
 
+# Ignore test recordings and screenshots (2GB+)
+public/recordings/
+public/screenshots/
+public/vision-screenshots/
+public/form-screenshots/
+
+# Ignore demo videos
+public/*.mov
+public/*.mp4
+
 # Ignore documentation
 docs/
 
