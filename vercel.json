@@ -47,8 +47,8 @@
     }
   ],
   "crons": [
-    { "path": "/api/jobs/ingest?source=greenhouse&limit=500", "schedule": "0 */4 * * *" },
-    { "path": "/api/jobs/ingest?source=lever&limit=500", "schedule": "10 */4 * * *" },
-    { "path": "/api/jobs/ingest?source=workable&limit=500", "schedule": "20 */4 * * *" }
+    { "path": "/api/jobs/ingest?source=greenhouse&limit=500", "schedule": "0 0 * * *" },
+    { "path": "/api/jobs/ingest?source=lever&limit=500", "schedule": "0 8 * * *" },
+    { "path": "/api/jobs/ingest?source=workable&limit=500", "schedule": "0 16 * * *" }
   ]
 }
