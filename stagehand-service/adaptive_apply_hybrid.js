@@ -94,7 +94,7 @@ INSTRUCTIONS:
 - For dropdowns, choose the most appropriate option
 - If you don't have information for a field, return "SKIP"
 
-Return JSON mapping each field description to its answer.`;
+IMPORTANT: Return JSON where the keys are the EXACT field descriptions (copy them exactly, including all punctuation and wording). Example format: { "Input field for the applicant's first name.": "John", "Input field for the applicant's last name.": "Doe" }`;
 
     try {
       const response = await openai.chat.completions.create({
@@ -159,8 +159,6 @@ async function observeFormFields(stagehand) {
  */
 async function fillFormFields(stagehand, actions, answers) {
   console.log('\n✍️  Phase 1: Filling form fields...');
-  console.log("\n📋 Debug: Answers received from ChatGPT:");
-  console.log(JSON.stringify(answers, null, 2));
 
   let filledCount = 0;
   let skippedCount = 0;
@@ -169,8 +167,6 @@ async function fillFormFields(stagehand, actions, answers) {
   for (const action of actions) {
     const description = action.description || '';
     const answer = answers[description];
-
-    console.log(`    🔍 Debug: answer="${answer}" for field="${description}"`);
     if (!answer || answer === 'SKIP') {
       console.log(`  ⏭️  Skipping: ${description}`);
       skippedCount++;
@@ -443,15 +439,20 @@ async function agentReviewAndComplete(stagehand, userProfile, jobDescription) {
 
 Your task:
 1. Review the form to see which fields are filled vs empty
-2. Fill any empty/missing fields using the user profile provided
+2. Fill any empty/missing fields using the user profile and job description provided
 3. Ensure all required fields have appropriate values
-4. DO NOT CLICK SUBMIT - your job is only to verify and complete the form
+4. Click the NEXT button to proceed to the next page (if available)
+5. If no NEXT button exists, click the SUBMIT button to submit the application
 
 IMPORTANT:
 - Only fill fields that are empty or incomplete
 - Do not modify fields that are already filled correctly
-- Be efficient - focus only on completing the form
-- STOP before clicking any submit/apply buttons`
+- For fields without direct information in the user profile, INFER reasonable answers based on:
+  * The user's work experience, education, and skills
+  * The job description and requirements
+  * The user's best interests while remaining truthful
+- Be efficient - focus on completing the form accurately
+- ALWAYS click NEXT (priority) or SUBMIT (if no Next button) when done filling`
   });
 
   const firstName = userProfile.fullName.split(' ')[0] || '';
@@ -501,21 +502,25 @@ WORK AUTHORIZATION:
 ${jobContextText}
 
 YOUR TASK:
-1. Look at the form
-2. Identify any empty or incomplete fields
-3. Fill them with appropriate information from above
+1. Look at the form and identify any empty or incomplete fields
+2. Fill them with appropriate information from above
+3. For questions without direct answers in the profile:
+   - Use the job description and user's background to infer reasonable, truthful answers
+   - Write responses that represent the user's best interests while being honest
 4. For essay/paragraph questions about motivation or interest, write 2-3 professional sentences that:
    - Reference the specific company and role
-   - Connect your relevant experience to the job requirements
+   - Connect the user's relevant experience to job requirements
    - Show genuine interest based on the job context
 5. For yes/no or dropdown questions, choose the most appropriate answer based on the profile
-6. SUBMIT the form
-7. Stop after filling all missing fields`;
+6. After filling all fields, look for a NEXT button (check for buttons labeled "Next", "Continue", "Next Page", "Next Step")
+7. If NEXT button exists: Click it to proceed to the next page
+8. If NO NEXT button exists: Look for SUBMIT button (labeled "Submit", "Submit Application", "Apply Now") and click it
+9. If the page says "Review your application" or similar, click the SUBMIT button`;
 
   try {
     const result = await agent.execute({
       instruction,
-      maxSteps: 20,
+      maxSteps: 30,  // Increased to allow more steps for complex forms
       highlightCursor: false
     });
 
@@ -570,51 +575,101 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
       // Wait for page to stabilize after login
       await new Promise(resolve => setTimeout(resolve, 3000));
     }
-
-    console.log('═══════════════════════════════════════');
-    console.log('  PHASE 1: Traditional Stagehand');
-    console.log('═══════════════════════════════════════');
-
-    // Extract job description first
+    // Extract job description once (same for all pages)
+    console.log('📋 Extracting job description...');
     const jobDescription = await extractJobDescription(stagehand);
+    console.log('✅ Job description extracted');
+    
+        // Multi-page form handling: Loop through pages
+    let allFilledFields = [];
+    let pageNumber = 1;
+    let continueToNextPage = true;
+    
+    while (continueToNextPage) {
+      console.log(`\n${'═'.repeat(50)}`);
+      console.log(`  PAGE ${pageNumber}: Form Filling`);
+      console.log(`${'═'.repeat(50)}`);
+      
+      const page = stagehand.context.pages()[0];
+      const urlBeforePhase2 = page.url();
+      
 
-    // Observe form fields
-    const formActions = await observeFormFields(stagehand);
-    if (formActions.length === 0) {
-      throw new Error('No form fields found');
+      console.log('═══════════════════════════════════════');
+      console.log('  PHASE 1: Traditional Stagehand');
+      console.log('═══════════════════════════════════════');
+
+      // Observe form fields
+      const formActions = await observeFormFields(stagehand);
+      if (formActions.length === 0) {
+        throw new Error('No form fields found');
+      }
+
+      // Get intelligent answers from ChatGPT
+      const answersResult = await getIntelligentAnswers(formActions, userProfile, jobDescription);
+      const answers = answersResult.answers;
+      chatGPTTokens = answersResult.tokens;
+
+      // Estimate Phase 1 tokens
+      const estimatedObserveTokens = 2000;
+      const estimatedActTokens = formActions.length * 500;
+      phase1Tokens.input = estimatedObserveTokens + estimatedActTokens + chatGPTTokens;
+      phase1Tokens.output = 500;
+      phase1Cost = 0.08;
+
+      // Fill form
+      const fillResults = await fillFormFields(stagehand, formActions, answers);
+      
+      // Track fields from this page
+      allFilledFields.push({
+        page: pageNumber,
+        filledCount: fillResults.filledCount,
+        skippedCount: fillResults.skippedCount,
+        errorCount: fillResults.errorCount
+      });
+      console.log(`\n💰 Phase 1 estimated cost: $${phase1Cost.toFixed(2)}`);
+
+      console.log('\n═══════════════════════════════════════');
+      console.log('  PHASE 2: Agent Review & Completion');
+      console.log('═══════════════════════════════════════');
+
+      const agentResult = await agentReviewAndComplete(stagehand, userProfile, jobDescription);
+
+      if (agentResult.usage) {
+        const inputTokens = agentResult.usage.input_tokens || 0;
+        const outputTokens = agentResult.usage.output_tokens || 0;
+        phase2Tokens.input = inputTokens;
+        phase2Tokens.output = outputTokens;
+        const inputCost = (inputTokens / 1000000) * 1.25;
+        const outputCost = (outputTokens / 1000000) * 10;
+        phase2Cost = inputCost + outputCost;
+      }
+      
+      // Check if we moved to a new page (Next clicked) or stayed (Submit clicked)
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for page transition
+      
+      const page2 = stagehand.context.pages()[0];
+      const urlAfterPhase2 = page2.url();
+      
+      // Check if URL changed or if we can find new form fields
+      const urlChanged = urlBeforePhase2 !== urlAfterPhase2;
+      
+      if (urlChanged) {
+        console.log(`\n✅ Moved to next page (URL changed)`);
+        console.log(`   Previous URL: ${urlBeforePhase2}`);
+        console.log(`   New URL: ${urlAfterPhase2}`);
+        console.log(`   Waiting 5 seconds for page to load...`);
+        await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
+        pageNumber++;
+        continueToNextPage = true; // Continue to next page
+      } else {
+        console.log(`\n✅ Submit clicked or no more pages (URL unchanged)`);
+        console.log(`   Final URL: ${urlAfterPhase2}`);
+        continueToNextPage = false; // Exit loop
+      }
     }
-
-    // Get intelligent answers from ChatGPT
-    const answersResult = await getIntelligentAnswers(formActions, userProfile, jobDescription);
-    const answers = answersResult.answers;
-    chatGPTTokens = answersResult.tokens;
-
-    // Estimate Phase 1 tokens
-    const estimatedObserveTokens = 2000;
-    const estimatedActTokens = formActions.length * 500;
-    phase1Tokens.input = estimatedObserveTokens + estimatedActTokens + chatGPTTokens;
-    phase1Tokens.output = 500;
-    phase1Cost = 0.08;
-
-    // Fill form
-    const fillResults = await fillFormFields(stagehand, formActions, answers);
-    console.log(`\n💰 Phase 1 estimated cost: $${phase1Cost.toFixed(2)}`);
-
-    console.log('\n═══════════════════════════════════════');
-    console.log('  PHASE 2: Agent Review & Completion');
-    console.log('═══════════════════════════════════════');
-
-    const agentResult = await agentReviewAndComplete(stagehand, userProfile, jobDescription);
-
-    if (agentResult.usage) {
-      const inputTokens = agentResult.usage.input_tokens || 0;
-      const outputTokens = agentResult.usage.output_tokens || 0;
-      phase2Tokens.input = inputTokens;
-      phase2Tokens.output = outputTokens;
-      const inputCost = (inputTokens / 1000000) * 1.25;
-      const outputCost = (outputTokens / 1000000) * 10;
-      phase2Cost = inputCost + outputCost;
-    }
+    
+    console.log(`\n📊 Completed ${pageNumber} page(s)`);
+    
 
     console.log('\n═══════════════════════════════════════');
     console.log('  PHASE 3: Verification Check');
@@ -794,7 +849,7 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
       sessionUrl,
       sessionVideoUrl,
       filledFields,
-      message: `Form filled using hybrid approach in ${executionTime}s. Form NOT submitted.`,
+      message: `Form filled across ${pageNumber} page(s) using hybrid approach in ${executionTime}s. Application submitted.`,
       jobDescription: jobDescription ? {
         title: jobDescription.title,
         company: jobDescription.company
@@ -810,11 +865,13 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
           outputTokens: phase1Tokens.output + phase2Tokens.output,
           chatGPTTokens: chatGPTTokens
         },
+        pages: pageNumber,
+        allPagesFields: allFilledFields,
+        totalFieldsFilled: allFilledFields.reduce((sum, p) => sum + p.filledCount, 0),
+        totalFieldsSkipped: allFilledFields.reduce((sum, p) => sum + p.skippedCount, 0),
+        totalErrors: allFilledFields.reduce((sum, p) => sum + p.errorCount, 0),
         phase1: {
           cost: phase1Cost.toFixed(4),
-          fieldsFilled: fillResults.filledCount,
-          fieldsSkipped: fillResults.skippedCount,
-          errors: fillResults.errorCount,
           tokens: {
             input: phase1Tokens.input,
             output: phase1Tokens.output,

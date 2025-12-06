@@ -79,7 +79,7 @@ async function fetchUserProfileData(userId: string) {
     } catch (e) {}
 
     try {
-      const { data } = await supabase.from('user_resumes').select('file_name, file_type, file_size, file_content').eq('user_id', userId).single();
+      const { data } = await supabase.from('resumes').select('file_name, file_type, file_size, file_content').eq('user_id', userId).single();
       if (data) userResume = data;
     } catch (e) {}
 
@@ -199,6 +199,7 @@ export async function POST(request: NextRequest) {
     const userProfile = await fetchUserProfileData(validatedData.userId);
     console.log('✅ Profile fetched:', userProfile.fullName);
     console.log('📄 Resume file:', userProfile.resumeFile || 'NOT PROVIDED');
+    console.log('📝 Cover letter:', coverLetter ? (coverLetter.fileName || 'string format') : 'NOT PROVIDED');
 
     console.log('📡 Calling Stagehand API...');
     const response = await fetch(`${STAGEHAND_API_URL}/apply`, {
