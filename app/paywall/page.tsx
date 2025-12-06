@@ -17,6 +17,7 @@ import {
 import { motion } from "framer-motion";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 const pricingPlans = [
   {
@@ -144,6 +145,38 @@ export default function PaywallPage() {
             Your time is valuable. Let AI handle the tedious form-filling while you focus on landing interviews.
           </p>
         </motion.div>
+
+        {/* Free Trial CTA */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.2 }}
+          className="text-center mb-12"
+        >
+          <p className="text-xl font-semibold text-gray-800 mb-4">
+            You get 5 free applications on us!
+          </p>
+          <Link href="/dashboard">
+            <Button
+              size="lg"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-6 text-lg font-semibold shadow-lg hover:shadow-xl transition-all"
+            >
+              Try for Free
+            </Button>
+          </Link>
+        </motion.div>
+
+        {/* Divider */}
+        <div className="relative mb-12">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-gray-300"></div>
+          </div>
+          <div className="relative flex justify-center text-sm">
+            <span className="px-4 bg-white text-gray-500">
+              Or choose a plan for more applications
+            </span>
+          </div>
+        </div>
 
         {/* Pricing Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
