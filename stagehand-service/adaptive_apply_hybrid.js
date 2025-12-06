@@ -159,6 +159,8 @@ async function observeFormFields(stagehand) {
  */
 async function fillFormFields(stagehand, actions, answers) {
   console.log('\n✍️  Phase 1: Filling form fields...');
+  console.log("\n📋 Debug: Answers received from ChatGPT:");
+  console.log(JSON.stringify(answers, null, 2));
 
   let filledCount = 0;
   let skippedCount = 0;
@@ -168,6 +170,7 @@ async function fillFormFields(stagehand, actions, answers) {
     const description = action.description || '';
     const answer = answers[description];
 
+    console.log(`    🔍 Debug: answer="${answer}" for field="${description}"`);
     if (!answer || answer === 'SKIP') {
       console.log(`  ⏭️  Skipping: ${description}`);
       skippedCount++;
@@ -427,7 +430,7 @@ IMPORTANT:
 /**
  * Agent review with work experience included
  */
-async function agentReviewAndComplete(stagehand, userProfile) {
+async function agentReviewAndComplete(stagehand, userProfile, jobDescription) {
   console.log('\n🤖 Phase 2: Agent review and completion...');
 
   const agent = stagehand.agent({
@@ -506,7 +509,7 @@ YOUR TASK:
    - Connect your relevant experience to the job requirements
    - Show genuine interest based on the job context
 5. For yes/no or dropdown questions, choose the most appropriate answer based on the profile
-6. DO NOT SUBMIT the form
+6. SUBMIT the form
 7. Stop after filling all missing fields`;
 
   try {
@@ -601,7 +604,7 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
     console.log('  PHASE 2: Agent Review & Completion');
     console.log('═══════════════════════════════════════');
 
-    const agentResult = await agentReviewAndComplete(stagehand, userProfile);
+    const agentResult = await agentReviewAndComplete(stagehand, userProfile, jobDescription);
 
     if (agentResult.usage) {
       const inputTokens = agentResult.usage.input_tokens || 0;
