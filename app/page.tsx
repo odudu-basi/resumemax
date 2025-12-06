@@ -355,8 +355,7 @@ export default function Home() {
                 Why Choose ResumeMax?
               </h2>
               <p className="mt-4 text-lg text-gray-700 max-w-2xl mx-auto">
-                Our advanced AI technology provides comprehensive analysis to help you create 
-                a resume that stands out from the competition.
+                Save hours on every application with AI-powered tools that tailor your resume and help you apply to jobs in seconds.
               </p>
             </motion.div>
           </div>
