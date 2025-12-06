@@ -783,7 +783,6 @@ function HomeSection() {
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 max-w-md">
                   <p className="text-amber-800 text-xs font-semibold mb-1">Temporary Password:</p>
                   <p className="text-gray-900 font-mono text-sm">{gmailPassword}</p>
-                  <p className="text-amber-700 text-xs mt-1">Save this password! You'll need to change it on first login.</p>
                 </div>
               )}
             </div>
