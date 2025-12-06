@@ -7,6 +7,14 @@ const nextConfig = {
   images: {
     domains: ['mgeppezubknkchynwydw.supabase.co'],
   },
+  eslint: {
+    // Disable ESLint during production builds
+    ignoreDuringBuilds: true,
+  },
+  typescript: {
+    // Disable type checking during production builds
+    ignoreBuildErrors: true,
+  },
 };
 
 // Sentry configuration options

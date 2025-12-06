@@ -212,6 +212,8 @@ export async function POST(request: NextRequest) {
       },
       password: password,
       changePasswordAtNextLogin: false, // Use the initial password without requiring a change
+      isEnrolledIn2Sv: false, // Don't enroll in 2-Step Verification
+      isEnforcedIn2Sv: false, // Don't enforce 2-Step Verification
       orgUnitPath: orgPath,
     };
 
