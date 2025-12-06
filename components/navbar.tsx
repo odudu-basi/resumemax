@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { FileText, Zap, DollarSign, Info, User, LogOut } from "lucide-react";
+import { FileText, Zap, DollarSign, Info, User, LogOut, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/src/contexts/AuthContext";
 
@@ -74,6 +74,12 @@ export function Navbar() {
                       <Button variant="ghost" className="flex items-center gap-2">
                         <User className="h-4 w-4" />
                         <span className="hidden sm:inline">Dashboard</span>
+                      </Button>
+                    </Link>
+                    <Link href="/onboarding">
+                      <Button variant="ghost" className="flex items-center gap-2">
+                        <Sparkles className="h-4 w-4" />
+                        <span className="hidden sm:inline">Onboarding</span>
                       </Button>
                     </Link>
                     <Button

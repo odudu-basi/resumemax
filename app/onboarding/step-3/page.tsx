@@ -10,16 +10,21 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useOnboarding } from "@/src/contexts/OnboardingContext";
+import { Loader2 } from "lucide-react";
 
 export default function OnboardingStep3() {
   const router = useRouter();
   const { onboardingData, updateOnboardingData } = useOnboarding();
-  
+  const [isLoading, setIsLoading] = useState(false);
+
   const [formData, setFormData] = useState({
-    workAuthorization: '',
-    visaStatus: '',
-    sponsorshipRequired: false,
-    sponsorshipTimeline: ''
+    workAuthorized: '',
+    visaSponsorship: '',
+    veteran: '',
+    disability: '',
+    openToRelocation: '',
+    workArrangement: '',
+    travelWillingness: ''
   });
 
   // Load existing data from context on mount
@@ -43,16 +48,27 @@ export default function OnboardingStep3() {
     }
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
+    setIsLoading(true);
     // Save to context instead of database
     updateOnboardingData('workAuth', formData);
     console.log('Work auth saved to context:', formData);
+
+    // Simulate a brief delay for better UX
+    await new Promise(resolve => setTimeout(resolve, 500));
+
     // Navigate to step 4
     router.push('/onboarding/step-4');
   };
 
   const isFormValid = () => {
-    return formData.workAuthorization && formData.visaStatus;
+    return formData.workAuthorized &&
+           formData.visaSponsorship &&
+           formData.veteran &&
+           formData.disability &&
+           formData.openToRelocation &&
+           formData.workArrangement &&
+           formData.travelWillingness;
   };
 
   return (
@@ -72,15 +88,10 @@ export default function OnboardingStep3() {
         transition={{ duration: 0.5 }}
         className="sticky top-4 z-50 flex justify-center px-4 py-4"
       >
-        <div className="flex items-center justify-between w-full max-w-6xl px-8 py-4 bg-black/60 backdrop-blur-xl border border-white/30 rounded-full shadow-2xl">
+        <div className="flex items-center justify-center w-full max-w-6xl px-8 py-4 bg-black/60 backdrop-blur-xl border border-white/30 rounded-full shadow-2xl">
           <Link href="/" className="flex items-center gap-3">
             <Image src="/logo.png" alt="ResumeMax Logo" width={32} height={32} className="h-8 w-8" />
             <span className="text-lg font-bold text-white">ResumeMax</span>
-          </Link>
-          <Link href="/auth/login">
-            <Button variant="ghost" size="sm" className="text-white hover:bg-white/20">
-              Skip Onboarding
-            </Button>
           </Link>
         </div>
       </motion.nav>
@@ -238,7 +249,7 @@ export default function OnboardingStep3() {
                   <div className="flex gap-4 pt-6">
                     <Button
                       variant="outline"
-                      onClick={() => router.back()}
+                      onClick={() => router.push('/onboarding/step-2b')}
                       className="flex-1"
                     >
                       Back
@@ -246,9 +257,16 @@ export default function OnboardingStep3() {
                     <Button
                       onClick={handleContinue}
                       className="flex-1 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
-                      disabled={!isFormValid()}
+                      disabled={!isFormValid() || isLoading}
                     >
-                      Continue
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        'Continue'
+                      )}
                     </Button>
                   </div>
                 </CardContent>

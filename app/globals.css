@@ -1,6 +1,11 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Custom Font Classes */
+.font-pacifico {
+  font-family: var(--font-pacifico), cursive;
+}
+
 /* Mixpanel Session Replay Privacy Classes */
 .mp-mask {
   /* This class will mask text content in session replays */

@@ -46,7 +46,9 @@ import {
   Trash2,
   RefreshCw,
   Clock,
-  MessageCircle
+  MessageCircle,
+  TrendingUp,
+  Rocket
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/src/contexts/AuthContext";
@@ -58,6 +60,7 @@ import { JobCard } from "@/components/JobCard";
 import { createSupabaseClient } from "@/src/lib/supabase";
 import { useAutoApplySessions } from "@/src/hooks/useAutoApplySessions";
 import { useSubmittedApplications } from "@/src/hooks/useSubmittedApplications";
+import { useAppliedJobs } from "@/src/hooks/useAppliedJobs";
 import { ApplicationDetailModal } from "@/src/components/ApplicationDetailModal";
 
 const sidebarItems = [
@@ -66,6 +69,12 @@ const sidebarItems = [
     label: 'Home',
     icon: Home,
     description: 'Quick apply to jobs'
+  },
+  {
+    id: 'applied-jobs',
+    label: 'Applied Jobs',
+    icon: CheckCircle2,
+    description: 'View your submitted applications'
   },
   {
     id: 'profile',
@@ -97,6 +106,12 @@ const sidebarItems = [
     label: 'Pricing',
     icon: DollarSign,
     description: 'View and manage your subscription'
+  },
+  {
+    id: 'feedback',
+    label: 'Feedback',
+    icon: MessageCircle,
+    description: 'Send us your feedback'
   }
 ];
 
@@ -752,21 +767,23 @@ function HomeSection() {
           </CardContent>
         </Card>
       ) : (
-        <Card className="bg-gradient-to-br from-green-900/50 to-emerald-900/30 backdrop-blur-xl border-green-700/50">
+        <Card className="bg-white/60 backdrop-blur-xl border border-gray-200/50 shadow-lg">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <CheckCircle2 className="h-6 w-6 text-green-400" />
+                <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                </div>
                 <div>
-                  <p className="text-white font-semibold">Work Email Active</p>
-                  <p className="text-green-100 text-sm">{workEmail}</p>
+                  <p className="text-gray-900 font-semibold">Work Email Active</p>
+                  <p className="text-gray-600 text-sm">{workEmail}</p>
                 </div>
               </div>
               {gmailPassword && (
-                <div className="bg-yellow-900/50 border border-yellow-700 rounded-lg p-3 max-w-md">
-                  <p className="text-yellow-100 text-xs font-semibold mb-1">Temporary Password:</p>
-                  <p className="text-white font-mono text-sm">{gmailPassword}</p>
-                  <p className="text-yellow-200 text-xs mt-1">Save this password! You'll need to change it on first login.</p>
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 max-w-md">
+                  <p className="text-amber-800 text-xs font-semibold mb-1">Temporary Password:</p>
+                  <p className="text-gray-900 font-mono text-sm">{gmailPassword}</p>
+                  <p className="text-amber-700 text-xs mt-1">Save this password! You'll need to change it on first login.</p>
                 </div>
               )}
             </div>
@@ -775,10 +792,12 @@ function HomeSection() {
       )}
 
       {/* Input Section */}
-      <Card className="bg-gradient-to-br from-gray-900/50 to-gray-800/30 backdrop-blur-xl border-gray-700/50 shadow-2xl">
+      <Card className="bg-white/60 backdrop-blur-xl border border-gray-200/50 shadow-lg">
         <CardHeader>
-          <CardTitle className="text-2xl font-bold text-white flex items-center gap-2">
-            <Home className="h-6 w-6" />
+          <CardTitle className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+              <Home className="h-5 w-5 text-gray-800" />
+            </div>
             Quick Apply
           </CardTitle>
         </CardHeader>
@@ -795,13 +814,13 @@ function HomeSection() {
                     handleApply();
                   }
                 }}
-                className="h-12 text-lg bg-gray-800/50 border-gray-600 text-white placeholder:text-gray-400 focus:border-blue-500"
+                className="h-12 text-lg bg-gray-50 border-gray-300 text-gray-900 placeholder:text-gray-400 focus:border-gray-800 focus:ring-gray-800"
               />
             </div>
             <Button
               onClick={handleApply}
               disabled={!jobLink.trim()}
-              className="h-12 px-8 text-lg bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all"
+              className="h-12 px-8 text-lg bg-gradient-to-r from-gray-800 to-black hover:from-gray-900 hover:to-black text-white font-semibold shadow-lg hover:shadow-xl transition-all"
             >
               <Send className="h-5 w-5 mr-2" />
               Apply
@@ -2148,6 +2167,164 @@ function ReviewApplicationsSection() {
   );
 }
 
+// Applied Jobs Section Component
+function AppliedJobsSection() {
+  const { user } = useAuth();
+  const { appliedJobs, loading, error } = useAppliedJobs(user?.id || null);
+  const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
+  const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
+
+  const openVideoModal = (videoUrl: string) => {
+    setSelectedVideo(videoUrl);
+    setIsVideoModalOpen(true);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center p-8">
+        <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+        <p className="text-red-600">Error loading applied jobs: {error}</p>
+      </div>
+    );
+  }
+
+  if (appliedJobs.length === 0) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh]">
+        <div className="text-center max-w-md">
+          <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <CheckCircle2 className="h-10 w-10 text-gray-400" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            No Applied Jobs Yet
+          </h2>
+          <p className="text-gray-600 mb-6">
+            Jobs you apply to will appear here for tracking.
+          </p>
+          <p className="text-sm text-gray-500">
+            Head to the Home tab to start applying!
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">Applied Jobs</h2>
+            <p className="text-gray-600 mt-1">
+              {appliedJobs.length} application{appliedJobs.length !== 1 ? 's' : ''} submitted
+            </p>
+          </div>
+          <Badge variant="default" className="bg-blue-600">
+            <CheckCircle2 className="h-4 w-4 mr-1" />
+            Application History
+          </Badge>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {appliedJobs.map((job) => (
+            <Card key={job.id} className="hover:shadow-lg transition-shadow">
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <CardTitle className="text-lg mb-1">{job.job_title}</CardTitle>
+                    <CardDescription className="flex items-center gap-2">
+                      <Building2 className="h-4 w-4" />
+                      {job.company_name}
+                    </CardDescription>
+                    {job.location && (
+                      <CardDescription className="flex items-center gap-2 mt-1">
+                        <MapPin className="h-4 w-4" />
+                        {job.location}
+                      </CardDescription>
+                    )}
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {/* Application Date */}
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <Clock className="h-4 w-4" />
+                    Applied {new Date(job.applied_at).toLocaleDateString()}
+                  </div>
+
+                  {/* Watch Live Button */}
+                  {job.session_video_url && (
+                    <Button
+                      onClick={() => openVideoModal(job.session_video_url!)}
+                      className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+                    >
+                      <Rocket className="h-4 w-4 mr-2" />
+                      Watch Live
+                    </Button>
+                  )}
+
+                  {/* Session Details */}
+                  {job.session_url && (
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => window.open(job.session_url, '_blank')}
+                    >
+                      View Session Details
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+
+      {/* Video Modal */}
+      {isVideoModalOpen && selectedVideo && (
+        <div
+          className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4"
+          onClick={() => setIsVideoModalOpen(false)}
+        >
+          <div
+            className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Live Video</h3>
+              <button
+                onClick={() => setIsVideoModalOpen(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            <div className="p-4">
+              <video
+                src={selectedVideo}
+                controls
+                autoPlay
+                className="w-full rounded-lg"
+              >
+                Your browser does not support the video tag.
+              </video>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // Submitted Applications Section Component
 function SubmittedApplicationsSection() {
   const { user } = useAuth();
@@ -2306,109 +2483,67 @@ function SubmittedApplicationsSection() {
 
 // Pricing Section Component
 function PricingSection() {
-  const [activeTab, setActiveTab] = useState<'weekly' | 'monthly'>('weekly');
   const [loading, setLoading] = useState<string | null>(null);
   const { user } = useAuth();
   const router = useRouter();
 
-  const pricingPlans = {
-    weekly: [
-      {
-        id: 'basic-weekly',
-        name: 'Basic',
-        price: 6,
-        period: 'week',
-        jobs: 10,
-        priceId: 'price_1SOBvoGfV3OgrONkrH31ZPzs',
-        icon: Zap,
-        popular: false,
-        features: [
-          '10 auto-apply uses per week',
-          'AI-powered form filling',
-          'Resume optimization',
-          'Basic support',
-          'Application tracking'
-        ]
-      },
-      {
-        id: 'student-weekly',
-        name: 'Student',
-        price: 10,
-        period: 'week',
-        jobs: 20,
-        priceId: 'price_1SOBxFGfV3OgrONkjWcGYa7k',
-        icon: Star,
-        popular: true,
-        features: [
-          '20 auto-apply uses per week',
-          'AI-powered form filling',
-          'Resume optimization',
-          'Priority support',
-          'Application tracking',
-          'Interview preparation tips'
-        ]
-      }
-    ],
-    monthly: [
-      {
-        id: 'basic-monthly',
-        name: 'Basic',
-        price: 20,
-        period: 'month',
-        jobs: 30,
-        priceId: 'price_1SOBwYGfV3OgrONkSrpIhdBH',
-        icon: Zap,
-        popular: false,
-        features: [
-          '30 auto-apply uses per month',
-          'AI-powered form filling',
-          'Resume optimization',
-          'Basic support',
-          'Application tracking'
-        ]
-      },
-      {
-        id: 'student-monthly',
-        name: 'Student',
-        price: 35,
-        period: 'month',
-        jobs: 80,
-        priceId: 'price_1SOBxuGfV3OgrONkamx6GPzC',
-        icon: Star,
-        popular: true,
-        features: [
-          '80 auto-apply uses per month',
-          'AI-powered form filling',
-          'Resume optimization',
-          'Priority support',
-          'Application tracking',
-          'Interview preparation tips',
-          'Career coaching resources'
-        ]
-      },
-      {
-        id: 'desperate-monthly',
-        name: 'Desperate',
-        price: 100,
-        period: 'month',
-        jobs: 200,
-        priceId: 'price_1SOByyGfV3OgrONk3Yvj3Sdh',
-        icon: Crown,
-        popular: false,
-        features: [
-          '200 auto-apply uses per month',
-          'AI-powered form filling',
-          'Resume optimization',
-          'Premium support',
-          'Application tracking',
-          'Interview preparation tips',
-          'Career coaching resources',
-          'Personal job search consultant',
-          'Custom application strategies'
-        ]
-      }
-    ]
-  };
+  const pricingPlans = [
+    {
+      id: 'basic',
+      name: 'Basic',
+      price: 10,
+      period: 'week',
+      jobs: 20,
+      priceId: 'price_1SOBxFGfV3OgrONkjWcGYa7k',
+      icon: TrendingUp,
+      popular: false,
+      features: [
+        '20 auto-apply uses per week',
+        'AI-powered form filling',
+        'Resume optimization',
+        'Priority support',
+        'Application tracking'
+      ]
+    },
+    {
+      id: 'pro',
+      name: 'Pro',
+      price: 20,
+      period: 'month',
+      jobs: 30,
+      priceId: 'price_1SOBwYGfV3OgrONkSrpIhdBH',
+      icon: Rocket,
+      popular: true,
+      features: [
+        '30 auto-apply uses per month',
+        'AI-powered form filling',
+        'Resume optimization',
+        'Priority support',
+        'Application tracking',
+        'Interview preparation tips'
+      ]
+    },
+    {
+      id: 'premium',
+      name: 'Premium',
+      price: 35,
+      period: 'month',
+      jobs: 80,
+      priceId: 'price_1SOBxuGfV3OgrONkamx6GPzC',
+      icon: Crown,
+      popular: false,
+      features: [
+        '80 auto-apply uses per month',
+        'AI-powered form filling',
+        'Resume optimization',
+        'Priority support',
+        'Application tracking',
+        'Interview preparation tips',
+        'Career coaching resources'
+      ]
+    }
+  ];
+
 
   const handleSubscribe = async (priceId: string, planName: string) => {
     if (!user) {
@@ -2456,48 +2591,21 @@ function PricingSection() {
           Subscription Plans
         </Badge>
         <h2 className="text-3xl font-bold text-gray-900 mb-2">
-          Choose Your Plan
+          Stop the Repetitive Work. Focus on Landing Interviews.
         </h2>
         <p className="text-gray-600">
-          Each plan gives you a certain number of auto-apply uses per period.
+          Let AI handle the tedious applications while you prepare for interviews.
         </p>
-      </div>
-
-      {/* Tab Navigation */}
-      <div className="flex justify-center">
-        <div className="bg-gray-100 p-1 rounded-lg">
-          <button
-            onClick={() => setActiveTab('weekly')}
-            className={`px-6 py-2 rounded-md font-medium transition-all ${
-              activeTab === 'weekly'
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Weekly Plans
-          </button>
-          <button
-            onClick={() => setActiveTab('monthly')}
-            className={`px-6 py-2 rounded-md font-medium transition-all ${
-              activeTab === 'monthly'
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Monthly Plans
-          </button>
-        </div>
       </div>
 
       {/* Pricing Cards */}
       <motion.div
-        key={activeTab}
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className="grid gap-6 md:grid-cols-2 lg:grid-cols-3"
+        className="grid gap-6 md:grid-cols-3"
       >
-        {pricingPlans[activeTab].map((plan) => {
+        {pricingPlans.map((plan) => {
           const Icon = plan.icon;
           const isLoading = loading === plan.priceId;
           
@@ -2506,15 +2614,13 @@ function PricingSection() {
               key={plan.id}
               className={`relative hover:shadow-xl transition-all duration-300 ${
                 plan.popular
-                  ? 'ring-2 ring-blue-500 shadow-lg scale-105'
-                  : plan.name === 'Desperate'
-                  ? 'ring-2 ring-red-500 bg-red-50/30 hover:shadow-lg'
+                  ? 'ring-2 ring-gray-800 shadow-lg'
                   : 'hover:shadow-lg'
               }`}
             >
               {plan.popular && (
                 <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                  <Badge className="bg-blue-500 text-white px-4 py-1">
+                  <Badge className="bg-gradient-to-r from-gray-800 to-black text-white px-4 py-1">
                     Most Popular
                   </Badge>
                 </div>
@@ -2524,9 +2630,7 @@ function PricingSection() {
                 <div className="flex justify-center mb-4">
                   <div className={`p-3 rounded-full ${
                     plan.popular 
-                      ? 'bg-blue-100 text-blue-600' 
-                      : plan.name === 'Desperate'
-                      ? 'bg-red-100 text-red-600'
+                      ? 'bg-gray-100 text-gray-800' 
                       : 'bg-gray-100 text-gray-600'
                   }`}>
                     <Icon className="h-6 w-6" />
@@ -2564,10 +2668,8 @@ function PricingSection() {
                   disabled={isLoading}
                   className={`w-full ${
                     plan.popular
-                      ? 'bg-blue-600 hover:bg-blue-700'
-                      : plan.name === 'Desperate'
-                      ? 'bg-red-600 hover:bg-red-700'
-                      : 'bg-gray-900 hover:bg-gray-800'
+                      ? 'bg-gradient-to-r from-gray-800 to-black hover:from-gray-900 hover:to-black'
+                      : 'bg-gray-800 hover:bg-gray-900'
                   }`}
                   size="lg"
                 >
@@ -2621,14 +2723,115 @@ function PricingSection() {
   );
 }
 
+// Feedback Section Component
+function FeedbackSection() {
+  const { user } = useAuth();
+  const [feedback, setFeedback] = useState('');
+  const [sending, setSending] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
+  const handleSubmit = async () => {
+    if (!feedback.trim()) {
+      setMessage({ type: 'error', text: 'Please enter your feedback before sending.' });
+      return;
+    }
+
+    setSending(true);
+    setMessage(null);
+
+    try {
+      const response = await fetch('/api/send-feedback', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          feedback,
+          userEmail: user?.email || 'anonymous',
+          userId: user?.id || 'anonymous',
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to send feedback');
+      }
+
+      setMessage({ type: 'success', text: 'Thank you for your feedback! We have received it and will review it soon.' });
+      setFeedback('');
+    } catch (error: any) {
+      console.error('Error sending feedback:', error);
+      setMessage({ type: 'error', text: 'Failed to send feedback. Please try again.' });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <MessageCircle className="h-5 w-5" />
+            Send Us Feedback
+          </CardTitle>
+          <CardDescription>
+            We would love to hear your thoughts, suggestions, or report any issues you have encountered.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {message && (
+            <div className={message.type === 'success' ? 'p-4 rounded-lg bg-green-50 text-green-800 border border-green-200' : 'p-4 rounded-lg bg-red-50 text-red-800 border border-red-200'}>
+              <p className="text-sm">{message.text}</p>
+            </div>
+          )}
+          
+          <div className="space-y-2">
+            <Label htmlFor="feedback">Your Feedback</Label>
+            <Textarea
+              id="feedback"
+              placeholder="Tell us what you think, what features you would like to see, or any issues you have experienced..."
+              value={feedback}
+              onChange={(e) => setFeedback(e.target.value)}
+              rows={8}
+              className="resize-none"
+            />
+          </div>
+
+          <div className="flex justify-end">
+            <Button
+              onClick={handleSubmit}
+              disabled={sending || !feedback.trim()}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              {sending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <MessageCircle className="mr-2 h-4 w-4" />
+                  Send Feedback
+                </>
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 // Profile Editor Component (collapsible onboarding sections)
 function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
   const { user } = useAuth();
   const supabase = createSupabaseClient();
   const [loading, setLoading] = useState(true);
+  const [profileDataLoaded, setProfileDataLoaded] = useState(false);
   const [savingSection, setSavingSection] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error', message: string } | null>(null);
-  const [updatingJJ, setUpdatingJJ] = useState(false);
 
   // Collapsible states
   const [open, setOpen] = useState<Record<string, boolean>>({
@@ -2682,6 +2885,27 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
     field_of_study: "",
   });
 
+  // Education and Experience entries from database
+  const [educationEntries, setEducationEntries] = useState<Array<{
+    id: string;
+    school: string;
+    degree: string;
+    start_date: string;
+    end_date: string;
+    current: boolean;
+  }>>([]);
+
+  const [experienceEntries, setExperienceEntries] = useState<Array<{
+    id: string;
+    company: string;
+    position: string;
+    location: string;
+    start_date: string;
+    end_date: string;
+    current: boolean;
+    description: string;
+  }>>([]);
+
   // Step 6: Skills & Certifications + Languages
   const [skills, setSkills] = useState({
     technical_skills: [] as string[],
@@ -2722,52 +2946,34 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
     setTimeout(() => setSaveMessage(null), 3000); // Clear after 3 seconds
   };
 
-  // Update JJ (regenerate factual profile)
-  async function updateJJ() {
-    if (!user) return;
-    setUpdatingJJ(true);
-    
-    try {
-      const response = await fetch('/api/update-essay-from-resume', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          userId: user.id
-        }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        // Handle specific error for missing resume
-        if (result.error === 'No resume found for user') {
-          showMessage('error', 'Please upload your resume first before generating your factual profile. Go to the Resume tab to upload your resume.');
-        } else {
-          throw new Error(result.error || 'Failed to update profile');
-        }
-        return;
-      }
-
-      showMessage('success', 'Factual profile updated successfully with your latest information!');
-      // Reload data to show the updated essay
-      await loadData();
-    } catch (error: any) {
-      console.error('Error updating profile:', error);
-      showMessage('error', 'Failed to update profile. Please try again.');
-    } finally {
-      setUpdatingJJ(false);
-    }
-  }
-
-// Fetch all onboarding data
   async function loadData() {
     if (!user) return;
     setLoading(true);
     try {
       const { data, error } = await supabase.rpc('get_complete_user_profile', { target_user_id: user.id } as any);
       if (error) throw error;
+
+      // Load education entries from database
+      const { data: educationData, error: eduError } = await supabase
+        .from('education_entries')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('start_date', { ascending: false });
+
+      if (!eduError && educationData) {
+        setEducationEntries(educationData);
+      }
+
+      // Load experience entries from database
+      const { data: experienceData, error: expError } = await supabase
+        .from('experience_entries')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('start_date', { ascending: false });
+
+      if (!expError && experienceData) {
+        setExperienceEntries(experienceData);
+      }
 
       const bi = (data as any)?.basic_info || {};
       setBasicInfo({
@@ -2830,23 +3036,24 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
           .from('education_entries')
           .select('*')
           .eq('user_id', user.id)
-          .order('start_year', { ascending: false });
-        
+          .order('start_date', { ascending: false });
+
         if (!educationError && educationData && educationData.length > 0) {
           setEducationEntries(educationData.map((e: any) => ({
+            id: e.id,
             school: e.school || '',
-            startYear: e.start_year || '',
-            endYear: e.end_year || '',
-            major: e.major || '',
-            degree: e.degree || ''
+            degree: e.degree || '',
+            start_date: e.start_date || '',
+            end_date: e.end_date || '',
+            current: e.current || false
           })));
         } else {
           // If no data, set a default empty entry
-          setEducationEntries([{ school: '', startYear: '', endYear: '', major: '', degree: '' }]);
+          setEducationEntries([{ id: '', school: '', degree: '', start_date: '', end_date: '', current: false }]);
         }
       } catch (error) {
         console.error('Failed to load education entries:', error);
-        setEducationEntries([{ school: '', startYear: '', endYear: '', major: '', degree: '' }]);
+        setEducationEntries([{ id: '', school: '', degree: '', start_date: '', end_date: '', current: false }]);
       }
 
       // Load experience_entries from database
@@ -2859,21 +3066,22 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
         
         if (!experienceError && experienceData && experienceData.length > 0) {
           setExperienceEntries(experienceData.map((x: any) => ({
+            id: x.id,
             company: x.company || '',
-            role: x.role || '',
-            startDate: x.start_date || '',
-            endDate: x.end_date || '',
-            reason: x.reason_for_leaving || '',
-            current: x.is_current || false,
+            position: x.position || '',
+            location: x.location || '',
+            start_date: x.start_date || '',
+            end_date: x.end_date || '',
+            current: x.current || false,
             description: x.description || ''
           })));
         } else {
           // If no data, set a default empty entry
-          setExperienceEntries([{ company: '', role: '', startDate: '', endDate: '', reason: '', current: false, description: '' }]);
+          setExperienceEntries([{ id: '', company: '', position: '', location: '', start_date: '', end_date: '', current: false, description: '' }]);
         }
       } catch (error) {
         console.error('Failed to load experience entries:', error);
-        setExperienceEntries([{ company: '', role: '', startDate: '', endDate: '', reason: '', current: false, description: '' }]);
+        setExperienceEntries([{ id: '', company: '', position: '', location: '', start_date: '', end_date: '', current: false, description: '' }]);
       }
 
       // Load demographics data separately
@@ -3092,39 +3300,35 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
     }
   }
 
-  // Multi-entry Education & Experience
-  const [educationEntries, setEducationEntries] = useState<Array<{ school: string; startYear: string; endYear: string; major: string; degree: string }>>([
-    { school: '', startYear: '', endYear: '', major: '', degree: '' }
-  ]);
-  const [experienceEntries, setExperienceEntries] = useState<Array<{ company: string; role: string; startDate: string; endDate: string; reason: string; current: boolean; description: string }>>([
-    { company: '', role: '', startDate: '', endDate: '', reason: '', current: false, description: '' }
-  ]);
-
   async function saveEducation() {
     if (!user) return;
     setSavingSection('step5Edu');
     try {
-      // Best-effort: save detailed entries to a dedicated table if present
-      try {
-        // Clear existing and insert fresh set
-        await supabase.from('education_entries').delete().eq('user_id', user.id);
-        const rows = educationEntries
-          .filter(e => e.school || e.degree)
-          .map(e => ({ user_id: user.id, school: e.school || null, start_year: e.startYear || null, end_year: e.endYear || null, major: e.major || null, degree: e.degree || null }));
-        if (rows.length > 0) {
-          const { error: insertErr } = await supabase.from('education_entries').insert(rows as any);
-          if (insertErr) throw insertErr;
-        }
-      } catch (e) {
-        console.warn('Education entries table not available or insert failed, falling back to summary fields.');
+      // Save education entries to database
+      await supabase.from('education_entries').delete().eq('user_id', user.id);
+      const rows = educationEntries
+        .filter(e => e.school || e.degree)
+        .map(e => ({
+          user_id: user.id,
+          school: e.school || null,
+          degree: e.degree || null,
+          start_date: e.start_date || null,
+          end_date: e.end_date || null,
+          current: e.current || false
+        }));
+      if (rows.length > 0) {
+        const { error: insertErr } = await supabase.from('education_entries').insert(rows as any);
+        if (insertErr) throw insertErr;
       }
-      // Always persist summary to experience_education
+
+      // Also persist summary to experience_education
       const { error } = await supabase.from('experience_education').upsert({
         user_id: user.id,
         education_level: experienceEd.education_level || null,
         field_of_study: experienceEd.field_of_study || null,
       } as any);
       if (error) throw error;
+
       showMessage('success', 'Education saved successfully!');
     } catch (e) {
       console.error('Save education failed:', e);
@@ -3138,23 +3342,32 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
     if (!user) return;
     setSavingSection('step5Exp');
     try {
-      try {
-        await supabase.from('experience_entries').delete().eq('user_id', user.id);
-        const rows = experienceEntries
-          .filter(x => x.company || x.role)
-          .map(x => ({ user_id: user.id, company: x.company || null, role: x.role || null, start_date: x.startDate || null, end_date: x.current ? null : (x.endDate || null), is_current: x.current, reason_for_leaving: x.reason || null, description: x.description || null }));
-        if (rows.length > 0) {
-          const { error: insertErr } = await supabase.from('experience_entries').insert(rows as any);
-          if (insertErr) throw insertErr;
-        }
-      } catch (e) {
-        console.warn('Experience entries table not available or insert failed, falling back to summary fields.');
+      // Save experience entries to database
+      await supabase.from('experience_entries').delete().eq('user_id', user.id);
+      const rows = experienceEntries
+        .filter(x => x.company || x.position)
+        .map(x => ({
+          user_id: user.id,
+          company: x.company || null,
+          position: x.position || null,
+          location: x.location || null,
+          start_date: x.start_date || null,
+          end_date: x.end_date || null,
+          current: x.current || false,
+          description: x.description || null
+        }));
+      if (rows.length > 0) {
+        const { error: insertErr } = await supabase.from('experience_entries').insert(rows as any);
+        if (insertErr) throw insertErr;
       }
+
+      // Also persist summary to experience_education
       const { error } = await supabase.from('experience_education').upsert({
         user_id: user.id,
         employment_status: experienceEd.employment_status || null,
       } as any);
       if (error) throw error;
+
       showMessage('success', 'Experience saved successfully!');
     } catch (e) {
       console.error('Save experience failed:', e);
@@ -3561,40 +3774,35 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <h4 className="font-medium">Education entries</h4>
-                    <Button size="sm" variant="outline" onClick={() => setEducationEntries(arr => [...arr, { school: '', startYear: '', endYear: '', major: '', degree: '' }])}>Add Education</Button>
+                    <Button size="sm" variant="outline" onClick={() => setEducationEntries(arr => [...arr, { id: `temp-${Date.now()}`, school: '', degree: '', start_date: '', end_date: '', current: false }])}>Add Education</Button>
                   </div>
                   {educationEntries.map((ed, idx) => (
-                    <div key={idx} className="grid grid-cols-1 md:grid-cols-5 gap-3 p-3 border rounded-lg">
-                      <div className="space-y-1">
-                        <Label>School</Label>
-                        <Input value={ed.school} onChange={e => setEducationEntries(a => a.map((x,i)=> i===idx? { ...x, school: e.target.value }: x))} />
+                    <div key={ed.id || idx} className="space-y-3 p-3 border rounded-lg">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <Label>School/University</Label>
+                          <Input value={ed.school} onChange={e => setEducationEntries(a => a.map((x,i)=> i===idx? { ...x, school: e.target.value }: x))} placeholder="e.g., Stanford University" />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Degree</Label>
+                          <Input value={ed.degree} onChange={e => setEducationEntries(a => a.map((x,i)=> i===idx? { ...x, degree: e.target.value }: x))} placeholder="e.g., Bachelor of Science in Computer Science" />
+                        </div>
                       </div>
-                      <div className="space-y-1">
-                        <Label>Year started</Label>
-                        <Input value={ed.startYear} onChange={e => setEducationEntries(a => a.map((x,i)=> i===idx? { ...x, startYear: e.target.value }: x))} placeholder="YYYY" />
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <Label>Start Date (MM/DD/YYYY)</Label>
+                          <Input value={ed.start_date} onChange={e => setEducationEntries(a => a.map((x,i)=> i===idx? { ...x, start_date: e.target.value }: x))} placeholder="09/01/2018" />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>End Date (MM/DD/YYYY)</Label>
+                          <Input value={ed.end_date} onChange={e => setEducationEntries(a => a.map((x,i)=> i===idx? { ...x, end_date: e.target.value }: x))} placeholder="05/01/2022" disabled={ed.current} />
+                        </div>
                       </div>
-                      <div className="space-y-1">
-                        <Label>Year graduated</Label>
-                        <Input value={ed.endYear} onChange={e => setEducationEntries(a => a.map((x,i)=> i===idx? { ...x, endYear: e.target.value }: x))} placeholder="YYYY" />
+                      <div className="flex items-center gap-2">
+                        <input type="checkbox" id={`edu-current-${idx}`} checked={ed.current} onChange={e => setEducationEntries(a => a.map((x,i)=> i===idx? { ...x, current: e.target.checked, end_date: e.target.checked ? '' : x.end_date }: x))} />
+                        <Label htmlFor={`edu-current-${idx}`} className="cursor-pointer">Currently studying here</Label>
                       </div>
-                      <div className="space-y-1">
-                        <Label>Major studied</Label>
-                        <Input value={ed.major} onChange={e => setEducationEntries(a => a.map((x,i)=> i===idx? { ...x, major: e.target.value }: x))} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label>Degree</Label>
-                        <Select value={ed.degree} onValueChange={v => setEducationEntries(a => a.map((x,i)=> i===idx? { ...x, degree: v }: x))}>
-                          <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="associate">Associate</SelectItem>
-                            <SelectItem value="bachelor">Bachelor's</SelectItem>
-                            <SelectItem value="master">Master's</SelectItem>
-                            <SelectItem value="phd">PhD</SelectItem>
-                            <SelectItem value="diploma">Diploma/Certificate</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="md:col-span-5 flex justify-end">
+                      <div className="flex justify-end">
                         <Button variant="ghost" size="sm" onClick={() => setEducationEntries(a => a.filter((_,i)=> i!==idx))}>Remove</Button>
                       </div>
                     </div>
@@ -3629,41 +3837,38 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <h4 className="font-medium">Experience entries</h4>
-                    <Button size="sm" variant="outline" onClick={() => setExperienceEntries(arr => [...arr, { company: '', role: '', startDate: '', endDate: '', reason: '', current: false, description: '' }])}>Add Experience</Button>
+                    <Button size="sm" variant="outline" onClick={() => setExperienceEntries(arr => [...arr, { id: `temp-${Date.now()}`, company: '', position: '', location: '', start_date: '', end_date: '', current: false, description: '' }])}>Add Experience</Button>
                   </div>
                   {experienceEntries.map((ex, idx) => (
-                    <div key={idx} className="space-y-3 p-3 border rounded-lg">
+                    <div key={ex.id || idx} className="space-y-3 p-3 border rounded-lg">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div className="space-y-1">
                           <Label>Company</Label>
-                          <Input value={ex.company} onChange={e => setExperienceEntries(a => a.map((x,i)=> i===idx? { ...x, company: e.target.value }: x))} />
+                          <Input value={ex.company} onChange={e => setExperienceEntries(a => a.map((x,i)=> i===idx? { ...x, company: e.target.value }: x))} placeholder="e.g., Google" />
                         </div>
                         <div className="space-y-1">
-                          <Label>Role</Label>
-                          <Input value={ex.role} onChange={e => setExperienceEntries(a => a.map((x,i)=> i===idx? { ...x, role: e.target.value }: x))} />
+                          <Label>Position/Job Title</Label>
+                          <Input value={ex.position} onChange={e => setExperienceEntries(a => a.map((x,i)=> i===idx? { ...x, position: e.target.value }: x))} placeholder="e.g., Software Engineer" />
                         </div>
                         <div className="space-y-1">
-                          <Label>Start date</Label>
-                          <Input type="date" value={ex.startDate} onChange={e => setExperienceEntries(a => a.map((x,i)=> i===idx? { ...x, startDate: e.target.value }: x))} />
+                          <Label>Location</Label>
+                          <Input value={ex.location} onChange={e => setExperienceEntries(a => a.map((x,i)=> i===idx? { ...x, location: e.target.value }: x))} placeholder="e.g., San Francisco, CA" />
                         </div>
                         <div className="space-y-1">
-                          <Label>End date</Label>
-                          <Input type="date" value={ex.endDate} onChange={e => setExperienceEntries(a => a.map((x,i)=> i===idx? { ...x, endDate: e.target.value }: x))} disabled={ex.current} />
+                          <Label>Start Date (MM/DD/YYYY)</Label>
+                          <Input value={ex.start_date} onChange={e => setExperienceEntries(a => a.map((x,i)=> i===idx? { ...x, start_date: e.target.value }: x))} placeholder="01/01/2020" />
                         </div>
                         <div className="space-y-1">
-                          <Label>Still working here?</Label>
-                          <div className="flex items-center gap-2">
-                            <Switch checked={ex.current} onCheckedChange={v => setExperienceEntries(a => a.map((x,i)=> i===idx? { ...x, current: v }: x))} />
-                            <span className="text-sm text-gray-600">Mark current role</span>
-                          </div>
+                          <Label>End Date (MM/DD/YYYY)</Label>
+                          <Input value={ex.end_date} onChange={e => setExperienceEntries(a => a.map((x,i)=> i===idx? { ...x, end_date: e.target.value }: x))} placeholder="12/01/2023" disabled={ex.current} />
                         </div>
-                        <div className="space-y-1">
-                          <Label>Reason for leaving</Label>
-                          <Input value={ex.reason} onChange={e => setExperienceEntries(a => a.map((x,i)=> i===idx? { ...x, reason: e.target.value }: x))} disabled={ex.current} />
+                        <div className="space-y-1 flex items-center gap-2 pt-6">
+                          <input type="checkbox" id={`exp-current-${idx}`} checked={ex.current} onChange={e => setExperienceEntries(a => a.map((x,i)=> i===idx? { ...x, current: e.target.checked, end_date: e.target.checked ? '' : x.end_date }: x))} />
+                          <Label htmlFor={`exp-current-${idx}`} className="cursor-pointer">Currently working here</Label>
                         </div>
                         <div className="md:col-span-2 space-y-1">
-                          <Label>Description of responsibilities/impact</Label>
-                          <Textarea value={ex.description} onChange={e => setExperienceEntries(a => a.map((x,i)=> i===idx? { ...x, description: e.target.value }: x))} rows={4} />
+                          <Label>Description of responsibilities/achievements</Label>
+                          <Textarea value={ex.description} onChange={e => setExperienceEntries(a => a.map((x,i)=> i===idx? { ...x, description: e.target.value }: x))} rows={4} placeholder="• Led team of 5 engineers&#10;• Increased performance by 40%&#10;• Launched 3 major features" />
                         </div>
                       </div>
                       <div className="flex justify-end">
@@ -3973,119 +4178,18 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
         </AnimatePresence>
       </Card>
 
-      {/* Update JJ Button */}
-      <Card className="bg-gradient-to-r from-purple-50 to-blue-50 border-purple-200">
-        <CardContent className="p-6">
-          <div className="space-y-4">
-            <div className="text-center space-y-2">
-              <h3 className="text-lg font-semibold text-gray-900">JJ AI Profile</h3>
-              <p className="text-sm text-gray-600">
-                Your comprehensive factual profile showing work experience, education, skills, projects, and preferences from your resume and profile data.
-              </p>
-            </div>
-            
-            {/* Display Structured Profile */}
-            {basicInfo.gpt_essay ? (
-              <div className="bg-white rounded-lg p-6 border border-gray-200">
-                <h4 className="font-medium text-gray-900 mb-4">Your Professional Profile:</h4>
-                <div className="text-sm text-gray-700 leading-relaxed">
-                  {/* Render structured profile with proper formatting */}
-                  {basicInfo.gpt_essay.split('\n').map((line, index) => {
-                    // Handle section headers (## SECTION)
-                    if (line.startsWith('## ')) {
-                      return (
-                        <h5 key={index} className="font-semibold text-gray-900 mt-6 mb-3 text-base border-b border-gray-200 pb-1">
-                          {line.replace('## ', '')}
-                        </h5>
-                      );
-                    }
-                    // Handle bullet points
-                    if (line.startsWith('- ')) {
-                      return (
-                        <div key={index} className="ml-4 mb-2 flex items-start">
-                          <span className="text-blue-600 mr-2 mt-1">•</span>
-                          <span>{line.replace('- ', '')}</span>
-                        </div>
-                      );
-                    }
-                    // Handle regular paragraphs
-                    if (line.trim()) {
-                      return (
-                        <p key={index} className="mb-3">
-                          {line}
-                        </p>
-                      );
-                    }
-                    // Handle empty lines
-                    return <div key={index} className="mb-2"></div>;
-                  })}
-                </div>
-              </div>
-            ) : (
-              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 text-center">
-                {!resumeFileName && !hasResumeInDB ? (
-                  <div className="space-y-3">
-                    <AlertCircle className="h-8 w-8 text-amber-500 mx-auto" />
-                    <div>
-                      <p className="text-sm font-medium text-gray-900 mb-1">Resume Required</p>
-                      <p className="text-sm text-gray-600">
-                        Please upload your resume first to generate your comprehensive factual profile. 
-                        Go to the <strong>Resume</strong> tab to upload your resume file.
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500">
-                    No professional profile generated yet. Click the button below to create your comprehensive factual profile.
-                  </p>
-                )}
-              </div>
-            )}
-            
-            <div className="text-center">
-              <Button 
-                onClick={updateJJ} 
-                disabled={updatingJJ || (!resumeFileName && !hasResumeInDB)}
-                className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white px-8 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {updatingJJ ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Updating Profile...
-                  </>
-                ) : !resumeFileName && !hasResumeInDB ? (
-                  <>
-                    <Upload className="mr-2 h-4 w-4" />
-                    Upload Resume First
-                  </>
-                ) : (
-                  <>
-                    <Zap className="mr-2 h-4 w-4" />
-                    {basicInfo.gpt_essay ? 'Update Profile' : 'Generate Factual Profile'}
-                  </>
-                )}
-              </Button>
-              {!resumeFileName && !hasResumeInDB && (
-                <p className="text-xs text-gray-500 mt-2">
-                  A resume is required to generate your factual profile
-                </p>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
 
+// Main Dashboard Component
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState('home');
-  const [profileDataLoaded, setProfileDataLoaded] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { user, signOut, loading } = useAuth();
+  const { user, loading, signOut } = useAuth();
   const router = useRouter();
+  const [activeTab, setActiveTab] = useState('home');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Persistent job search state (survives tab switches)
+  // Job search states
   const [isSearching, setIsSearching] = useState(false);
   const [jobResults, setJobResults] = useState<EnhancedJobListing[]>([]);
   const [autoApplyJobLoading, setAutoApplyJobLoading] = useState<Record<string, boolean>>({});
@@ -4093,10 +4197,11 @@ export default function Dashboard() {
   const [notifications, setNotifications] = useState<Record<string, any>>({});
   const [cloudNotifications, setCloudNotifications] = useState<Record<string, any>>({});
   const [searchProgress, setSearchProgress] = useState<string>('');
-  // Credit tracking state
-  const [creditsRemaining, setCreditsRemaining] = useState<number>(0);
-  const [creditsLimit, setCreditsLimit] = useState<number>(5);
-  const [planName, setPlanName] = useState<string>('Free');
+
+  // Credits state
+  const [creditsRemaining, setCreditsRemaining] = useState(0);
+  const [creditsLimit, setCreditsLimit] = useState(5);
+  const [planName, setPlanName] = useState('Free');
   const [loadingCredits, setLoadingCredits] = useState(true);
 
   // Resume state
@@ -4107,6 +4212,9 @@ export default function Dashboard() {
   const [resumeSaving, setResumeSaving] = useState(false);
   const [resumeUploading, setResumeUploading] = useState(false);
   const [resumeMessage, setResumeMessage] = useState('');
+
+  // Global data prefetch state
+  const [dataInitialized, setDataInitialized] = useState(false);
 
   // Resume functions
   const loadResume = useCallback(async () => {
@@ -4321,61 +4429,81 @@ export default function Dashboard() {
     }
   };
 
-  // Load resume when component mounts or user changes
+  // Master data prefetch - Load ALL data on mount in parallel
   useEffect(() => {
-    if (user?.id) {
-      loadResume(); // Load resume data regardless of active tab
-    }
-  }, [user?.id, loadResume]);
+    if (!user?.id || dataInitialized) return;
 
-  // Fetch user credits
-  useEffect(() => {
-    const fetchCredits = async () => {
-      if (!user?.id) {
-        setLoadingCredits(false);
-        return;
+    const prefetchAllData = async () => {
+      console.log('🚀 Prefetching all dashboard data...');
+
+      try {
+        // Run all data fetches in parallel for maximum performance
+        await Promise.allSettled([
+          // 1. Load resume
+          loadResume(),
+
+          // 2. Load credits
+          (async () => {
+            try {
+              const supabase = createSupabaseClient();
+              const { data, error } = await supabase.rpc('check_auto_apply_credits', {
+                p_user_id: user.id
+              });
+
+              if (error || !data || data.length === 0) {
+                setCreditsRemaining(5);
+                setCreditsLimit(5);
+                setPlanName('Free');
+              } else {
+                const creditInfo = data[0];
+                setCreditsRemaining(creditInfo.credits_remaining || 0);
+                setCreditsLimit(creditInfo.credits_limit || 5);
+                setPlanName(creditInfo.plan_name || 'Free');
+              }
+            } catch (error) {
+              setCreditsRemaining(5);
+              setCreditsLimit(5);
+              setPlanName('Free');
+            } finally {
+              setLoadingCredits(false);
+            }
+          })()
+        ]);
+
+        console.log('✅ All dashboard data prefetched successfully');
+        setDataInitialized(true);
+      } catch (error) {
+        console.error('❌ Error prefetching dashboard data:', error);
+        setDataInitialized(true); // Set anyway to prevent retry loops
       }
+    };
 
+    prefetchAllData();
+  }, [user?.id, dataInitialized, loadResume]);
+
+  // Refresh credits periodically (every 30 seconds)
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const refreshCredits = async () => {
       try {
         const supabase = createSupabaseClient();
         const { data, error } = await supabase.rpc('check_auto_apply_credits', {
           p_user_id: user.id
         });
 
-        if (error) {
-          // RPC error - set default free tier values
-          setCreditsRemaining(5);
-          setCreditsLimit(5);
-          setPlanName('Free');
-          setLoadingCredits(false);
-          return;
-        }
-
-        if (data && data.length > 0) {
+        if (!error && data && data.length > 0) {
           const creditInfo = data[0];
           setCreditsRemaining(creditInfo.credits_remaining || 0);
           setCreditsLimit(creditInfo.credits_limit || 5);
           setPlanName(creditInfo.plan_name || 'Free');
-        } else {
-          // No data returned, set defaults
-          setCreditsRemaining(5);
-          setCreditsLimit(5);
-          setPlanName('Free');
         }
       } catch (error) {
-        // Exception - set default free tier values
-        setCreditsRemaining(5);
-        setCreditsLimit(5);
-        setPlanName('Free');
-      } finally {
-        setLoadingCredits(false);
+        console.error('Error refreshing credits:', error);
       }
     };
 
-    fetchCredits();
-    
-    // Refresh credits every 30 seconds
-    const interval = setInterval(fetchCredits, 30000);
+    const interval = setInterval(refreshCredits, 30000);
     return () => clearInterval(interval);
   }, [user?.id]);
 
@@ -4569,26 +4697,6 @@ export default function Dashboard() {
         </CardContent>
       </Card>
       
-      {/* AI Resume Analysis */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">AI Resume Analysis</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <p className="text-sm text-gray-600">
-              Get personalized feedback and practice interview questions based on your resume with our AI assistant.
-            </p>
-            <Button
-              onClick={() => setActiveTab('context')}
-              className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
-            >
-              <MessageCircle className="h-4 w-4 mr-2" />
-              Analyze Resume & Start Conversation
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 
@@ -4599,6 +4707,11 @@ export default function Dashboard() {
     // Render Home section
     if (activeTab === 'home') {
       return <HomeSection />;
+    }
+
+    // Render Applied Jobs section
+    if (activeTab === 'applied-jobs') {
+      return <AppliedJobsSection />;
     }
 
     if (activeTab === 'browse-jobs') {
@@ -4639,6 +4752,10 @@ export default function Dashboard() {
     // Render Profile section
     if (activeTab === 'profile') {
       return <ProfileEditor resumeFileName={resumeFileName} />;
+    }
+    // Render Feedback section
+    if (activeTab === 'feedback') {
+      return <FeedbackSection />;
     }
     
     return (
@@ -5013,6 +5130,6 @@ export default function Dashboard() {
 
       </div>
 
-          </div>
+    </div>
   );
 }

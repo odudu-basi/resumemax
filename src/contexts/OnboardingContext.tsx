@@ -2,6 +2,49 @@
 
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 
+// Resume data types
+export interface PersonalInfo {
+  name: string;
+  email: string;
+  phone: string;
+  state: string;
+}
+
+export interface Experience {
+  id: string;
+  company: string;
+  position: string;
+  location: string;
+  startDate: string;
+  endDate: string;
+  current: boolean;
+  description: string;
+}
+
+export interface Education {
+  id: string;
+  school: string;
+  degree: string;
+  startDate: string;
+  endDate: string;
+  current: boolean;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export interface ResumeData {
+  personalInfo: PersonalInfo;
+  experiences: Experience[];
+  education: Education[];
+  projects: Project[];
+  summary: string;
+  skills: string[];
+}
+
 // Define the onboarding data structure
 export interface OnboardingData {
   // Step 2: Basic Information
@@ -14,6 +57,12 @@ export interface OnboardingData {
     linkedinUrl: string;
     portfolioUrl: string;
   };
+
+  // Step 2a: Resume Upload
+  resumeFile?: File | null;
+
+  // Step 2b: Resume Data (parsed)
+  resumeData?: ResumeData;
 
   // Step 3: Work Authorization
   workAuth?: {
@@ -87,11 +136,11 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
 
   const isComplete = !!(
     onboardingData.basicInfo &&
+    onboardingData.resumeData &&
     onboardingData.workAuth &&
     onboardingData.jobCriteria &&
     onboardingData.experience &&
-    onboardingData.skills &&
-    onboardingData.applicationPrefs
+    onboardingData.skills
   );
 
   return (
@@ -113,6 +162,36 @@ export const useOnboarding = () => {
   }
   return context;
 };
+
+// Helper function to convert date formats to MM/DD/YYYY
+function formatDate(dateStr: string): string {
+  if (!dateStr) return '';
+
+  // If already in MM/DD/YYYY format, return as is
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
+    return dateStr;
+  }
+
+  // If in MM/YYYY format, add /01 for first day of month
+  if (/^\d{2}\/\d{4}$/.test(dateStr)) {
+    return `${dateStr.substring(0, 2)}/01/${dateStr.substring(3)}`;
+  }
+
+  // If in other format, try to parse and convert
+  try {
+    const date = new Date(dateStr);
+    if (!isNaN(date.getTime())) {
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = '01'; // Always use 1st of the month
+      const year = date.getFullYear();
+      return `${month}/${day}/${year}`;
+    }
+  } catch (e) {
+    console.warn('Could not parse date:', dateStr);
+  }
+
+  return dateStr; // Return as-is if we can't parse it
+}
 
 // Helper function to save onboarding data to database after signup
 export const saveOnboardingDataToDatabase = async (userId: string, onboardingData: OnboardingData) => {
@@ -244,21 +323,109 @@ export const saveOnboardingDataToDatabase = async (userId: string, onboardingDat
       }
     }
 
-    // Save application preferences
-    if (onboardingData.applicationPrefs) {
-      const { error: appPrefsError } = await supabase
-        .from('application_preferences')
+    // Save resume data (education entries)
+    if (onboardingData.resumeData?.education && onboardingData.resumeData.education.length > 0) {
+      // Delete existing education entries first
+      await supabase
+        .from('education_entries')
+        .delete()
+        .eq('user_id', userId);
+
+      // Insert new education entries
+      const educationEntries = onboardingData.resumeData.education.map(edu => ({
+        user_id: userId,
+        school: edu.school,
+        degree: edu.degree, // Full degree text
+        start_date: formatDate(edu.startDate),
+        end_date: edu.current ? '' : formatDate(edu.endDate),
+        current: edu.current || false,
+      }));
+
+      const { error: eduError } = await supabase
+        .from('education_entries')
+        .insert(educationEntries);
+
+      if (eduError) {
+        console.error('Error saving education entries:', eduError);
+        // Don't throw, just log - this is not critical
+      }
+    }
+
+    // Save resume data (experience entries)
+    if (onboardingData.resumeData?.experiences && onboardingData.resumeData.experiences.length > 0) {
+      // Delete existing experience entries first
+      await supabase
+        .from('experience_entries')
+        .delete()
+        .eq('user_id', userId);
+
+      // Insert new experience entries
+      const experienceEntries = onboardingData.resumeData.experiences.map(exp => ({
+        user_id: userId,
+        company: exp.company,
+        position: exp.position, // Job title
+        location: exp.location || '', // Location
+        start_date: formatDate(exp.startDate),
+        end_date: exp.current ? '' : formatDate(exp.endDate),
+        current: exp.current || false,
+        description: exp.description,
+      }));
+
+      const { error: expError } = await supabase
+        .from('experience_entries')
+        .insert(experienceEntries);
+
+      if (expError) {
+        console.error('Error saving experience entries:', expError);
+        // Don't throw, just log - this is not critical
+      }
+    }
+
+    // Save resume data (summary, skills, projects) to user_resume_data table
+    if (onboardingData.resumeData) {
+      const { error: resumeDataError } = await supabase
+        .from('user_resume_data')
         .upsert({
           user_id: userId,
-          applications_per_week: parseInt(onboardingData.applicationPrefs.applicationsPerWeek),
-          blacklisted_companies: onboardingData.applicationPrefs.blacklistedCompanies,
+          professional_summary: onboardingData.resumeData.summary || '',
+          skills: onboardingData.resumeData.skills || [],
+          projects: onboardingData.resumeData.projects || [],
         }, {
           onConflict: 'user_id'
         });
 
-      if (appPrefsError) {
-        console.error('Error saving application preferences:', appPrefsError);
-        throw appPrefsError;
+      if (resumeDataError) {
+        console.error('Error saving resume data:', resumeDataError);
+        // Don't throw, just log - this is not critical
+      }
+    }
+
+    // Save demographics (work authorization data)
+    if (onboardingData.workAuth || onboardingData.experience) {
+      const { error: demoError } = await supabase
+        .from('user_demographics')
+        .upsert({
+          user_id: userId,
+          employment_status: onboardingData.experience?.employmentStatus === 'employed' ? 'employed_full_time' :
+                             onboardingData.experience?.employmentStatus === 'unemployed' ? 'unemployed_seeking' :
+                             onboardingData.experience?.employmentStatus === 'student' ? 'student' : 'prefer_not_to_say',
+          education_level: onboardingData.experience?.educationLevel?.toLowerCase().includes('bachelor') ? 'bachelor_degree' :
+                          onboardingData.experience?.educationLevel?.toLowerCase().includes('master') ? 'master_degree' :
+                          onboardingData.experience?.educationLevel?.toLowerCase().includes('phd') ||
+                          onboardingData.experience?.educationLevel?.toLowerCase().includes('doctoral') ? 'doctoral_degree' :
+                          onboardingData.experience?.educationLevel?.toLowerCase().includes('associate') ? 'associate_degree' :
+                          onboardingData.experience?.educationLevel?.toLowerCase().includes('high school') ? 'high_school' : 'prefer_not_to_say',
+          veteran_status: onboardingData.workAuth?.veteran === 'yes' ? 'veteran' :
+                         onboardingData.workAuth?.veteran === 'no' ? 'not_veteran' : 'prefer_not_to_say',
+          disability_status: onboardingData.workAuth?.disability?.includes('yes') ? 'yes' :
+                            onboardingData.workAuth?.disability?.includes('no') ? 'no' : 'prefer_not_to_say',
+        }, {
+          onConflict: 'user_id'
+        });
+
+      if (demoError) {
+        console.error('Error saving demographics:', demoError);
+        // Don't throw, just log - this is not critical
       }
     }
 

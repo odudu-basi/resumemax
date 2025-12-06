@@ -1,18 +1,20 @@
-import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 
-const nextConfig: NextConfig = {
-  /* config options here */
-  turbopack: {
-    root: __dirname,
-  },
-  webpack: (config) => {
-    // Handle large files better
-    config.module.rules.push({
-      test: /\.(webm|mp4)$/,
-      type: 'asset/resource',
-    });
-    return config;
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  // Your existing Next.js config here
+  reactStrictMode: true,
+  images: {
+    domains: ['mgeppezubknkchynwydw.supabase.co'],
   },
 };
 
-export default nextConfig;
+// Sentry configuration options
+const sentryWebpackPluginOptions = {
+  // Suppresses source map uploading logs during build
+  silent: true,
+  org: "resumemax",
+  project: "javascript-nextjs",
+};
+
+export default withSentryConfig(nextConfig, sentryWebpackPluginOptions);

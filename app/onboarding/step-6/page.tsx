@@ -9,9 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { X, Plus } from "lucide-react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useOnboarding } from "@/src/contexts/OnboardingContext";
 
 const commonSkills = [
   "JavaScript", "Python", "Java", "React", "Node.js", "SQL", "HTML/CSS", "Git",
@@ -39,6 +40,8 @@ const proficiencyLevels = [
 
 export default function OnboardingStep6() {
   const router = useRouter();
+  const { onboardingData, updateOnboardingData } = useOnboarding();
+
   const [formData, setFormData] = useState({
     technicalSkills: [] as string[],
     softwareTools: [] as string[],
@@ -46,6 +49,13 @@ export default function OnboardingStep6() {
     languageSkills: [] as { language: string; proficiency: string }[],
     keyStrengths: [] as string[]
   });
+
+  // Load existing data from context on mount
+  useEffect(() => {
+    if (onboardingData.skills) {
+      setFormData(onboardingData.skills);
+    }
+  }, [onboardingData.skills]);
 
   const [inputValues, setInputValues] = useState({
     newSkill: '',
@@ -120,16 +130,16 @@ export default function OnboardingStep6() {
   };
 
   const handleContinue = () => {
-    // Here you can save the form data or pass it to the next step
-    console.log('Skills & Certifications data:', formData);
-    // Navigate to step 7
-    router.push('/onboarding/step-7');
+    // Save to context
+    updateOnboardingData('skills', formData);
+    console.log('Skills & Certifications data saved to context:', formData);
+    console.log('Complete onboarding data:', onboardingData);
+    // Complete onboarding and redirect to signup, then paywall
+    router.push('/auth/signup?returnTo=/paywall');
   };
 
   const isFormValid = () => {
-    return formData.technicalSkills.length > 0 || 
-           formData.softwareTools.length > 0 || 
-           formData.keyStrengths.length > 0;
+    return formData.keyStrengths.length > 0;
   };
 
   return (
@@ -149,14 +159,14 @@ export default function OnboardingStep6() {
         transition={{ duration: 0.5 }}
         className="sticky top-4 z-50 flex justify-center px-4 py-4"
       >
-        <div className="flex items-center justify-between w-full max-w-6xl px-8 py-4 bg-black/60 backdrop-blur-xl border border-white/30 rounded-full shadow-2xl">
+        <div className="flex items-center justify-center w-full max-w-6xl px-8 py-4 bg-black/60 backdrop-blur-xl border border-white/30 rounded-full shadow-2xl">
           <Link href="/" className="flex items-center gap-3">
             <Image src="/logo.png" alt="ResumeMax Logo" width={32} height={32} className="h-8 w-8" />
             <span className="text-lg font-bold text-white">ResumeMax</span>
           </Link>
           <Link href="/auth/login">
             <Button variant="ghost" size="sm" className="text-white hover:bg-white/20">
-              Skip Onboarding
+              Sign In
             </Button>
           </Link>
         </div>
@@ -190,86 +200,6 @@ export default function OnboardingStep6() {
                   <CardTitle className="text-2xl text-center">Your Expertise</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  {/* Core Technical Skills */}
-                  <div className="space-y-3">
-                    <Label className="text-sm font-medium">
-                      Core technical skills
-                    </Label>
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder="Add a technical skill (e.g., JavaScript, Python)"
-                        value={inputValues.newSkill}
-                        onChange={(e) => setInputValues(prev => ({ ...prev, newSkill: e.target.value }))}
-                        onKeyPress={(e) => e.key === 'Enter' && handleAddSkill()}
-                        className="flex-1"
-                      />
-                      <Button onClick={handleAddSkill} size="sm">
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {commonSkills.slice(0, 8).map((skill) => (
-                        <Badge
-                          key={skill}
-                          variant="outline"
-                          className="cursor-pointer hover:bg-blue-50"
-                          onClick={() => {
-                            if (!formData.technicalSkills.includes(skill)) {
-                              addItem('technicalSkills', skill);
-                            }
-                          }}
-                        >
-                          + {skill}
-                        </Badge>
-                      ))}
-                    </div>
-                    {formData.technicalSkills.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {formData.technicalSkills.map((skill, index) => (
-                          <Badge key={index} className="flex items-center gap-1">
-                            {skill}
-                            <X 
-                              className="h-3 w-3 cursor-pointer" 
-                              onClick={() => removeItem('technicalSkills', index)}
-                            />
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Software/Tools Proficiency */}
-                  <div className="space-y-3">
-                    <Label className="text-sm font-medium">
-                      Software/Tools proficiency
-                    </Label>
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder="Add software or tools (e.g., Excel, Photoshop, AutoCAD)"
-                        value={inputValues.newTool}
-                        onChange={(e) => setInputValues(prev => ({ ...prev, newTool: e.target.value }))}
-                        onKeyPress={(e) => e.key === 'Enter' && handleAddTool()}
-                        className="flex-1"
-                      />
-                      <Button onClick={handleAddTool} size="sm">
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    {formData.softwareTools.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {formData.softwareTools.map((tool, index) => (
-                          <Badge key={index} variant="secondary" className="flex items-center gap-1">
-                            {tool}
-                            <X 
-                              className="h-3 w-3 cursor-pointer" 
-                              onClick={() => removeItem('softwareTools', index)}
-                            />
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
                   {/* Certifications */}
                   <div className="space-y-3">
                     <Label className="text-sm font-medium">
@@ -308,9 +238,12 @@ export default function OnboardingStep6() {
                         {formData.certifications.map((cert, index) => (
                           <Badge key={index} variant="secondary" className="flex items-center gap-1">
                             {cert}
-                            <X 
-                              className="h-3 w-3 cursor-pointer" 
-                              onClick={() => removeItem('certifications', index)}
+                            <X
+                              className="h-3 w-3 cursor-pointer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeItem('certifications', index);
+                              }}
                             />
                           </Badge>
                         ))}
@@ -363,9 +296,12 @@ export default function OnboardingStep6() {
                         {formData.languageSkills.map((lang, index) => (
                           <Badge key={index} variant="secondary" className="flex items-center gap-1">
                             {lang.language} ({lang.proficiency})
-                            <X 
-                              className="h-3 w-3 cursor-pointer" 
-                              onClick={() => removeItem('languageSkills', index)}
+                            <X
+                              className="h-3 w-3 cursor-pointer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeItem('languageSkills', index);
+                              }}
                             />
                           </Badge>
                         ))}
@@ -403,9 +339,12 @@ export default function OnboardingStep6() {
                         {formData.keyStrengths.map((strength, index) => (
                           <Badge key={index} variant="default" className="flex items-center gap-1">
                             {strength}
-                            <X 
-                              className="h-3 w-3 cursor-pointer" 
-                              onClick={() => removeItem('keyStrengths', index)}
+                            <X
+                              className="h-3 w-3 cursor-pointer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeItem('keyStrengths', index);
+                              }}
                             />
                           </Badge>
                         ))}
@@ -427,7 +366,7 @@ export default function OnboardingStep6() {
                       className="flex-1 bg-gradient-to-r from-green-500 to-blue-600 hover:from-green-600 hover:to-blue-700"
                       disabled={!isFormValid()}
                     >
-                      Continue
+                      Complete Onboarding
                     </Button>
                   </div>
                 </CardContent>

@@ -84,7 +84,7 @@ app.post('/apply', async (req, res) => {
     // Route to selected approach
     if (selectedApproach === 'hybrid') {
       console.log('🔄 Using HYBRID approach (observe + ChatGPT + agent)');
-      await hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res);
+      await hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res, jobUrl);
     } else {
       console.log('🤖 Using AGENT-ONLY approach');
       await adaptiveFormFillAgent(stagehand, userProfile, sessionId, sessionUrl, res);

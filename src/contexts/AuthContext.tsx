@@ -5,6 +5,7 @@ import { User, Session, AuthError } from '@supabase/supabase-js';
 import { createSupabaseClient } from '@/src/lib/supabase';
 import { useRouter } from 'next/navigation';
 import MixpanelService from '@/src/lib/mixpanel';
+import posthog from 'posthog-js';
 
 interface AuthContextType {
   user: User | null;
@@ -65,23 +66,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // Handle auth events and track them
         if (event === 'SIGNED_IN' && session?.user) {
+          // Track to Mixpanel
           MixpanelService.trackUserSignIn({
             user_id: session.user.id,
             login_method: session.user.app_metadata?.provider === 'google' ? 'google' : 'email',
           });
-          
+
           // Set user properties for Mixpanel
           MixpanelService.setUser(session.user.id, {
             email: session.user.email,
             full_name: session.user.user_metadata?.full_name,
             signup_date: session.user.created_at,
           });
+
+          // Identify user in PostHog
+          if (typeof window !== 'undefined') {
+            posthog.identify(session.user.id, {
+              email: session.user.email,
+              full_name: session.user.user_metadata?.full_name,
+              signup_date: session.user.created_at,
+              login_method: session.user.app_metadata?.provider === 'google' ? 'google' : 'email',
+            });
+          }
         }
-        
+
         if (event === 'SIGNED_OUT') {
+          // Track to Mixpanel
           MixpanelService.trackUserSignOut({
             user_id: session?.user?.id,
           });
+
+          // Reset PostHog on sign out
+          if (typeof window !== 'undefined') {
+            posthog.reset();
+          }
+
           router.push('/');
         }
       }

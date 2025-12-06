@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -65,6 +65,12 @@ import { ApplicationDetailModal } from "@/src/components/ApplicationDetailModal"
 
 const sidebarItems = [
   {
+    id: 'home',
+    label: 'Home',
+    icon: Home,
+    description: 'Quick apply to jobs'
+  },
+  {
     id: 'profile',
     label: 'Profile',
     icon: User,
@@ -76,12 +82,7 @@ const sidebarItems = [
     icon: FileText,
     description: 'Upload and manage your resume'
   },
-  {
-    id: 'context',
-    label: 'Context',
-    icon: MessageCircle,
-    description: 'Voice mode and AI assistance'
-  },
+
   {
     id: 'browse-jobs',
     label: 'Browse Jobs',
@@ -109,6 +110,327 @@ const sidebarItems = [
 ];
 
 // Browse Jobs Section Component
+// Home Section Component
+// Home Job Card Component - No Apply button, only shows Applying status and Watch Live
+function HomeJobCard({
+  job,
+  userId,
+  cloudApplyLoading = false,
+  cloudNotification = null,
+}: {
+  job: any;
+  userId: string | null;
+  cloudApplyLoading?: boolean;
+  cloudNotification?: any;
+}) {
+  return (
+    <Card className="hover:shadow-lg transition-all relative">
+      <CardHeader className="pb-3">
+        <div className="flex justify-between items-start gap-2">
+          <div className="flex-1 min-w-0">
+            <CardTitle className="text-lg font-bold text-gray-900 mb-1 line-clamp-2">
+              {job.title}
+            </CardTitle>
+            <CardDescription className="flex items-center gap-1 text-sm">
+              <Building2 className="h-3 w-3" />
+              {job.company}
+            </CardDescription>
+          </div>
+          {job.datePosted && (
+            <Badge variant="secondary" className="shrink-0 flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              {job.datePosted}
+            </Badge>
+          )}
+        </div>
+      </CardHeader>
+
+      <CardContent className="space-y-4">
+        {/* Location and Salary */}
+        <div className="space-y-2 text-sm text-gray-600">
+          <div className="flex items-center gap-2">
+            <MapPin className="h-4 w-4" />
+            <span>{job.location}</span>
+          </div>
+          {job.salary?.display && (
+            <div className="flex items-center gap-2">
+              <DollarSign className="h-4 w-4" />
+              <span>{job.salary.display}</span>
+            </div>
+          )}
+          {job.jobType && (
+            <div className="flex items-center gap-2">
+              <Briefcase className="h-4 w-4" />
+              <span>{job.jobType}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Status Badge */}
+        {job.status === 'scraping' && (
+          <Badge variant="outline" className="w-full justify-center py-2">
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            Extracting job details...
+          </Badge>
+        )}
+
+        {job.status === 'error' && (
+          <Badge variant="destructive" className="w-full justify-center py-2">
+            <AlertCircle className="h-4 w-4 mr-2" />
+            {job.error || 'Application failed'}
+          </Badge>
+        )}
+
+        {/* Cloud Notification - Shows Watch Live button */}
+        {cloudNotification && (
+          <div className={`p-3 rounded-md ${
+            cloudNotification.type === 'success'
+              ? 'bg-blue-50 border border-blue-200'
+              : 'bg-red-50 border border-red-200'
+          }`}>
+            <p className={`text-sm ${
+              cloudNotification.type === 'success' ? 'text-blue-800' : 'text-red-800'
+            }`}>
+              {cloudNotification.description || cloudNotification.message}
+            </p>
+            {cloudNotification.liveUrl && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2 w-full"
+                onClick={() => window.open(cloudNotification.liveUrl, '_blank')}
+              >
+                <ExternalLink className="h-4 w-4 mr-2" />
+                Watch Live
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* Applying Button (disabled, just shows status) */}
+        <div className="flex gap-2">
+          <Button
+            className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white"
+            disabled={true}
+          >
+            {cloudApplyLoading || job.status === 'applying' ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Applying...
+              </>
+            ) : job.status === 'scraping' ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Loading...
+              </>
+            ) : (
+              <>
+                <Zap className="h-4 w-4 mr-2" />
+                Applying...
+              </>
+            )}
+          </Button>
+        </div>
+
+        {/* View Job Link */}
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full"
+          onClick={() => window.open(job.applicationUrl, '_blank')}
+        >
+          <Globe className="h-4 w-4 mr-2" />
+          View Original Job
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+// Home Section Component
+function HomeSection() {
+  const { user } = useAuth();
+  const [jobLink, setJobLink] = useState("");
+  const [homeJobs, setHomeJobs] = useState<any[]>([]);
+  const [cloudApplyJobLoading, setCloudApplyJobLoading] = useState<Record<string, boolean>>({});
+  const [cloudNotifications, setCloudNotifications] = useState<Record<string, any>>({});
+
+  const handleApply = async () => {
+    if (!jobLink.trim()) {
+      toast.error('Please enter a job link');
+      return;
+    }
+
+    const jobId = `home_${Date.now()}`;
+    const currentJobUrl = jobLink.trim();
+
+    // Clear input immediately
+    setJobLink("");
+
+    // Create initial job card with loading state
+    const newJob = {
+      id: jobId,
+      title: "Scraping job details...",
+      company: "Loading...",
+      location: "Loading...",
+      applicationUrl: currentJobUrl,
+      status: 'scraping',
+      datePosted: null,
+    };
+
+    setHomeJobs(prev => [newJob, ...prev]);
+
+    try {
+      // Step 1: Scrape job details
+      console.log('🔍 Scraping job details from:', currentJobUrl);
+      const scrapeResponse = await fetch('http://localhost:3001/scrape-job-details', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobUrl: currentJobUrl }),
+      });
+
+      if (!scrapeResponse.ok) {
+        throw new Error('Failed to scrape job details');
+      }
+
+      const scrapedData = await scrapeResponse.json();
+      console.log('✅ Job details scraped:', scrapedData);
+
+      // Update job card with scraped details
+      setHomeJobs(prev => prev.map(job =>
+        job.id === jobId ? {
+          ...job,
+          title: scrapedData.jobTitle || 'Job Title Not Found',
+          company: scrapedData.companyName || 'Company Not Found',
+          location: scrapedData.location || 'Location Not Found',
+          salary: scrapedData.salaryRange ? { min: 0, max: 0, display: scrapedData.salaryRange } : undefined,
+          datePosted: scrapedData.datePosted || null,
+          description: scrapedData.jobDescription,
+          jobType: scrapedData.jobType,
+          requirements: scrapedData.requirements,
+          benefits: scrapedData.benefits,
+          status: 'applying',
+        } : job
+      ));
+
+      // Step 2: Automatically trigger cloud apply
+      console.log('🚀 Auto-triggering cloud apply for:', currentJobUrl);
+      setCloudApplyJobLoading(prev => ({ ...prev, [jobId]: true }));
+
+      const applyResponse = await fetch('/api/cloud-apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jobUrl: currentJobUrl,
+          userId: user?.id,
+        }),
+      });
+
+      const applyResult = await applyResponse.json();
+
+      if (applyResult.success) {
+        console.log('✅ Application started:', applyResult);
+
+        // Set notification with session info
+        setCloudNotifications(prev => ({
+          ...prev,
+          [jobId]: {
+            type: 'success',
+            message: `Application in progress for ${scrapedData.companyName || 'this job'}`,
+            liveUrl: applyResult.sessionUrl,
+            description: `Smart application to ${scrapedData.companyName || 'company'} is in progress... Click "Watch Live" to view!`,
+          }
+        }));
+
+        // Update job status
+        setHomeJobs(prev => prev.map(job =>
+          job.id === jobId ? { ...job, status: 'applying', sessionUrl: applyResult.sessionUrl, sessionId: applyResult.sessionId } : job
+        ));
+
+        toast.success(`Application started for ${scrapedData.companyName || 'job'}! Click "Watch Live" to monitor.`);
+      } else {
+        throw new Error(applyResult.error || 'Failed to start application');
+      }
+
+    } catch (error: any) {
+      console.error('❌ Error in apply flow:', error);
+      toast.error(`Failed: ${error.message}`);
+
+      // Update job card to show error
+      setHomeJobs(prev => prev.map(job =>
+        job.id === jobId ? { ...job, status: 'error', error: error.message } : job
+      ));
+
+      setCloudNotifications(prev => ({
+        ...prev,
+        [jobId]: {
+          type: 'error',
+          message: error.message,
+        }
+      }));
+    } finally {
+      setCloudApplyJobLoading(prev => ({ ...prev, [jobId]: false }));
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Input Section */}
+      <Card className="bg-gradient-to-br from-gray-900/50 to-gray-800/30 backdrop-blur-xl border-gray-700/50 shadow-2xl">
+        <CardHeader>
+          <CardTitle className="text-2xl font-bold text-white flex items-center gap-2">
+            <Home className="h-6 w-6" />
+            Quick Apply
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col sm:flex-row gap-4 items-center justify-center max-w-3xl mx-auto py-8">
+            <div className="flex-1 w-full">
+              <Input
+                type="url"
+                placeholder="Paste job link here..."
+                value={jobLink}
+                onChange={(e) => setJobLink(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && jobLink.trim()) {
+                    handleApply();
+                  }
+                }}
+                className="h-12 text-lg bg-gray-800/50 border-gray-600 text-white placeholder:text-gray-400 focus:border-blue-500"
+              />
+            </div>
+            <Button
+              onClick={handleApply}
+              disabled={!jobLink.trim()}
+              className="h-12 px-8 text-lg bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all"
+            >
+              <Send className="h-5 w-5 mr-2" />
+              Apply
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Job Cards Section */}
+      {homeJobs.length > 0 && (
+        <div>
+          <h3 className="text-xl font-semibold text-gray-900 mb-4">Your Applications</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {homeJobs.map((job) => (
+              <HomeJobCard
+                key={job.id}
+                job={job}
+                userId={user?.id || null}
+                cloudApplyLoading={cloudApplyJobLoading[job.id]}
+                cloudNotification={cloudNotifications[job.id]}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BrowseJobsSection({
   isSearching,
   setIsSearching,
@@ -879,8 +1201,8 @@ function BrowseJobsSection({
         });
 
         // Log the live URL
-        if (result.liveUrl) {
-          console.log('🔴 Live URL:', result.liveUrl);
+        if (result.sessionUrl) {
+          console.log('🔴 Live URL:', result.sessionUrl);
         }
 
         // Set notification with live URL - this makes the Watch Live button appear
@@ -890,7 +1212,7 @@ function BrowseJobsSection({
             type: 'success',
             message: `Application in progress... Task ID: ${result.taskId}`,
             timestamp: new Date(),
-            liveUrl: result.liveUrl
+            liveUrl: result.sessionUrl
           }
         }));
 
@@ -3339,7 +3661,7 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
 }
 
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState('browse-jobs');
+  const [activeTab, setActiveTab] = useState('home');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user, signOut, loading } = useAuth();
   const router = useRouter();
@@ -3798,7 +4120,12 @@ export default function Dashboard() {
   const renderContent = () => {
     const activeItem = sidebarItems.find(item => item.id === activeTab);
     
-    // Render Browse Jobs section
+    
+    // Render Home section
+    if (activeTab === 'home') {
+      return <HomeSection />;
+    }
+
     if (activeTab === 'browse-jobs') {
       return (
         <BrowseJobsSection

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
-import { createSupabaseClient } from '@/src/lib/supabase';
+import { supabase } from '@/src/lib/supabase';
 
 // Initialize Google Admin SDK with JWT
 async function getGoogleAuth() {
@@ -27,6 +27,8 @@ async function getGoogleAuth() {
       scopes: [
         'https://www.googleapis.com/auth/admin.directory.user',
         'https://www.googleapis.com/auth/admin.directory.user.alias',
+        'https://www.googleapis.com/auth/admin.directory.orgunit',
+        'https://www.googleapis.com/auth/gmail.settings.sharing',
       ],
       subject: process.env.GOOGLE_ADMIN_EMAIL
     });
@@ -101,10 +103,7 @@ export async function POST(request: NextRequest) {
     }
 
     const domain = process.env.GOOGLE_WORKSPACE_DOMAIN;
-    const orgPath = process.env.GOOGLE_WORKSPACE_ORG_PATH || '/resumemax.ai/Auto-Created Users';
-
-    // Create Supabase client
-    const supabase = await createSupabaseClient();
+    const orgPath = process.env.GOOGLE_WORKSPACE_ORG_PATH || '/';
 
     // Check if user already has a work email
     const { data: existingProfile, error: profileError } = await supabase
@@ -138,6 +137,21 @@ export async function POST(request: NextRequest) {
     // Initialize Google Admin SDK
     const auth = await getGoogleAuth();
     const admin = google.admin({ version: 'directory_v1', auth });
+
+    // DEBUG: List all organizational units to find the correct path
+    try {
+      console.log('🔍 Listing all organizational units...');
+      const orgUnitsResponse = await admin.orgunits.list({
+        customerId: 'my_customer',
+        type: 'all'
+      });
+      console.log('📋 Available Organizational Units:');
+      orgUnitsResponse.data.organizationUnits?.forEach((ou: any) => {
+        console.log(`   - Name: "${ou.name}", Path: "${ou.orgUnitPath}", ID: "${ou.orgUnitId}"`);
+      });
+    } catch (listError) {
+      console.warn('⚠️  Could not list organizational units:', listError);
+    }
 
     // Check if email already exists in Google Workspace
     try {
@@ -180,37 +194,66 @@ export async function POST(request: NextRequest) {
     const password = generateSecurePassword();
 
     // Create the user in Google Workspace
-    console.log(`Creating Gmail account: ${workEmail}`);
+    console.log('🔧 ===== GMAIL ACCOUNT CREATION DEBUG =====');
+    console.log(`📧 Creating Gmail account: ${workEmail}`);
+    console.log(`👤 First Name: ${firstName}`);
+    console.log(`👤 Last Name: ${lastName}`);
+    console.log(`🏢 Domain: ${domain}`);
+    console.log(`📂 Org Unit Path: "${orgPath}"`);
+    console.log(`📂 Org Unit Path Type: ${typeof orgPath}`);
+    console.log(`📂 Org Unit Path Length: ${orgPath?.length}`);
+    console.log('🔧 =========================================');
 
-    const createResponse = await admin.users.insert({
-      requestBody: {
-        primaryEmail: workEmail,
-        name: {
-          givenName: firstName,
-          familyName: lastName,
-        },
-        password: password,
-        changePasswordAtNextLogin: true, // Force password change on first login
-        orgUnitPath: orgPath,
+    const requestBody = {
+      primaryEmail: workEmail,
+      name: {
+        givenName: firstName,
+        familyName: lastName,
       },
-    });
+      password: password,
+      changePasswordAtNextLogin: false, // Use the initial password without requiring a change
+      orgUnitPath: orgPath,
+    };
+
+    console.log('📤 Request body being sent to Google:', JSON.stringify(requestBody, null, 2));
+
+    let createResponse;
+    try {
+      createResponse = await admin.users.insert({
+        requestBody: requestBody,
+      });
+    } catch (insertError: any) {
+      console.error('❌ Google API Insert Error:');
+      console.error('Error Code:', insertError.code);
+      console.error('Error Message:', insertError.message);
+      console.error('Error Details:', JSON.stringify(insertError.errors || insertError, null, 2));
+      throw insertError;
+    }
 
     console.log('Gmail account created successfully:', createResponse.data.primaryEmail);
 
-    // Update the user profile in database
-    const { error: updateError } = await supabase
+    // Update the user profile in database using upsert
+    console.log(`💾 Updating database for user_id: ${userId}`);
+    const { data: upsertData, error: updateError } = await supabase
       .from('user_profiles')
-      .update({
+      .upsert({
+        user_id: userId,
         first_name: firstName,
         last_name: lastName,
         work_email: workEmail,
         work_email_password: password,
         work_email_created_at: new Date().toISOString(),
+      }, {
+        onConflict: 'user_id'
       })
-      .eq('user_id', userId);
+      .select();
 
     if (updateError) {
-      console.error('Error updating user profile:', updateError);
+      console.error('❌ Error updating user profile:');
+      console.error('Error code:', updateError.code);
+      console.error('Error message:', updateError.message);
+      console.error('Error details:', updateError.details);
+      console.error('User ID attempted:', userId);
       // Gmail account was created but database update failed
       // You might want to handle this edge case differently
       return NextResponse.json(
@@ -223,9 +266,59 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    console.log('✅ Database updated successfully:', upsertData);
+
     // Get user's personal email from auth.users
     const { data: authUser } = await supabase.auth.admin.getUserById(userId);
     const personalEmail = authUser?.user?.email;
+
+    // Set up automatic email forwarding to user's personal email
+    if (personalEmail) {
+      try {
+        console.log(`📧 Setting up email forwarding: ${workEmail} → ${personalEmail}`);
+
+        // Create a new JWT client with the created user's email as subject
+        const userAuth = new google.auth.JWT({
+          email: credentials.client_email,
+          key: privateKey,
+          scopes: ['https://www.googleapis.com/auth/gmail.settings.sharing'],
+          subject: workEmail, // Impersonate the newly created user
+        });
+
+        await userAuth.authorize();
+        const gmail = google.gmail({ version: 'v1', auth: userAuth });
+
+        // Step 1: Add forwarding address
+        console.log(`📝 Adding forwarding address: ${personalEmail}`);
+        await gmail.users.settings.forwardingAddresses.create({
+          userId: 'me',
+          requestBody: {
+            forwardingEmail: personalEmail,
+          },
+        });
+
+        // Step 2: Enable auto-forwarding
+        console.log(`⚙️  Enabling auto-forwarding...`);
+        await gmail.users.settings.updateAutoForwarding({
+          userId: 'me',
+          requestBody: {
+            enabled: true,
+            emailAddress: personalEmail,
+            disposition: 'leaveInInbox', // Keep a copy in the work inbox
+          },
+        });
+
+        console.log(`✅ Email forwarding successfully configured!`);
+      } catch (forwardError: any) {
+        console.error('⚠️  Failed to set up email forwarding:');
+        console.error('Error:', forwardError.message);
+        console.error('Details:', forwardError.errors || forwardError);
+        // Don't fail the entire account creation if forwarding fails
+        // The account is still created successfully
+      }
+    } else {
+      console.warn('⚠️  No personal email found for user, skipping forwarding setup');
+    }
 
     // TODO: Send email with credentials to user's personal email
     // For now, we'll return the password in the response

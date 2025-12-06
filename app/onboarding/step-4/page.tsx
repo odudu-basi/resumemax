@@ -156,9 +156,12 @@ export default function OnboardingStep4() {
                         {formData.locations.map((location) => (
                           <Badge key={location} variant="secondary" className="flex items-center gap-1">
                             {location}
-                            <X 
-                              className="h-3 w-3 cursor-pointer" 
-                              onClick={() => removeItem('locations', location)}
+                            <X
+                              className="h-3 w-3 cursor-pointer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeItem('locations', location);
+                              }}
                             />
                           </Badge>
                         ))}
@@ -181,6 +184,9 @@ export default function OnboardingStep4() {
                       min="0"
                       step="1000"
                     />
+                    <p className="text-xs text-gray-600 italic">
+                      ⚠️ Enter numbers only without commas (e.g., 80000, not 80,000)
+                    </p>
                   </div>
 
                   {/* Job Type Preference */}

@@ -7,7 +7,6 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import ElevenLabsAgent from "@/src/components/ElevenLabsAgent";
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -39,22 +38,11 @@ export default function OnboardingPage() {
         transition={{ duration: 0.5 }}
         className="sticky top-4 z-50 flex justify-center px-4 py-4"
       >
-        <div className="flex items-center justify-between w-full max-w-6xl px-8 py-4 bg-black/60 backdrop-blur-xl border border-white/30 rounded-full shadow-2xl">
+        <div className="flex items-center justify-center w-full max-w-6xl px-8 py-4 bg-black/60 backdrop-blur-xl border border-white/30 rounded-full shadow-2xl">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-3">
             <Image src="/logo.png" alt="ResumeMax Logo" width={32} height={32} className="h-8 w-8" />
             <span className="text-lg font-bold text-white">ResumeMax</span>
-          </Link>
-
-          {/* Skip Button */}
-          <Link href="/auth/login">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-white hover:bg-white/20"
-            >
-              Skip Onboarding
-            </Button>
           </Link>
         </div>
       </motion.nav>
@@ -68,19 +56,6 @@ export default function OnboardingPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8 }}
             >
-              {/* JJ Introduction */}
-              <div className="mb-12">
-                <div className="w-24 h-24 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl">
-                  <span className="text-2xl font-bold text-white">Valentino</span>
-                </div>
-                <p className="text-lg text-gray-600 mb-2">
-                  Hi, my name is <span className="font-semibold text-blue-600">Valentino</span>
-                </p>
-                <p className="text-lg text-gray-600">
-                  I am your personal career assistant and onboarding guide
-                </p>
-              </div>
-
               {/* Main Question */}
               <h1 className="text-4xl font-bold tracking-tight text-black sm:text-6xl mb-16">
                 Welcome, let's{" "}
@@ -117,9 +92,6 @@ export default function OnboardingPage() {
           </div>
         </div>
       </section>
-
-      {/* ElevenLabs AI Agent */}
-      <ElevenLabsAgent />
     </div>
   );
 }

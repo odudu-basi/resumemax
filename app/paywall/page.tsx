@@ -138,10 +138,10 @@ export default function PaywallPage() {
             Unlock Full Access
           </Badge>
           <h1 className="text-4xl md:text-5xl font-bold text-black mb-4">
-            You've used all your free applications
+            Stop Wasting Hours on Repetitive Applications
           </h1>
           <p className="text-lg md:text-xl text-gray-700 max-w-2xl mx-auto">
-            Upgrade now to continue applying to jobs with AI-powered automation
+            Your time is valuable. Let AI handle the tedious form-filling while you focus on landing interviews.
           </p>
         </motion.div>
 
@@ -186,7 +186,7 @@ export default function PaywallPage() {
                     </div>
 
                     <Badge variant="outline" className="text-base font-semibold w-fit">
-                      {plan.applications} applications/month
+                      {plan.applications} applications/{plan.period}
                     </Badge>
 
                     <CardDescription className="text-base mt-3">

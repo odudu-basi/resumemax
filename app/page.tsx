@@ -195,6 +195,31 @@ export default function Home() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8 }}
             >
+              {/* Product Hunt Badge */}
+              <div className="flex flex-col items-center mb-8 gap-3">
+                {/* Cursive CTA Text */}
+                <p className="text-3xl sm:text-4xl font-pacifico italic text-transparent bg-clip-text bg-gradient-to-r from-gray-600 via-gray-800 to-black">
+                  Please give us an upvote on Product Hunt
+                </p>
+
+                <div className="inline-flex items-center px-6 py-3 bg-white/40 backdrop-blur-md border border-white/60 rounded-full shadow-lg hover:bg-white/50 transition-all duration-300">
+                  <a
+                    href="https://www.producthunt.com/products/resumemax-ai?embed=true&utm_source=badge-featured&utm_medium=badge&utm_source=badge-resumemax&#0045;ai"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center"
+                  >
+                    <img
+                      src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1046566&theme=light&t=1765025491233"
+                      alt="ResumeMax.ai - Apply to jobs accurately in seconds not hours with AI | Product Hunt"
+                      style={{ width: '250px', height: '54px' }}
+                      width="250"
+                      height="54"
+                    />
+                  </a>
+                </div>
+              </div>
+
               <h1 className="text-4xl font-bold tracking-tight text-black sm:text-6xl">
                 Apply to Jobs Accurately{" "}
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-gray-700 to-black">
@@ -217,20 +242,6 @@ export default function Home() {
                   >
                     Get Started
                   </Button>
-                </motion.div>
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  <Link href="/smart-jobs">
-                    <Button
-                      size="lg"
-                      variant="outline"
-                      className="text-lg px-8 py-3 border-2 border-gray-800 text-gray-800 hover:bg-gray-800 hover:text-white"
-                    >
-                      Smart Job Search
-                    </Button>
-                  </Link>
                 </motion.div>
               </div>
             </motion.div>
@@ -260,9 +271,9 @@ export default function Home() {
               <div className="grid md:grid-cols-2 gap-12 items-center mb-8">
                 {/* AI Side */}
                 <div className="relative">
-                  <div className="bg-gradient-to-br from-blue-500 via-purple-600 to-indigo-700 rounded-2xl p-6 text-white shadow-xl">
+                  <div className="bg-gradient-to-br from-gray-800 via-gray-700 to-gray-900 rounded-2xl p-6 text-white shadow-xl border border-gray-600">
                     <div className="flex items-center mb-4">
-                      <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center mr-3">
+                      <div className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center mr-3">
                         <span className="text-lg font-bold">🤖</span>
                       </div>
                       <h3 className="text-xl font-bold">AI Does All The Work</h3>
@@ -286,16 +297,16 @@ export default function Home() {
                       </li>
                     </ul>
                   </div>
-                  <div className="absolute -top-2 -right-2 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+                  <div className="absolute -top-2 -right-2 w-6 h-6 bg-gray-600 rounded-full flex items-center justify-center border border-gray-500">
                     <span className="text-xs text-white font-bold">AI</span>
                   </div>
                 </div>
 
                 {/* You Side */}
                 <div className="relative">
-                  <div className="bg-gradient-to-br from-emerald-500 via-teal-600 to-cyan-700 rounded-2xl p-6 text-white shadow-xl">
+                  <div className="bg-gradient-to-br from-gray-700 via-gray-600 to-gray-800 rounded-2xl p-6 text-white shadow-xl border border-gray-500">
                     <div className="flex items-center mb-4">
-                      <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center mr-3">
+                      <div className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center mr-3">
                         <span className="text-lg font-bold">👤</span>
                       </div>
                       <h3 className="text-xl font-bold">You Just Apply</h3>
@@ -319,7 +330,7 @@ export default function Home() {
                       </li>
                     </ul>
                   </div>
-                  <div className="absolute -top-2 -right-2 w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center">
+                  <div className="absolute -top-2 -right-2 w-6 h-6 bg-gray-500 rounded-full flex items-center justify-center border border-gray-400">
                     <span className="text-xs text-white font-bold">YOU</span>
                   </div>
                 </div>

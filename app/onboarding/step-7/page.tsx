@@ -106,14 +106,14 @@ export default function OnboardingStep7() {
         transition={{ duration: 0.5 }}
         className="sticky top-4 z-50 flex justify-center px-4 py-4"
       >
-        <div className="flex items-center justify-between w-full max-w-6xl px-8 py-4 bg-black/60 backdrop-blur-xl border border-white/30 rounded-full shadow-2xl">
+        <div className="flex items-center justify-center w-full max-w-6xl px-8 py-4 bg-black/60 backdrop-blur-xl border border-white/30 rounded-full shadow-2xl">
           <Link href="/" className="flex items-center gap-3">
             <Image src="/logo.png" alt="ResumeMax Logo" width={32} height={32} className="h-8 w-8" />
             <span className="text-lg font-bold text-white">ResumeMax</span>
           </Link>
           <Link href="/auth/login">
             <Button variant="ghost" size="sm" className="text-white hover:bg-white/20">
-              Skip Onboarding
+              Sign In
             </Button>
           </Link>
         </div>
@@ -250,9 +250,12 @@ export default function OnboardingStep7() {
                           {formData.blacklistedCompanies.map((company, index) => (
                             <Badge key={index} variant="destructive" className="flex items-center gap-1">
                               {company}
-                              <X 
-                                className="h-3 w-3 cursor-pointer" 
-                                onClick={() => removeBlacklistedCompany(index)}
+                              <X
+                                className="h-3 w-3 cursor-pointer"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  removeBlacklistedCompany(index);
+                                }}
                               />
                             </Badge>
                           ))}

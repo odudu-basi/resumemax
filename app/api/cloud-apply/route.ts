@@ -69,7 +69,7 @@ async function fetchUserProfileData(userId: string) {
     } catch (e) {}
 
     try {
-      const { data } = await supabase.from('education_entries').select('*').eq('user_id', userId).order('start_year', { ascending: false });
+      const { data } = await supabase.from('education_entries').select('*').eq('user_id', userId).order('start_date', { ascending: false });
       if (data) educationEntries = data;
     } catch (e) {}
 
@@ -99,17 +99,25 @@ async function fetchUserProfileData(userId: string) {
       location: userProfile?.location || parsedResumeData?.personalInfo?.location || 'San Francisco',
       linkedinUrl: userProfile?.linkedin_url || parsedResumeData?.personalInfo?.linkedinUrl || null,
       workExperience: experienceEntries.length > 0 ? experienceEntries.map((exp: any) => ({
-        title: exp.role || '',
+        position: exp.position || '',
         company: exp.company || '',
+        location: exp.location || '',
+        startDate: exp.start_date || '',
+        endDate: exp.end_date || '',
+        current: exp.current || false,
         duration: exp.start_date && exp.end_date ? `${exp.start_date} - ${exp.end_date}` :
-                 exp.start_date && exp.is_current ? `${exp.start_date} - Present` : exp.start_date || '',
+                 exp.start_date && exp.current ? `${exp.start_date} - Present` : exp.start_date || '',
         description: exp.description || ''
       })) : parsedResumeData?.experience || [],
       education: educationEntries.length > 0 ? educationEntries.map((edu: any) => ({
-        degree: edu.degree || '',
-        field: edu.major || '',
         school: edu.school || '',
-        year: edu.end_year || edu.start_year || ''
+        degree: edu.degree || '',
+        startDate: edu.start_date || '',
+        endDate: edu.end_date || '',
+        current: edu.current || false,
+        dateRange: edu.start_date && edu.end_date ? `${edu.start_date} - ${edu.end_date}` :
+                   edu.start_date && edu.current ? `${edu.start_date} - Present` :
+                   edu.end_date || edu.start_date || ''
       })) : parsedResumeData?.education || [],
       skills: {
         technical: skillsCerts?.technical_skills || parsedResumeData?.skills?.technical || [],
@@ -118,7 +126,11 @@ async function fetchUserProfileData(userId: string) {
       workAuthorized: workAuth?.work_authorized || true,
       requiresSponsorship: workAuth?.visa_sponsorship_required || false,
       yearsOfExperience: parsedResumeData?.yearsOfExperience || experienceEntries.length.toString() || '3',
-      
+
+      // Work email credentials for login/signup (from @nuclei-mail.com)
+      workEmail: userProfile?.work_email || null,
+      workPassword: userProfile?.work_email_password || null,
+
       // Resume file from user_resumes table (binary content as base64)
       resumeFile: userResume?.file_content ? {
         fileName: userResume.file_name,

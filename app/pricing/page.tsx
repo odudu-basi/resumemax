@@ -253,10 +253,10 @@ export default function PricingPage() {
           className="text-center mb-16"
         >
           <h1 className="text-5xl font-bold text-black mb-4">
-            Simple, Transparent Pricing
+            Stop the Repetitive Work. Focus on Landing Interviews.
           </h1>
           <p className="text-xl text-gray-700 max-w-2xl mx-auto">
-            Choose the plan that fits your job search needs. All plans include AI-powered applications.
+            Choose the plan that fits your job search needs. Let AI handle the tedious applications while you prepare for interviews.
           </p>
         </motion.div>
 
@@ -313,7 +313,7 @@ export default function PricingPage() {
                     </div>
                     <div className="mt-2">
                       <Badge variant="outline" className="text-base font-semibold">
-                        {plan.applications} applications/month
+                        {plan.applications} applications/{plan.period}
                       </Badge>
                     </div>
                     <CardDescription className="text-base mt-2">

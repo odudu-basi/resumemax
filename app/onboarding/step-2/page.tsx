@@ -10,7 +10,6 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useOnboarding } from "@/src/contexts/OnboardingContext";
-import ElevenLabsAgent from "@/src/components/ElevenLabsAgent";
 
 export default function OnboardingStep2() {
   const router = useRouter();
@@ -44,8 +43,8 @@ export default function OnboardingStep2() {
     // Save to context instead of database
     updateOnboardingData('basicInfo', formData);
     console.log('Basic info saved to context:', formData);
-    // Navigate to step 3
-    router.push('/onboarding/step-3');
+    // Navigate to step 2a (resume upload)
+    router.push('/onboarding/step-2a');
   };
 
   return (
@@ -65,15 +64,10 @@ export default function OnboardingStep2() {
         transition={{ duration: 0.5 }}
         className="sticky top-4 z-50 flex justify-center px-4 py-4"
       >
-        <div className="flex items-center justify-between w-full max-w-6xl px-8 py-4 bg-black/60 backdrop-blur-xl border border-white/30 rounded-full shadow-2xl">
+        <div className="flex items-center justify-start w-full max-w-6xl px-8 py-4 bg-black/60 backdrop-blur-xl border border-white/30 rounded-full shadow-2xl">
           <Link href="/" className="flex items-center gap-3">
             <Image src="/logo.png" alt="ResumeMax Logo" width={32} height={32} className="h-8 w-8" />
             <span className="text-lg font-bold text-white">ResumeMax</span>
-          </Link>
-          <Link href="/auth/login">
-            <Button variant="ghost" size="sm" className="text-white hover:bg-white/20">
-              Skip Onboarding
-            </Button>
           </Link>
         </div>
       </motion.nav>
@@ -247,9 +241,6 @@ export default function OnboardingStep2() {
           </div>
         </div>
       </section>
-
-      {/* ElevenLabs AI Agent */}
-      <ElevenLabsAgent />
     </div>
   );
 }

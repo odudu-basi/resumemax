@@ -88,15 +88,17 @@ ${userProfile.resumeUrl ? `- Resume URL: ${userProfile.resumeUrl}` : ''}
 
 WORK EXPERIENCE (${userProfile.workExperience.length} positions):
 ${userProfile.workExperience.map((exp, i) => `
-${i + 1}. ${exp.title} at ${exp.company}
+${i + 1}. ${exp.position} at ${exp.company}${exp.location ? ` (${exp.location})` : ''}
    Duration: ${exp.duration}
    Description: ${exp.description}
 `).join('\n')}
 
 EDUCATION:
-${userProfile.education.map((edu, i) => 
-  `${i + 1}. ${edu.degree} in ${edu.field}, ${edu.school} (${edu.year})`
-).join('\n')}
+${userProfile.education.map((edu, i) => `
+${i + 1}. ${edu.degree}
+   School: ${edu.school}
+   ${edu.dateRange}
+`).join('\n')}
 
 SKILLS:
 - Technical: ${Array.isArray(userProfile.skills.technical) ? userProfile.skills.technical.join(', ') : userProfile.skills.technical}
