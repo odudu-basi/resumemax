@@ -1,238 +1,193 @@
 const { z } = require('zod');
 
-/**
- * Detect if current page is a login/signup page
- */
 async function detectLoginPage(stagehand) {
   console.log('\n🔍 Checking if login/signup is required...');
-
   try {
-    // Use observe to detect login-related elements
     const loginActions = await stagehand.observe(
       "Find login buttons, signup buttons, email/password input fields, or 'sign in' / 'create account' links. Only return actions if this appears to be a login or authentication page."
     );
-
-    // Check for login indicators
     const hasLoginElements = loginActions.some(action => {
       const desc = action.description.toLowerCase();
-      return desc.includes('sign in') ||
-             desc.includes('log in') ||
-             desc.includes('login') ||
+      return desc.includes('sign in') || desc.includes('log in') || desc.includes('login') ||
              (desc.includes('email') && desc.includes('password')) ||
-             desc.includes('create account') ||
-             desc.includes('sign up');
+             desc.includes('create account') || desc.includes('sign up');
     });
-
     if (hasLoginElements) {
       console.log('  ✅ Login page detected!');
-      return {
-        isLoginPage: true,
-        actions: loginActions
-      };
+      return { isLoginPage: true, actions: loginActions };
     }
-
     console.log('  ℹ️  No login required, proceeding with application');
     return { isLoginPage: false };
-
   } catch (error) {
     console.error('  ⚠️  Login detection error:', error.message);
     return { isLoginPage: false };
   }
 }
 
-/**
- * Handle login or account creation
- */
-async function handleLogin(stagehand, userProfile) {
-  console.log('\n🔐 Starting login handler...');
+async function handleLogin(stagehand, userProfile, maxRetries = 2) {
+  console.log('\n═══════════════════════════════════════');
+  console.log('  PHASE 0: Authentication');
+  console.log('═══════════════════════════════════════');
+  let phase0Cost = 0;
+  let phase0Usage = { input_tokens: 0, output_tokens: 0 };
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    console.log(`\n🔐 Login attempt ${attempt}/${maxRetries}...`);
+    try {
+      console.log('  🔧 Attempting manual login/signup...');
+      const manualResult = await tryManualLogin(stagehand, userProfile);
+      if (manualResult.success) {
+        console.log('  ✅ Manual login successful!');
+        return { success: true, method: 'manual', attempt, cost: phase0Cost, usage: phase0Usage };
+      }
+      console.log('  ⚠️  Manual login failed, trying agent fallback...');
+      const agentResult = await agentLoginFallback(stagehand, userProfile);
+      if (agentResult.usage) {
+        const inputCost = (agentResult.usage.input_tokens / 1000000) * 1.25;
+        const outputCost = (agentResult.usage.output_tokens / 1000000) * 10;
+        phase0Cost += inputCost + outputCost;
+        phase0Usage.input_tokens += agentResult.usage.input_tokens || 0;
+        phase0Usage.output_tokens += agentResult.usage.output_tokens || 0;
+      }
+      if (agentResult.success) {
+        console.log('  ✅ Agent login successful!');
+        console.log(`  💰 Phase 0 cost: $${phase0Cost.toFixed(4)}`);
+        return { success: true, method: 'agent', attempt, cost: phase0Cost, usage: phase0Usage };
+      }
+      console.log(`  ❌ Attempt ${attempt} failed`);
+    } catch (error) {
+      console.error(`  ❌ Login attempt ${attempt} error:`, error.message);
+    }
+    if (attempt < maxRetries) {
+      console.log('  ⏳ Waiting 3 seconds before retry...');
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+  }
+  console.log('  ❌ All login attempts failed');
+  console.log(`  💰 Phase 0 total cost: $${phase0Cost.toFixed(4)}`);
+  return { success: false, error: 'Login failed after all attempts', cost: phase0Cost, usage: phase0Usage };
+}
 
+async function tryManualLogin(stagehand, userProfile) {
   try {
-    // Step 1: Determine if we need to create account or login
     const pageText = await stagehand.page.evaluate(() => document.body.innerText.toLowerCase());
     const needsAccountCreation = pageText.includes('create account') ||
                                   pageText.includes('sign up') ||
                                   pageText.includes('register');
-
+    const workEmail = userProfile.workEmail;
+    const workPassword = userProfile.workPassword;
+    const firstName = userProfile.first_name || userProfile.fullName?.split(' ')[0] || '';
+    const lastName = userProfile.last_name || userProfile.fullName?.split(' ').slice(1).join(' ') || '';
+    const phone = userProfile.phone || '';
     if (needsAccountCreation) {
-      console.log('  📝 Account creation detected, will create new account');
-      await createAccount(stagehand, userProfile);
+      console.log('    📝 Creating account...');
+      const signupInstruction = `Create a new account using:
+- Email: ${workEmail}
+- Password: ${workPassword}
+- First Name: ${firstName}
+- Last Name: ${lastName}` + (phone ? `\n- Phone: ${phone}` : '') + `\n\nFill in all required fields and submit the form.`;
+      await stagehand.act(signupInstruction, {});
     } else {
-      console.log('  🔑 Login form detected, attempting login');
-      await performLogin(stagehand, userProfile);
+      console.log('    🔑 Logging in...');
+      await stagehand.act(`Log in using:
+- Email: ${workEmail}
+- Password: ${workPassword}
+
+Find and fill the email and password fields, then click the login button.`, {});
     }
-
-    // Step 2: Handle email verification if needed
-    await handleEmailVerification(stagehand, userProfile);
-
-    console.log('  ✅ Login completed successfully!');
-    return { success: true };
-
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    const stillOnLogin = await detectLoginPage(stagehand);
+    return { success: !stillOnLogin.isLoginPage };
   } catch (error) {
-    console.error('  ❌ Login handler error:', error.message);
+    console.error('    ⚠️  Manual login error:', error.message);
     return { success: false, error: error.message };
   }
 }
 
-/**
- * Create a new account
- */
-async function createAccount(stagehand, userProfile) {
-  console.log('\n  📝 Creating new account...');
-  console.log(`    📧 Using work email: ${userProfile.workEmail}`);
-
+async function agentLoginFallback(stagehand, userProfile) {
+  console.log('    🤖 Starting agent login fallback...');
   try {
-    const phone = userProfile.phone || '';
-    const workEmail = userProfile.workEmail; // Work email address (@nuclei-mail.com)
-    const workPassword = userProfile.workPassword; // Work email password
-
-    const actInstruction = `Create a new account using these details:
-- Email: ${workEmail}
-- Password: ${workPassword}
-- Full Name: ${userProfile.fullName}
-${phone ? `- Phone: ${phone}` : '- Phone: skip if not required'}
-
-Fill in all required fields and submit the form. If there are optional fields, you can skip them.`;
-
-    // Use act() to let the agent intelligently fill the signup form
-    await stagehand.act(actInstruction);
-
-    console.log('    ✅ Account creation form submitted');
-
-    // Wait for page to load after submission
-    await stagehand.page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-  } catch (error) {
-    console.error('    ⚠️  Account creation error:', error.message);
-    throw error;
-  }
-}
-
-/**
- * Perform login
- */
-async function performLogin(stagehand, userProfile) {
-  console.log('\n  🔑 Logging in...');
-  console.log(`    📧 Using work email: ${userProfile.workEmail}`);
-
-  try {
-    const workEmail = userProfile.workEmail; // Work email address (@nuclei-mail.com)
-    const workPassword = userProfile.workPassword; // Work email password
-
-    const actInstruction = `Log in to the account using:
-- Email/Username: ${workEmail}
-- Password: ${workPassword}
-
-Find the email and password fields, fill them in, and click the login/sign in button.`;
-
-    // Use act() to let the agent fill login form
-    await stagehand.act(actInstruction);
-
-    console.log('    ✅ Login form submitted');
-
-    // Wait for page to load
-    await stagehand.page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-  } catch (error) {
-    console.error('    ⚠️  Login error:', error.message);
-    throw error;
-  }
-}
-
-/**
- * Handle email verification by navigating to Gmail
- */
-async function handleEmailVerification(stagehand, userProfile) {
-  console.log('\n  📧 Checking for email verification requirement...');
-
-  try {
-    // Check if verification is needed
-    const pageText = await stagehand.page.evaluate(() => document.body.innerText.toLowerCase());
-    const needsVerification = (pageText.includes('verify') && pageText.includes('email')) ||
-                              pageText.includes('verification code') ||
-                              pageText.includes('check your email') ||
-                              pageText.includes('confirmation code');
-
-    if (!needsVerification) {
-      console.log('    ℹ️  No email verification required');
-      return;
-    }
-
-    console.log('    🔔 Email verification required!');
-
-    // Get current URL to return to
-    const applicationUrl = stagehand.page.url();
-    console.log(`    💾 Saved application URL: ${applicationUrl}`);
-
-    // Navigate to Gmail
-    console.log('    📬 Navigating to Gmail...');
-    const workEmail = userProfile.workEmail;
-    const workPassword = userProfile.workPassword;
-    console.log(`    📧 Checking work email: ${workEmail}`);
-
-    await stagehand.page.goto('https://mail.google.com', { waitUntil: 'networkidle' });
-    await new Promise(resolve => setTimeout(resolve, 3000));
-
-    // Log in to Gmail
-    console.log('    🔐 Logging into Gmail...');
-    await stagehand.act(
-      `Log in to Gmail using:
-- Email/Username: ${workEmail}
-- Password: ${workPassword}
-
-Find and fill the login form, then submit it.`
-    );
-
-    await new Promise(resolve => setTimeout(resolve, 3000));
-
-    // Use agent to find and extract verification code
-    console.log('    🔍 Looking for verification email...');
-    await stagehand.act(
-      'Find the most recent email with a verification code or confirmation code. Look for emails from the company or application system we just signed up for. Open that email.'
-    );
-
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    // Extract the verification code using extract()
-    const codeSchema = z.object({
-      code: z.string().describe("The verification or confirmation code from the email")
+    const agent = stagehand.agent({
+      cua: true,
+      model: {
+        modelName: "google/gemini-2.5-computer-use-preview-10-2025",
+        apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
+      },
+      systemPrompt: 'You are a login/signup assistant. Your task is to help users log into or create accounts on job application sites.'
     });
+    const firstName = userProfile.first_name || userProfile.fullName?.split(' ')[0] || '';
+    const lastName = userProfile.last_name || userProfile.fullName?.split(' ').slice(1).join(' ') || '';
+    const userContext = `
+USER PROFILE:
+Name: ${firstName} ${lastName}
+Work Email: ${userProfile.workEmail}
+Work Password: ${userProfile.workPassword}
+Phone: ${userProfile.phone || 'N/A'}
+Location: ${userProfile.location || 'N/A'}
+LinkedIn: ${userProfile.linkedinUrl || 'N/A'}
 
-    const extracted = await stagehand.extract(
-      "Find and extract the verification code, confirmation code, or OTP from this email. It's usually a 4-8 digit number or alphanumeric code.",
-      codeSchema
-    );
+Use any information from this profile that may be requested during signup.
+`;
+    const instruction = `${userContext}
 
-    const verificationCode = extracted.code;
-    console.log(`    ✅ Found verification code: ${verificationCode}`);
+Log into this application or create an account if needed.
 
-    // Navigate back to application
-    console.log('    🔙 Returning to application...');
-    await stagehand.page.goto(applicationUrl, { waitUntil: 'networkidle' });
-    await new Promise(resolve => setTimeout(resolve, 2000));
+Steps to follow:
+1. Check if there's a login form or signup form on the current page
+2. Try to log in with the work email and work password
+3. If it says "account doesn't exist", "user not found", or similar:
+   - Create a new account using the user's information from the profile above
+   - Use work email as the email
+   - Use work password as the password
+   - Fill in first name, last name, and any other required fields from the profile
+   - Submit the signup form
+4. If a verification code or link is requested after signup/login:
+   - Navigate to https://mail.google.com
+   - Log in with the work email and work password
+   - Find the MOST RECENT email from the site you were just working on
+   - Look for verification code or confirmation link
+   - If it's a link, click it
+   - If it's a code, copy it, navigate back to the application, and enter it in the verification field
+   - Submit the verification
+5. Complete the login/signup process and ensure you're logged into the application
 
-    // Enter the verification code
-    console.log('    ⌨️  Entering verification code...');
-    await stagehand.act(
-      `Enter the verification code "${verificationCode}" in the verification code input field and submit it.`
-    );
-
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    console.log('    ✅ Email verification completed!');
-
+IMPORTANT:
+- Only look at the most recent emails in Gmail (top of inbox)
+- Make sure the verification email is from the application site, not spam
+- After verification, ensure you end up logged into the application
+- If login succeeds without verification, stop and return success`;
+    console.log('    🚀 Executing agent login/signup...');
+    const result = await agent.execute({
+      instruction,
+      maxSteps: 35,
+      highlightCursor: false
+    });
+    console.log(`    ${result.success ? '✅' : '❌'} Agent completed`);
+    console.log(`    📊 Steps taken: ${result.actions ? result.actions.length : 'N/A'}`);
+    if (result.usage) {
+      const inputTokens = result.usage.input_tokens || 0;
+      const outputTokens = result.usage.output_tokens || 0;
+      const inputCost = (inputTokens / 1000000) * 1.25;
+      const outputCost = (outputTokens / 1000000) * 10;
+      const totalCost = inputCost + outputCost;
+      console.log(`    💰 Agent cost: $${totalCost.toFixed(4)}`);
+      console.log(`       Input tokens: ${inputTokens.toLocaleString()}`);
+      console.log(`       Output tokens: ${outputTokens.toLocaleString()}`);
+    }
+    return {
+      success: result.success,
+      usage: result.usage,
+      steps: result.actions ? result.actions.length : 0,
+      messages: result.messages || []
+    };
   } catch (error) {
-    console.error('    ⚠️  Email verification error:', error.message);
-    // Don't throw - continue even if verification fails
-    console.log('    ℹ️  Continuing without verification...');
+    console.error('    ❌ Agent login error:', error.message);
+    return { success: false, error: error.message, usage: null };
   }
 }
 
-// Export the functions
 module.exports = {
   detectLoginPage,
   handleLogin,
-  createAccount,
-  performLogin,
-  handleEmailVerification
+  tryManualLogin,
+  agentLoginFallback
 };

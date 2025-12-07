@@ -62,7 +62,7 @@ app.post('/apply', async (req, res) => {
     // Pre-upload resume if available (before agent starts)
     if (userProfile.resumeFile && userProfile.resumeFile.contentBase64) {
       console.log('📄 Attempting to pre-upload resume...');
-      const resumeUploaded = await uploadResumeToForm(page, userProfile.resumeFile);
+      const resumeUploaded = await uploadResumeToForm(page, userProfile.resumeFile, 'resume');
       if (resumeUploaded) {
         console.log('✅ Resume pre-uploaded successfully');
       } else {
@@ -70,14 +70,14 @@ app.post('/apply', async (req, res) => {
       }
     }
 
-    // Pre-upload cover letter if available (right after resume)
-    if (coverLetter && coverLetter.contentBase64) {
-      console.log('📝 Attempting to pre-upload cover letter PDF...');
-      const coverLetterUploaded = await uploadResumeToForm(page, coverLetter); // Use same upload method
+    // Always attempt to upload cover letter if provided (helper will check if form has cover letter field)
+    if (coverLetter) {
+      console.log('📝 Checking for cover letter field in application...');
+      const coverLetterUploaded = await uploadResumeToForm(page, coverLetter, 'cover letter');
       if (coverLetterUploaded) {
-        console.log('✅ Cover letter pre-uploaded successfully');
+        console.log('✅ Cover letter uploaded to form');
       } else {
-        console.log('⚠️  Cover letter pre-upload failed');
+        console.log('ℹ️  No cover letter field in this application form');
       }
     }
 

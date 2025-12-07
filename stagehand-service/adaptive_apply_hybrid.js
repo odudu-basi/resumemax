@@ -237,8 +237,11 @@ async function handleVerification(stagehand, userProfile) {
   console.log('\n📧 Verification Handler: Checking for verification requirement...');
 
   try {
+    // Get the page object from context
+    const page = stagehand.context.pages()[0];
+
     // Check if verification is needed on current page
-    const pageText = await stagehand.page.evaluate(() => document.body.innerText.toLowerCase());
+    const pageText = await page.evaluate(() => document.body.innerText.toLowerCase());
     const needsVerification = (pageText.includes('verify') && pageText.includes('email')) ||
                               pageText.includes('verification code') ||
                               pageText.includes('enter code') ||
@@ -255,12 +258,12 @@ async function handleVerification(stagehand, userProfile) {
     console.log('  🔔 Verification required! Starting verification flow...');
 
     // Save the current application URL to return to
-    const applicationUrl = stagehand.page.url();
+    const applicationUrl = page.url();
     console.log(`  💾 Saved application URL: ${applicationUrl}`);
 
     // Step 1: Navigate to Gmail
     console.log('\n  📬 Step 1: Navigating to Gmail...');
-    await stagehand.page.goto('https://mail.google.com', { waitUntil: 'networkidle' });
+    await page.goto('https://mail.google.com', { waitUntil: 'networkidle' });
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     // Step 2: Check if already logged in, if not, log in
@@ -277,11 +280,11 @@ async function handleVerification(stagehand, userProfile) {
       console.log('    🔑 Gmail login required, entering credentials...');
 
       // Fill email
-      await stagehand.act(`Enter "${gmailEmail}" in the email input field and press Enter or click Next`);
+      await stagehand.act(`Enter "${gmailEmail}" in the email input field and press Enter or click Next`, {});
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       // Fill password
-      await stagehand.act(`Enter "${gmailPassword}" in the password input field and press Enter or click Next`);
+      await stagehand.act(`Enter "${gmailPassword}" in the password input field and press Enter or click Next`, {});
       await new Promise(resolve => setTimeout(resolve, 3000));
 
       console.log('    ✅ Gmail login completed');
@@ -292,7 +295,8 @@ async function handleVerification(stagehand, userProfile) {
     // Step 3: Find and open the verification email
     console.log('\n  🔍 Step 3: Finding verification email...');
     await stagehand.act(
-      "Find and click on the most recent email that contains a verification code, confirmation code, or is from the company/service we just signed up for. Look for emails in the inbox."
+      "Find and click on the most recent email that contains a verification code, confirmation code, or is from the company/service we just signed up for. Look for emails in the inbox.",
+      {}
     );
     await new Promise(resolve => setTimeout(resolve, 2000));
 
@@ -312,13 +316,14 @@ async function handleVerification(stagehand, userProfile) {
 
     // Step 5: Return to application
     console.log('\n  🔙 Step 5: Returning to application...');
-    await stagehand.page.goto(applicationUrl, { waitUntil: 'networkidle' });
+    await page.goto(applicationUrl, { waitUntil: 'networkidle' });
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     // Step 6: Enter the verification code
     console.log('  ⌨️  Step 6: Entering verification code...');
     await stagehand.act(
-      `Enter the verification code "${verificationCode}" in the verification code input field and submit it. Click the submit or verify button.`
+      `Enter the verification code "${verificationCode}" in the verification code input field and submit it. Click the submit or verify button.`,
+      {}
     );
     await new Promise(resolve => setTimeout(resolve, 3000));
 
@@ -552,6 +557,8 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
   const startTime = Date.now();
   let phase1Cost = 0;
   let phase2Cost = 0;
+  let phase0Cost = 0;
+  let verificationCost = 0;
   let phase1Tokens = { input: 0, output: 0 };
   let phase2Tokens = { input: 0, output: 0 };
   let chatGPTTokens = 0;
@@ -567,6 +574,7 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
     if (loginDetection.isLoginPage) {
       console.log('🔐 Login/signup page detected, handling authentication...');
       const loginResult = await handleLogin(stagehand, userProfile);
+      phase0Cost = loginResult.cost || 0;
       
       if (!loginResult.success) {
         console.error('❌ Login failed, but continuing with application attempt...');
@@ -693,7 +701,13 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
 
       if (fallbackResult.verified) {
         console.log('✅ Agent fallback verification completed successfully!');
-        verificationResult = fallbackResult; // Use fallback result as main result
+        verificationResult = fallbackResult;
+        // Track verification cost
+        if (fallbackResult.usage) {
+          const inputCost = (fallbackResult.usage.input_tokens / 1000000) * 1.25;
+          const outputCost = (fallbackResult.usage.output_tokens / 1000000) * 10;
+          verificationCost = inputCost + outputCost;
+        }
       } else {
         console.log('❌ Both verification attempts failed');
         console.log(`   Manual: ${verificationResult.error || verificationResult.reason}`);
@@ -701,7 +715,7 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
       }
     }
 
-    const totalCost = phase1Cost + phase2Cost;
+    const totalCost = phase0Cost + phase1Cost + phase2Cost + verificationCost;
     const executionTime = ((Date.now() - startTime) / 1000).toFixed(2);
     const totalTokens = phase1Tokens.input + phase1Tokens.output + phase2Tokens.input + phase2Tokens.output;
 
@@ -710,8 +724,10 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
     console.log('═══════════════════════════════════════');
     console.log(`⏱️  Total time: ${executionTime}s`);
     console.log(`💰 Total cost: $${totalCost.toFixed(4)}`);
-    console.log(`   Phase 1: $${phase1Cost.toFixed(4)}`);
-    console.log(`   Phase 2: $${phase2Cost.toFixed(4)}`);
+    console.log(`   Phase 0 (Login): $${phase0Cost.toFixed(4)}`);
+    console.log(`   Phase 1 (Form): ${phase1Cost.toFixed(4)}`);
+    console.log(`   Phase 2 (Agent): ${phase2Cost.toFixed(4)}`);
+    console.log(`   Verification: ${verificationCost.toFixed(4)}`);
     console.log(`📊 Fields filled (Phase 1): ${allFilledFields.reduce((sum, p) => sum + p.filledCount, 0)}`);
     console.log(`📊 Agent steps (Phase 2): ${agentResult.actions ? agentResult.actions.length : 'N/A'}`);
     console.log(`\n🔢 Token Usage:`);
