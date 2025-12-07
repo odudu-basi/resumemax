@@ -35,7 +35,7 @@ const adaptiveFormFill = async (stagehand, userProfile, sessionId, sessionUrl, r
           let uploaded = false;
           for (const action of uploadActions) {
             try {
-              await stagehand.act(action);
+              await stagehand.act(action, {});
               console.log(`  ✅ Resume uploaded successfully`);
               uploaded = true;
               await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for upload to process
@@ -200,7 +200,7 @@ const adaptiveFormFill = async (stagehand, userProfile, sessionId, sessionUrl, r
     const userContext = `
 USER PROFILE:
 Name: ${userProfile.fullName}
-Email: ${userProfile.email}
+Email: ${userProfile.workEmail}
 Phone: ${userProfile.phone}
 Location: ${userProfile.location}
 LinkedIn: ${userProfile.linkedinUrl || 'N/A'}
@@ -403,13 +403,13 @@ Respond with a JSON object: {"answers": ["answer1", "answer2", ...]}`
           // Regular fill for non-sensitive fields
           if (field.fieldType === 'dropdown' || field.fieldType === 'radio') {
             // For dropdowns and radios, use selection language
-            await stagehand.act(`For the field "${field.label}", select the option that best matches: "${answer}"`);
+            await stagehand.act(`For the field "${field.label}", select the option that best matches: "${answer}"`, {});
             filled = true;
           } else if (field.fieldType === 'checkbox') {
             // For checkboxes, use check/uncheck language
             const shouldCheck = ['yes', 'true', '1', 'checked'].includes(answer.toLowerCase());
             if (shouldCheck) {
-              await stagehand.act(`check the "${field.label}" checkbox`);
+              await stagehand.act(`check the "${field.label}" checkbox`, {});
               filled = true;
             } else {
               console.log(`  ⏭️  Skipping checkbox "${field.label}" - answer is No/False`);
@@ -418,11 +418,11 @@ Respond with a JSON object: {"answers": ["answer1", "answer2", ...]}`
             }
           } else if (field.fieldType === 'textarea') {
             // For textareas, use fill language
-            await stagehand.act(`fill the "${field.label}" textarea with "${answer}"`);
+            await stagehand.act(`fill the "${field.label}" textarea with "${answer}"`, {});
             filled = true;
           } else {
             // For text inputs (text, email, phone, number, url, date)
-            await stagehand.act(`fill the "${field.label}" field with "${answer}"`);
+            await stagehand.act(`fill the "${field.label}" field with "${answer}"`, {});
             filled = true;
           }
         }
@@ -465,7 +465,7 @@ Respond with a JSON object: {"answers": ["answer1", "answer2", ...]}`
       let submitted = false;
       for (const action of submitActions) {
         try {
-          await stagehand.act(action);
+          await stagehand.act(action, {});
           console.log(`  ✅ Application submitted successfully: ${action}`);
           submitted = true;
           break;

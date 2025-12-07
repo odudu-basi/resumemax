@@ -136,39 +136,7 @@ function SignUpForm() {
                   Please click the link in the email to verify your account.
                 </p>
 
-                {/* Gmail Connection Prompt */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                  <Mail className="h-8 w-8 text-blue-600 mx-auto mb-2" />
-                  <h3 className="font-semibold text-gray-900 mb-2">
-                    Connect Your Gmail (Recommended)
-                  </h3>
-                  <p className="text-sm text-gray-600 mb-4">
-                    Enable automatic email verification for job applications.
-                    We&apos;ll handle verification codes and confirmation links automatically.
-                  </p>
-                  <Button
-                    onClick={() => {
-                      // The user will be created after they verify their email
-                      // For now, we'll store in localStorage and prompt again on dashboard
-                      localStorage.setItem('prompt_gmail_connection', 'true');
-                      router.push('/dashboard');
-                    }}
-                    className="w-full bg-blue-600 hover:bg-blue-700 mb-2"
-                  >
-                    Connect Gmail Now
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => router.push('/dashboard')}
-                    className="w-full"
-                  >
-                    Skip for Now
-                  </Button>
-                </div>
 
-                <p className="text-xs text-gray-500">
-                  You can connect Gmail later from your dashboard settings
-                </p>
               </CardContent>
             </Card>
           </motion.div>

@@ -71,7 +71,7 @@ Summary: ${jobDescription.summary}
 
 USER PROFILE:
 Name: ${userProfile.fullName}
-Email: ${userProfile.email}
+Email: ${userProfile.workEmail}
 Phone: ${userProfile.phone}
 Location: ${userProfile.location}
 Work Authorization: ${userProfile.workAuthorized ? 'Yes' : 'No'}
@@ -265,8 +265,8 @@ async function handleVerification(stagehand, userProfile) {
 
     // Step 2: Check if already logged in, if not, log in
     console.log('  🔐 Step 2: Logging into Gmail...');
-    const gmailEmail = userProfile.workspaceEmail;
-    const gmailPassword = userProfile.workspacePassword;
+    const gmailEmail = userProfile.workEmail;
+    const gmailPassword = userProfile.workPassword;
 
     // Use observe to check if login is needed
     const loginElements = await stagehand.observe(
@@ -362,8 +362,8 @@ If verification IS needed:
 1. Note the current page URL (you'll need to return here)
 2. Navigate to https://mail.google.com
 3. Log in to Gmail using:
-   - Email: ${userProfile.workspaceEmail}
-   - Password: ${userProfile.workspacePassword}
+   - Email: ${userProfile.workEmail}
+   - Password: ${userProfile.workPassword}
 4. Find the most recent email with a verification code or verification link for the application/service we just signed up for
 5. Extract the verification code from the email (it's usually a 4-8 digit or alphanumeric code)
 6. Navigate back to the application page
@@ -477,7 +477,7 @@ PERSONAL INFO:
 - Full Name: ${userProfile.fullName}
 - First Name: ${firstName}
 - Last Name: ${lastName}
-- Email: ${userProfile.email}
+- Email: ${userProfile.workEmail}
 - Phone: ${userProfile.phone}
 - Location: ${userProfile.location}
 
