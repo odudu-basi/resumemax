@@ -622,7 +622,7 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
       // Track fields from this page
       allFilledFields.push({
         page: pageNumber,
-        filledCount: fillResults.filledCount,
+        filledCount: allFilledFields.reduce((sum, p) => sum + p.filledCount, 0),
         skippedCount: fillResults.skippedCount,
         errorCount: fillResults.errorCount
       });
@@ -712,7 +712,7 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
     console.log(`💰 Total cost: $${totalCost.toFixed(4)}`);
     console.log(`   Phase 1: $${phase1Cost.toFixed(4)}`);
     console.log(`   Phase 2: $${phase2Cost.toFixed(4)}`);
-    console.log(`📊 Fields filled (Phase 1): ${fillResults.filledCount}`);
+    console.log(`📊 Fields filled (Phase 1): ${allFilledFields.reduce((sum, p) => sum + p.filledCount, 0)}`);
     console.log(`📊 Agent steps (Phase 2): ${agentResult.actions ? agentResult.actions.length : 'N/A'}`);
     console.log(`\n🔢 Token Usage:`);
     console.log(`   Total: ${totalTokens.toLocaleString()} tokens`);
