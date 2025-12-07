@@ -182,16 +182,12 @@ async function fillFormFields(stagehand, actions, answers) {
 
         try {
           // Step 1: Click to open dropdown
-          await stagehand.act(`click the ${description}`, {
-            model: "openai/gpt-4o"
-          });
+          await stagehand.act(`click the ${description}`, {});
 
           await new Promise(resolve => setTimeout(resolve, 500));
 
           // Step 2: Select the option
-          await stagehand.act(`select "${answer}"`, {
-            model: "openai/gpt-4o"
-          });
+          await stagehand.act(`select "${answer}"`, {});
 
           filledCount++;
           console.log(`    ✅ Selected: ${answer}`);
@@ -206,9 +202,7 @@ async function fillFormFields(stagehand, actions, answers) {
       else {
         console.log(`  📝 Filling: ${description.substring(0, 50)}...`);
 
-        await stagehand.act(`enter "${answer}" in the ${description}`, {
-          model: "openai/gpt-4o"
-        });
+        await stagehand.act(`enter "${answer}" in the ${description}`, {});
 
         filledCount++;
         console.log(`    ✅ Entered: ${answer.substring(0, 50)}${answer.length > 50 ? '...' : ''}`);

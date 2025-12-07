@@ -141,16 +141,6 @@ export default function Home() {
                     <span className="hidden sm:inline">Dashboard</span>
                   </Button>
                 </Link>
-                <Link href="/onboarding">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-white hover:bg-white/20 flex items-center gap-2"
-                  >
-                    <Sparkles className="h-4 w-4" />
-                    <span className="hidden sm:inline">Onboarding</span>
-                  </Button>
-                </Link>
                 <Button
                   variant="ghost"
                   size="sm"
