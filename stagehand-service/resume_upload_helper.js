@@ -21,16 +21,18 @@ async function uploadResumeToForm(page, documentData, documentType = 'resume') {
 
     if (documentType === 'cover letter') {
       // For cover letter, look for second file input or one with "cover" in attributes
-      const allFileInputs = await page.locator('input[type="file"]').all();
+      const fileInputsLocator = page.locator('input[type="file"]');
+      const fileInputCount = await fileInputsLocator.count();
 
-      if (allFileInputs.length < 2) {
+      if (fileInputCount < 2) {
         console.log('  ℹ️  No cover letter field found in form (only one file input exists)');
         return false;
       }
 
       // Try to find input with "cover" in name, id, or aria-label
       let coverInput = null;
-      for (const input of allFileInputs) {
+      for (let i = 0; i < fileInputCount; i++) {
+        const input = fileInputsLocator.nth(i);
         const name = await input.getAttribute('name') || '';
         const id = await input.getAttribute('id') || '';
         const ariaLabel = await input.getAttribute('aria-label') || '';
@@ -44,7 +46,7 @@ async function uploadResumeToForm(page, documentData, documentType = 'resume') {
       }
 
       // If no specific cover letter input found, use second file input
-      fileInput = coverInput || allFileInputs[1];
+      fileInput = coverInput || fileInputsLocator.nth(1);
       console.log(`  📍 Using ${coverInput ? 'labeled cover letter' : 'second file'} input`);
 
     } else {

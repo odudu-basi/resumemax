@@ -173,6 +173,7 @@ async function fillFormFields(stagehand, actions, answers) {
       continue;
     }
 
+    // Wrap each field operation in comprehensive error handling
     try {
       const descLower = description.toLowerCase();
 
@@ -182,19 +183,27 @@ async function fillFormFields(stagehand, actions, answers) {
 
         try {
           // Step 1: Click to open dropdown
-          await stagehand.act(`click the ${description}`, {});
+          const clickResult = await stagehand.act(`click the ${description}`, {});
+          
+          if (!clickResult || typeof clickResult !== 'object') {
+            throw new Error('Invalid click response');
+          }
 
           await new Promise(resolve => setTimeout(resolve, 500));
 
           // Step 2: Select the option
-          await stagehand.act(`select "${answer}"`, {});
+          const selectResult = await stagehand.act(`select "${answer}"`, {});
+          
+          if (!selectResult || typeof selectResult !== 'object') {
+            throw new Error('Invalid select response');
+          }
 
           filledCount++;
           console.log(`    ✅ Selected: ${answer}`);
 
         } catch (dropdownError) {
-          console.log(`    ⚠️  Dropdown failed, leaving empty`);
-          skippedCount++;
+          console.log(`    ⚠️  Dropdown failed (${dropdownError.message}), leaving empty`);
+          errorCount++; // Count as error, not skip
         }
 
       }
@@ -202,17 +211,31 @@ async function fillFormFields(stagehand, actions, answers) {
       else {
         console.log(`  📝 Filling: ${description.substring(0, 50)}...`);
 
-        await stagehand.act(`enter "${answer}" in the ${description}`, {});
-
-        filledCount++;
-        console.log(`    ✅ Entered: ${answer.substring(0, 50)}${answer.length > 50 ? '...' : ''}`);
+        try {
+          const result = await stagehand.act(`enter "${answer}" in the ${description}`, {});
+          
+          // Validate that we got a proper response
+          if (result && typeof result === 'object') {
+            filledCount++;
+            console.log(`    ✅ Entered: ${answer.substring(0, 50)}${answer.length > 50 ? '...' : ''}`);
+          } else {
+            console.log(`    ⚠️  Invalid response from stagehand.act, but continuing...`);
+            filledCount++; // Still count as filled since no error was thrown
+          }
+        } catch (actError) {
+          console.log(`    ❌ Act failed: ${actError.message}`);
+          errorCount++;
+          continue; // Skip to next field
+        }
       }
 
       await new Promise(resolve => setTimeout(resolve, 300));
 
     } catch (error) {
       console.error(`  ❌ Error filling ${description}:`, error.message);
+      console.log(`    🔄 Field will be handled by Phase 2 agent fallback`);
       errorCount++;
+      // Continue to next field - don't let one field failure stop the entire process
     }
   }
 
@@ -692,13 +715,22 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
       phase1Tokens.output = 500;
       phase1Cost = 0.08;
 
-      // Fill form
-      const fillResults = await fillFormFields(stagehand, formActions, answers);
+      // Fill form (with error resilience)
+      let fillResults = { filledCount: 0, skippedCount: 0, errorCount: 0 };
+      
+      try {
+        fillResults = await fillFormFields(stagehand, formActions, answers);
+        console.log(`\n📊 Phase 1 Results: ✅ ${fillResults.filledCount} filled, ⏭️ ${fillResults.skippedCount} skipped, ❌ ${fillResults.errorCount} errors`);
+      } catch (phase1Error) {
+        console.error(`\n❌ Phase 1 failed with error: ${phase1Error.message}`);
+        console.log(`\n🔄 Continuing to Phase 2 (Agent Fallback) to handle remaining fields...`);
+        fillResults.errorCount = formActions.length; // Mark all as errors for tracking
+      }
       
       // Track fields from this page
       allFilledFields.push({
         page: pageNumber,
-        filledCount: allFilledFields.reduce((sum, p) => sum + p.filledCount, 0),
+        filledCount: fillResults.filledCount,
         skippedCount: fillResults.skippedCount,
         errorCount: fillResults.errorCount
       });
@@ -706,6 +738,7 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
 
       console.log('\n═══════════════════════════════════════');
       console.log('  PHASE 2: Agent Review & Completion');
+      console.log('  (Handles remaining/failed fields from Phase 1)');
       console.log('═══════════════════════════════════════');
 
       const agentResult = await agentReviewAndComplete(stagehand, userProfile, jobDescription);

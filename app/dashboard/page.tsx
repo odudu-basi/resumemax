@@ -36,6 +36,7 @@ import {
   Loader2,
   CheckCircle2,
   Zap,
+  BarChart3,
   AlertCircle,
   Crown,
   Star,
@@ -4557,7 +4558,35 @@ export default function Dashboard() {
             Upload your resume file (PDF, DOC, DOCX). This will be used for job applications and matching.
           </p>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-6">
+          {/* Resume Action Buttons */}
+          <div className="grid gap-4 md:grid-cols-3">
+            <Button
+              onClick={() => router.push('/create-resume')}
+              className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+            >
+              <FileText className="h-4 w-4" />
+              Create Resume
+            </Button>
+            <Button
+              onClick={() => router.push('/tailor-resume')}
+              variant="outline"
+              className="flex items-center gap-2 border-blue-600 text-blue-600 hover:bg-blue-50"
+            >
+              <Zap className="h-4 w-4" />
+              Tailor Resume
+            </Button>
+            <Button
+              onClick={() => router.push('/rate-resume')}
+              variant="outline"
+              className="flex items-center gap-2 border-green-600 text-green-600 hover:bg-green-50"
+            >
+              <BarChart3 className="h-4 w-4" />
+              Rate Resume
+            </Button>
+          </div>
+
+          <div className="space-y-4">
           {resumeLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-blue-600" />

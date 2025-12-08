@@ -425,7 +425,7 @@ export default function Home() {
                   <Button 
                     size="lg" 
                     className="w-full"
-                    onClick={() => handleFeatureClick('/create-resume')}
+                    onClick={() => handleFeatureClick('/onboarding')}
                   >
                     Start Building
                   </Button>
@@ -459,7 +459,7 @@ export default function Home() {
                     size="lg"
                     variant="outline"
                     className="w-full border-gray-800 text-gray-800 hover:bg-gray-50"
-                    onClick={() => handleFeatureClick('/rate-resume')}
+                    onClick={() => handleFeatureClick('/onboarding')}
                   >
                     Rate Now
                   </Button>
@@ -493,7 +493,7 @@ export default function Home() {
                     size="lg"
                     variant="outline"
                     className="w-full border-gray-800 text-gray-800 hover:bg-gray-50"
-                    onClick={() => handleFeatureClick('/tailor-resume')}
+                    onClick={() => handleFeatureClick('/onboarding')}
                   >
                     Optimize Now
                   </Button>
