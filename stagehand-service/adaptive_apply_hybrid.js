@@ -763,13 +763,13 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
       // Check if we moved to a new page (Next clicked) or stayed (Submit clicked)
       await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for page transition
       
-      const pages = stagehand.context.pages();
-      if (!pages || pages.length === 0) {
+      const pagesAfterPhase2 = stagehand.context.pages();
+      if (!pagesAfterPhase2 || pagesAfterPhase2.length === 0) {
         console.log(`❌ No pages available in context after Phase 2`);
         throw new Error('Browser context lost - no pages available');
       }
       
-      const page2 = pages[0];
+      const page2 = pagesAfterPhase2[0];
       const urlAfterPhase2 = page2.url();
       
       // Check if URL changed or if we can find new form fields
