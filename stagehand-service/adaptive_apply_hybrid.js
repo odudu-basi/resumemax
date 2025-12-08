@@ -255,9 +255,10 @@ async function handleVerification(stagehand, userProfile) {
     const applicationUrl = page.url();
     console.log(`  💾 Saved application URL: ${applicationUrl}`);
 
-    // Step 1: Navigate to Gmail
-    console.log('\n  📬 Step 1: Navigating to Gmail...');
-    await page.goto('https://mail.google.com', { waitUntil: 'networkidle' });
+    // Step 1: Open Gmail in new tab (preserve application context)
+    console.log('\n  📬 Step 1: Opening Gmail in new tab...');
+    const gmailPage = await stagehand.context.newPage();
+    await gmailPage.goto('https://mail.google.com', { waitUntil: 'networkidle' });
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     // Step 2: Check if already logged in, if not, log in
@@ -265,7 +266,7 @@ async function handleVerification(stagehand, userProfile) {
     const gmailEmail = userProfile.workEmail;
     const gmailPassword = userProfile.workPassword;
 
-    // Use observe to check if login is needed
+    // Use observe to check if login is needed on Gmail page
     const loginElements = await stagehand.observe(
       "Find email input field, password input field, or sign in button. Only return actions if Gmail login page is shown."
     );
@@ -273,28 +274,59 @@ async function handleVerification(stagehand, userProfile) {
     if (loginElements.length > 0) {
       console.log('    🔑 Gmail login required, entering credentials...');
 
-      // Fill email
-      await stagehand.act(`Enter "${gmailEmail}" in the email input field and press Enter or click Next`, {});
+      // Step 1: Fill email and proceed to password page
+      console.log('      📧 Entering email address...');
+      await stagehand.act(`Enter "${gmailEmail}" in the email input field and click Next`, { page: gmailPage });
+      
+      // Step 2: Wait for password page to load (Gmail's two-step process)
+      console.log('      ⏳ Waiting for password page to load...');
+      try {
+        // Wait for URL change or password field to appear
+        await Promise.race([
+          gmailPage.waitForURL('**/challenge/pwd**', { timeout: 8000 }),
+          gmailPage.waitForSelector('input[type="password"]', { timeout: 8000 }),
+          gmailPage.waitForSelector('input[name="password"]', { timeout: 8000 })
+        ]);
+        console.log('      ✅ Password page loaded');
+      } catch (waitError) {
+        console.log('      ⚠️  Password page detection timeout, proceeding anyway...');
+      }
+      
+      // Additional wait for page stabilization
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // Fill password
-      await stagehand.act(`Enter "${gmailPassword}" in the password input field and press Enter or click Next`, {});
+      // Step 3: Fill password and complete login
+      console.log('      🔐 Entering password...');
+      await stagehand.act(`Enter "${gmailPassword}" in the password input field and click Next or Sign in`, { page: gmailPage });
+      
+      // Step 4: Wait for Gmail inbox to load
+      console.log('      ⏳ Waiting for Gmail inbox to load...');
+      try {
+        await Promise.race([
+          gmailPage.waitForURL('**/mail.google.com/mail/**', { timeout: 10000 }),
+          gmailPage.waitForSelector('[data-testid="inbox"]', { timeout: 10000 }),
+          gmailPage.waitForSelector('.zA', { timeout: 10000 }) // Gmail email list
+        ]);
+        console.log('      ✅ Gmail inbox loaded successfully');
+      } catch (inboxError) {
+        console.log('      ⚠️  Gmail inbox detection timeout, proceeding anyway...');
+      }
+      
       await new Promise(resolve => setTimeout(resolve, 3000));
-
       console.log('    ✅ Gmail login completed');
     } else {
       console.log('    ℹ️  Already logged into Gmail');
     }
 
-    // Step 3: Find and open the verification email
+    // Step 3: Find and open the verification email on Gmail page
     console.log('\n  🔍 Step 3: Finding verification email...');
     await stagehand.act(
       "Find and click on the most recent email that contains a verification code, confirmation code, or is from the company/service we just signed up for. Look for emails in the inbox.",
-      {}
+      { page: gmailPage }
     );
     await new Promise(resolve => setTimeout(resolve, 2000));
 
-    // Step 4: Extract the verification code
+    // Step 4: Extract the verification code from Gmail page
     console.log('  📝 Step 4: Extracting verification code...');
     const codeSchema = z.object({
       code: z.string().describe("The verification code, confirmation code, or OTP from the email. Usually a 4-8 character code.")
@@ -308,16 +340,21 @@ async function handleVerification(stagehand, userProfile) {
     const verificationCode = extracted.code;
     console.log(`  ✅ Found verification code: ${verificationCode}`);
 
-    // Step 5: Return to application
-    console.log('\n  🔙 Step 5: Returning to application...');
-    await page.goto(applicationUrl, { waitUntil: 'networkidle' });
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // Step 5: Close Gmail tab and navigate back to application tab
+    console.log('\n  🔙 Step 5: Closing Gmail tab and returning to application...');
+    await gmailPage.close();
+    console.log('    ✅ Gmail tab closed');
+    
+    // Navigate back to application tab (ensure we're on the right page)
+    await page.bringToFront();
+    console.log('    ✅ Navigated back to application tab');
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
-    // Step 6: Enter the verification code
-    console.log('  ⌨️  Step 6: Entering verification code...');
+    // Step 6: Enter the verification code on original application page
+    console.log('  ⌨️  Step 6: Entering verification code on application page...');
     await stagehand.act(
       `Enter the verification code "${verificationCode}" in the verification code input field and submit it. Click the submit or verify button.`,
-      {}
+      { page: page }
     );
     await new Promise(resolve => setTimeout(resolve, 3000));
 
@@ -326,11 +363,23 @@ async function handleVerification(stagehand, userProfile) {
     return {
       verified: true,
       code: verificationCode,
-      reason: 'Verification completed'
+      reason: 'Verification completed',
+      gmailPage: gmailPage // Return Gmail page reference for potential reuse
     };
 
   } catch (error) {
     console.error('  ❌ Verification handler error:', error.message);
+    
+    // Clean up Gmail tab if it exists
+    try {
+      if (typeof gmailPage !== 'undefined' && gmailPage) {
+        await gmailPage.close();
+        console.log('  🧹 Gmail tab cleaned up after error');
+      }
+    } catch (cleanupError) {
+      console.log('  ⚠️ Error cleaning up Gmail tab:', cleanupError.message);
+    }
+    
     return {
       verified: false,
       error: error.message,
@@ -342,7 +391,7 @@ async function handleVerification(stagehand, userProfile) {
 /**
  * Fallback: Use agent to handle verification if manual approach fails
  */
-async function agentVerificationFallback(stagehand, userProfile) {
+async function agentVerificationFallback(stagehand, userProfile, existingGmailPage = null) {
   console.log('\n🤖 Agent Verification Fallback: Using autonomous agent...');
 
   try {
@@ -355,28 +404,39 @@ async function agentVerificationFallback(stagehand, userProfile) {
       systemPrompt: `You are a verification code assistant. Your task is to check if verification is needed, get the code from Gmail, and complete the verification process.`
     });
 
-    const instruction = `Check if this page is asking for a verification code, confirmation code, or email verification.
+    // Check if Gmail tab already exists, if not create one
+    let gmailPage = existingGmailPage;
+    const applicationPage = stagehand.context.pages()[0];
+    
+    if (!gmailPage) {
+      console.log('  📬 Opening new Gmail tab for agent...');
+      gmailPage = await stagehand.context.newPage();
+    } else {
+      console.log('  📬 Reusing existing Gmail tab...');
+    }
+
+    const instruction = `Check if the current application page is asking for a verification code, confirmation code, or email verification.
 
 If verification IS needed:
-1. Note the current page URL (you'll need to return here)
-2. Navigate to https://mail.google.com
+1. Note that you have access to both the application page and a Gmail page
+2. Switch to the Gmail page and navigate to https://mail.google.com if not already there
 3. Log in to Gmail using:
    - Email: ${userProfile.workEmail}
    - Password: ${userProfile.workPassword}
 4. Find the most recent email with a verification code or verification link for the application/service we just signed up for
-5. Extract the verification code from the email (it's usually a 4-8 digit or alphanumeric code)
-6. Navigate back to the application page
-7. Enter the verification code in the input field
-8. Click submit/verify button
+5. If it's a verification CODE: Extract the code and switch back to application page, enter it and submit
+6. If it's a verification LINK: Click the link (it should open in the application tab)
+7. Ensure you end up on the application page with verification completed
 
 If verification is NOT needed:
 - Simply confirm no verification is required and stop
 
 IMPORTANT:
+- Use the Gmail tab for email operations, application tab for entering codes
 - Be careful to use the correct email and password
 - Look for the most recent email in the inbox
 - The verification code is usually displayed prominently in the email
-- After entering the code, make sure to submit/verify it`;
+- After entering the code or clicking link, make sure verification is completed on the application page and complete the applciation`;
 
     console.log('  🚀 Starting agent verification flow...');
 
@@ -385,6 +445,20 @@ IMPORTANT:
       maxSteps: 25,
       highlightCursor: false
     });
+
+    // Ensure we're back on the application page after agent completes
+    console.log('  🔙 Ensuring we\'re back on application page...');
+    await applicationPage.bringToFront();
+    
+    // Close Gmail tab if we created it (don't close if it was passed in)
+    if (!existingGmailPage && gmailPage) {
+      try {
+        await gmailPage.close();
+        console.log('  ✅ Gmail tab closed');
+      } catch (error) {
+        console.log('  ⚠️ Gmail tab already closed or error closing:', error.message);
+      }
+    }
 
     console.log('\n✅ Agent Verification Complete:');
     console.log(`  Steps taken: ${result.actions ? result.actions.length : 'N/A'}`);
@@ -437,7 +511,7 @@ async function agentReviewAndComplete(stagehand, userProfile, jobDescription) {
     systemPrompt: `You are a quality control assistant for job application forms.
 
 Your task:
-1. Review the form to see which fields are filled vs empty
+1. Review the entire job application to see which fields are filled vs empty
 2. Fill any empty/missing fields using the user profile and job description provided
 3. Ensure all required fields have appropriate values
 4. Click the NEXT button to proceed to the next page (if available)
@@ -688,10 +762,20 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
     } else if (verificationResult.reason === 'No verification needed') {
       console.log(`ℹ️  ${verificationResult.reason}`);
     } else {
-      // Manual verification failed, try agent fallback
+      // Manual verification failed, try agent fallback with existing Gmail tab
       console.log('⚠️  Manual verification failed, trying agent fallback...');
       usedFallback = true;
-      fallbackResult = await agentVerificationFallback(stagehand, userProfile);
+      
+      // Check if Gmail tab is still open from manual attempt
+      let existingGmailTab = null;
+      try {
+        const pages = stagehand.context.pages();
+        existingGmailTab = pages.find(p => p.url().includes('mail.google.com'));
+      } catch (error) {
+        console.log('  ℹ️  No existing Gmail tab found');
+      }
+      
+      fallbackResult = await agentVerificationFallback(stagehand, userProfile, existingGmailTab);
 
       if (fallbackResult.verified) {
         console.log('✅ Agent fallback verification completed successfully!');
