@@ -180,7 +180,7 @@ async function fillFormFields(stagehand, actions, answers) {
       // DROPDOWN LOGIC: Skip all dropdowns in Phase 1
       if (descLower.includes('dropdown') || descLower.includes('select') || action.method === 'selectOption') {
         console.log(`  ⏭️  Skipping dropdown: ${description.substring(0, 50)}... (will be handled in Phase 2)`);
-        skippedCount++;
+          skippedCount++;
         continue; // Skip to next field
 
       }
@@ -190,11 +190,11 @@ async function fillFormFields(stagehand, actions, answers) {
 
         try {
           const result = await stagehand.act(`enter "${answer}" in the ${description}`, {});
-          
+
           // Validate that we got a proper response
           if (result && typeof result === 'object') {
-            filledCount++;
-            console.log(`    ✅ Entered: ${answer.substring(0, 50)}${answer.length > 50 ? '...' : ''}`);
+        filledCount++;
+        console.log(`    ✅ Entered: ${answer.substring(0, 50)}${answer.length > 50 ? '...' : ''}`);
           } else {
             console.log(`    ⚠️  Invalid response from stagehand.act, but continuing...`);
             filledCount++; // Still count as filled since no error was thrown
@@ -524,6 +524,18 @@ IMPORTANT:
   * The user's work experience, education, and skills
   * The job description and requirements
   * The user's best interests while remaining truthful
+- For COUNTRY CODE dropdowns: Some forms use phone country codes instead of country names. Common mappings:
+  * United States = +1
+  * Canada = +1
+  * United Kingdom = +44
+  * Australia = +61
+  * Germany = +49
+  * France = +33
+  * India = +91
+  * China = +86
+  * Mexico = +52
+  * Brazil = +55
+  If you see a dropdown with phone country codes (+1, +44, etc.), use the appropriate code for the user's location.
 - Be efficient - focus on completing the form accurately
 - ALWAYS click NEXT (priority) or SUBMIT (if no Next button) when done filling`
   });
@@ -585,6 +597,8 @@ YOUR TASK:
    - Connect the user's relevant experience to job requirements
    - Show genuine interest based on the job context
 5. For yes/no or dropdown questions, choose the most appropriate answer based on the profile
+   - For COUNTRY CODE dropdowns: Look for phone country codes (+1, +44, +61, etc.) if you see them in dropdowns
+   - For STATE/PROVINCE dropdowns: Use standard abbreviations (CA for California, NY for New York, etc.) if needed
 6. After filling all fields, look for a NEXT button (check for buttons labeled "Next", "Continue", "Next Page", "Next Step")
 7. If NEXT button exists: Click it to proceed to the next page
 8. If NO NEXT button exists: Look for SUBMIT button (labeled "Submit", "Submit Application", "Apply Now") and click it

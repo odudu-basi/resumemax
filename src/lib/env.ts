@@ -36,7 +36,7 @@ const envSchema = z.object({
   
   // File Upload Configuration
   MAX_FILE_SIZE: z.coerce.number().default(10 * 1024 * 1024), // 10MB
-  ALLOWED_FILE_TYPES: z.string().default("pdf,doc,docx"),
+  ALLOWED_FILE_TYPES: z.string().default("pdf"),
   
   // Rate Limiting
   RATE_LIMIT_MAX: z.coerce.number().default(100),
@@ -165,7 +165,7 @@ export function getConfig() {
   const env = typeof window === 'undefined' ? validateEnv() : ({
     // Client-side defaults
     MAX_FILE_SIZE: 10 * 1024 * 1024,
-    ALLOWED_FILE_TYPES: "pdf,doc,docx",
+    ALLOWED_FILE_TYPES: "pdf",
     RATE_LIMIT_MAX: 100,
     RATE_LIMIT_WINDOW: 15 * 60 * 1000,
     ENABLE_RATE_LIMITING: false,
@@ -215,7 +215,7 @@ export function getConfig() {
     // File Upload
     upload: {
       maxFileSize: env.MAX_FILE_SIZE,
-      allowedTypes: (env.ALLOWED_FILE_TYPES || "pdf,doc,docx").split(","),
+      allowedTypes: (env.ALLOWED_FILE_TYPES || "pdf").split(","),
     },
     
     // Rate Limiting

@@ -4645,13 +4645,13 @@ export default function Dashboard() {
                     <input
                       id="resume-file"
                       type="file"
-                      accept=".pdf,.doc,.docx"
+                      accept=".pdf"
                       onChange={handleFileSelect}
                       className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                     />
                   </div>
                   <p className="text-xs text-gray-500">
-                    Supported formats: PDF, DOC, DOCX (Max size: 5MB)
+                    Supported formats: PDF only (Max size: 5MB)
                   </p>
                 </div>
 

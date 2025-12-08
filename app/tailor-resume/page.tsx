@@ -14,6 +14,7 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Upload,
   FileText,
@@ -174,6 +175,8 @@ function TailorResumeContent() {
 
   const [step, setStep] = useState(1);
   const [file, setFile] = useState<File | null>(null);
+  const [originalFileFormat, setOriginalFileFormat] = useState<string>('pdf');
+  const [downloadFormat, setDownloadFormat] = useState<string>('pdf');
   const [jobTitle, setJobTitle] = useState("");
   const [jobDescription, setJobDescription] = useState("");
 
@@ -194,6 +197,10 @@ function TailorResumeContent() {
             .then(blob => {
               const transferredFile = new File([blob], fileData.name, { type: fileData.type });
               setFile(transferredFile);
+              
+              // Track original file format from transferred file
+              const fileExtension = fileData.name.split('.').pop()?.toLowerCase() || 'pdf';
+              setOriginalFileFormat(fileExtension);
               
               // Also carry over job details if available
               if (fileData.jobTitle) {
@@ -325,6 +332,10 @@ function TailorResumeContent() {
     const selectedFile = event.target.files?.[0];
     if (selectedFile) {
       setFile(selectedFile);
+      
+      // Track original file format
+      const fileExtension = selectedFile.name.split('.').pop()?.toLowerCase() || 'pdf';
+      setOriginalFileFormat(fileExtension);
     }
   };
 
@@ -658,6 +669,7 @@ function TailorResumeContent() {
           skills: resumeData.skills,
           summary: resumeData.summary,
           sectionOrder: tabOrder.filter(tab => tab !== 'personal'), // Exclude personal info from section order
+          format: downloadFormat, // Add format parameter
         }),
       });
 
@@ -674,14 +686,14 @@ function TailorResumeContent() {
         throw new Error(errorData.error || 'Failed to generate PDF');
       }
 
-      // Get the PDF blob
-      const pdfBlob = await response.blob();
+      // Get the file blob
+      const fileBlob = await response.blob();
       
       // Create download link
-      const url = window.URL.createObjectURL(pdfBlob);
+      const url = window.URL.createObjectURL(fileBlob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `${resumeData.personalInfo.name.replace(/\s+/g, '_')}_Tailored_Resume.pdf`;
+      link.download = `${resumeData.personalInfo.name.replace(/\s+/g, '_')}_Tailored_Resume.${downloadFormat}`;
       document.body.appendChild(link);
       link.click();
       
@@ -2564,20 +2576,36 @@ function TailorResumeContent() {
                       </DialogContent>
                     </Dialog>
 
-                    {/* Download PDF Button */}
-                    <Button 
-                      variant="outline"
-                      onClick={generatePDF}
-                      disabled={isGeneratingPDF}
-                      className="flex items-center gap-2"
-                    >
-                      {isGeneratingPDF ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Download className="h-4 w-4" />
-                      )}
-                      {isGeneratingPDF ? 'Generating...' : 'Download PDF'}
+                    {/* Download Format Selector and Button */}
+                    <div className="flex items-center gap-2">
+                      <Select value={downloadFormat} onValueChange={setDownloadFormat}>
+                        <SelectTrigger className="w-32">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pdf">PDF</SelectItem>
+                          {originalFileFormat !== 'pdf' && (
+                            <SelectItem value={originalFileFormat}>
+                              {originalFileFormat.toUpperCase()} (Original)
+                            </SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                      
+                      <Button 
+                        variant="outline"
+                        onClick={generatePDF}
+                        disabled={isGeneratingPDF}
+                        className="flex items-center gap-2"
+                      >
+                        {isGeneratingPDF ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Download className="h-4 w-4" />
+                        )}
+                        {isGeneratingPDF ? 'Generating...' : `Download ${downloadFormat.toUpperCase()}`}
                       </Button>
+                    </div>
 
                   </div>
                     </div>
