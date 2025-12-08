@@ -91,7 +91,7 @@ INSTRUCTIONS:
 - For each field, provide a concise, accurate answer based on the user profile
 - For essay questions (like "Why do you want to work here?"), write professional 2-3 sentence responses tailored to the job description
 - For yes/no questions, answer based on the profile data
-- For dropdowns, choose the most appropriate option
+- For dropdown/select fields, return "SKIP" (these will be handled in Phase 2)
 - If you don't have information for a field, return "SKIP"
 
 IMPORTANT: Return JSON where the keys are the EXACT field descriptions (copy them exactly, including all punctuation and wording). Example format: { "Input field for the applicant's first name.": "John", "Input field for the applicant's last name.": "Doe" }`;
@@ -177,34 +177,11 @@ async function fillFormFields(stagehand, actions, answers) {
     try {
       const descLower = description.toLowerCase();
 
-      // DROPDOWN LOGIC: 2-step approach
+      // DROPDOWN LOGIC: Skip all dropdowns in Phase 1
       if (descLower.includes('dropdown') || descLower.includes('select') || action.method === 'selectOption') {
-        console.log(`  🔽 Filling dropdown: ${description.substring(0, 50)}...`);
-
-        try {
-          // Step 1: Click to open dropdown
-          const clickResult = await stagehand.act(`click the ${description}`, {});
-          
-          if (!clickResult || typeof clickResult !== 'object') {
-            throw new Error('Invalid click response');
-          }
-
-          await new Promise(resolve => setTimeout(resolve, 500));
-
-          // Step 2: Select the option
-          const selectResult = await stagehand.act(`select "${answer}"`, {});
-          
-          if (!selectResult || typeof selectResult !== 'object') {
-            throw new Error('Invalid select response');
-          }
-
-          filledCount++;
-          console.log(`    ✅ Selected: ${answer}`);
-
-        } catch (dropdownError) {
-          console.log(`    ⚠️  Dropdown failed (${dropdownError.message}), leaving empty`);
-          errorCount++; // Count as error, not skip
-        }
+        console.log(`  ⏭️  Skipping dropdown: ${description.substring(0, 50)}... (will be handled in Phase 2)`);
+        skippedCount++;
+        continue; // Skip to next field
 
       }
       // TEXT/TEXTAREA LOGIC
