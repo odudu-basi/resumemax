@@ -49,7 +49,8 @@ import {
   Clock,
   MessageCircle,
   TrendingUp,
-  Rocket
+  Rocket,
+  ExternalLink
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/src/contexts/AuthContext";
@@ -4695,6 +4696,7 @@ export default function Dashboard() {
               )}
             </>
           )}
+          </div>
         </CardContent>
       </Card>
       
