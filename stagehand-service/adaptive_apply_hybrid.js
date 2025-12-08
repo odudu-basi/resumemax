@@ -232,7 +232,12 @@ async function handleVerification(stagehand, userProfile) {
 
   try {
     // Get the page object from context
-    const page = stagehand.context.pages()[0];
+    const pages = stagehand.context.pages();
+    if (!pages || pages.length === 0) {
+      console.log(`❌ No pages available in context for verification`);
+      throw new Error('Browser context lost - no pages available');
+    }
+    const page = pages[0];
 
     // Check if verification is needed on current page
     const pageText = await page.evaluate(() => document.body.innerText.toLowerCase());
@@ -406,7 +411,12 @@ async function agentVerificationFallback(stagehand, userProfile, existingGmailPa
 
     // Check if Gmail tab already exists, if not create one
     let gmailPage = existingGmailPage;
-    const applicationPage = stagehand.context.pages()[0];
+    const pages = stagehand.context.pages();
+    if (!pages || pages.length === 0) {
+      console.log(`❌ No pages available in context for Gmail verification`);
+      throw new Error('Browser context lost - no pages available');
+    }
+    const applicationPage = pages[0];
     
     if (!gmailPage) {
       console.log('  📬 Opening new Gmail tab for agent...');
@@ -589,20 +599,21 @@ ${jobContextText}
 YOUR TASK:
 1. Look at the form and identify any empty or incomplete fields
 2. Fill them with appropriate information from above
-3. For questions without direct answers in the profile:
+3. IMPORTANT: For each field, try filling it a maximum of 2 times. If a field fails twice, move on to the next field - do not spend more time on it
+4. For questions without direct answers in the profile:
    - Use the job description and user's background to infer reasonable, truthful answers
    - Write responses that represent the user's best interests while being honest
-4. For essay/paragraph questions about motivation or interest, write 2-3 professional sentences that:
+5. For essay/paragraph questions about motivation or interest, write 2-3 professional sentences that:
    - Reference the specific company and role
    - Connect the user's relevant experience to job requirements
    - Show genuine interest based on the job context
-5. For yes/no or dropdown questions, choose the most appropriate answer based on the profile
+6. For yes/no or dropdown questions, choose the most appropriate answer based on the profile
    - For COUNTRY CODE dropdowns: Look for phone country codes (+1, +44, +61, etc.) if you see them in dropdowns
    - For STATE/PROVINCE dropdowns: Use standard abbreviations (CA for California, NY for New York, etc.) if needed
-6. After filling all fields, look for a NEXT button (check for buttons labeled "Next", "Continue", "Next Page", "Next Step")
-7. If NEXT button exists: Click it to proceed to the next page
-8. If NO NEXT button exists: Look for SUBMIT button (labeled "Submit", "Submit Application", "Apply Now") and click it
-9. If the page says "Review your application" or similar, click the SUBMIT button`;
+7. After filling all fields, look for a NEXT button (check for buttons labeled "Next", "Continue", "Next Page", "Next Step")
+8. If NEXT button exists: Click it to proceed to the next page
+9. If NO NEXT button exists: Look for SUBMIT button (labeled "Submit", "Submit Application", "Apply Now") and click it
+10. If the page says "Review your application" or similar, click the SUBMIT button`;
 
   try {
     const result = await agent.execute({
@@ -680,7 +691,12 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
       console.log(`  PAGE ${pageNumber}: Form Filling`);
       console.log(`${'═'.repeat(50)}`);
       
-      const page = stagehand.context.pages()[0];
+      const pages = stagehand.context.pages();
+      if (!pages || pages.length === 0) {
+        console.log(`❌ No pages available in context for page ${pageNumber}`);
+        throw new Error('Browser context lost - no pages available');
+      }
+      const page = pages[0];
       const urlBeforePhase2 = page.url();
       
 
@@ -747,7 +763,13 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
       // Check if we moved to a new page (Next clicked) or stayed (Submit clicked)
       await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for page transition
       
-      const page2 = stagehand.context.pages()[0];
+      const pages = stagehand.context.pages();
+      if (!pages || pages.length === 0) {
+        console.log(`❌ No pages available in context after Phase 2`);
+        throw new Error('Browser context lost - no pages available');
+      }
+      
+      const page2 = pages[0];
       const urlAfterPhase2 = page2.url();
       
       // Check if URL changed or if we can find new form fields
