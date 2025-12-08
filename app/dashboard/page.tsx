@@ -4578,7 +4578,10 @@ export default function Dashboard() {
               Tailor Resume
             </Button>
             <Button
-              onClick={() => router.push('/rate-resume')}
+              onClick={() => {
+                console.log('Rate Resume button clicked');
+                router.push('/rate-resume');
+              }}
               variant="outline"
               className="flex items-center gap-2 border-green-600 text-green-600 hover:bg-green-50"
             >

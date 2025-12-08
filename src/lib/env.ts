@@ -162,7 +162,14 @@ function validateClientEnv() {
  */
 export function getConfig() {
   // Only validate on server side
-  const env = typeof window === 'undefined' ? validateEnv() : ({} as any);
+  const env = typeof window === 'undefined' ? validateEnv() : ({
+    // Client-side defaults
+    MAX_FILE_SIZE: 10 * 1024 * 1024,
+    ALLOWED_FILE_TYPES: "pdf,doc,docx",
+    RATE_LIMIT_MAX: 100,
+    RATE_LIMIT_WINDOW: 15 * 60 * 1000,
+    ENABLE_RATE_LIMITING: false,
+  } as any);
   
   return {
     // App
@@ -208,7 +215,7 @@ export function getConfig() {
     // File Upload
     upload: {
       maxFileSize: env.MAX_FILE_SIZE,
-      allowedTypes: env.ALLOWED_FILE_TYPES.split(","),
+      allowedTypes: (env.ALLOWED_FILE_TYPES || "pdf,doc,docx").split(","),
     },
     
     // Rate Limiting
