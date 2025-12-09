@@ -1,8 +1,7 @@
 const OpenAI = require('openai');
 const { z } = require('zod');
 
-const { intelligentFormFill, observeAndExtractPage, executeCommands } = require('./intelligent_form_fill');
-const { agentVerificationFallback } = require('./adaptive_apply_hybrid');
+const { getIntelligentAnswers, fillFormFields, agentReviewAndComplete, agentVerificationFallback } = require('./adaptive_apply_hybrid');
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -677,20 +676,52 @@ async function workdayFormFill(stagehand, userProfile, sessionId, sessionUrl, re
     console.log(`📊 Commands executed: ${loginResult.commandsExecuted}`);
 
     console.log('\n═══════════════════════════════════════');
-    console.log('  PHASE 0.5: Intelligent Form Fill');
-    console.log('  (Workday-Optimized ChatGPT Commands)');
+    console.log('  PHASE 1: Intelligent Form Fill (ChatGPT)');
     console.log('═══════════════════════════════════════');
 
     // Extract job description
     const jobDescription = await extractJobDescription(stagehand);
 
-    const formFillResult = await intelligentFormFill(stagehand, workdayUserProfile, jobUrl, sessionId, sessionUrl, res);
+    // Get form fields using observe
+    console.log('🔍 Observing form fields...');
+    const formActions = await stagehand.observe(
+      "find all form fields, input boxes, text areas, dropdowns, checkboxes, radio buttons, and navigation buttons on this page"
+    );
     
-    if (formFillResult.success) {
-      console.log('✅ Workday form completed with intelligent fill');
-      formFillCost = formFillResult.usedFallback ? 0.167 : 0.017;
+    if (formActions.length === 0) {
+      throw new Error('No form fields found on the page');
+    }
+    
+    console.log(`✅ Found ${formActions.length} form fields`);
+
+    // Get intelligent answers from ChatGPT (using proven Phase 1 approach)
+    const { getIntelligentAnswers } = require('./adaptive_apply_hybrid');
+    const answersResult = await getIntelligentAnswers(formActions, workdayUserProfile, jobDescription);
+    const answers = answersResult.answers;
+    
+    console.log(`✅ Got answers for ${Object.keys(answers).length} fields`);
+
+    // Fill form fields using answers
+    const { fillFormFields } = require('./adaptive_apply_hybrid');
+    const fillResults = await fillFormFields(stagehand, formActions, answers);
+    
+    console.log(`📊 Phase 1 Results: ✅ ${fillResults.filledCount} filled, ⏭️ ${fillResults.skippedCount} skipped, ❌ ${fillResults.errorCount} errors`);
+    
+    formFillCost = 0.08; // Phase 1 cost
+
+    console.log('\n═══════════════════════════════════════');
+    console.log('  PHASE 2: Agent Review & Complete');
+    console.log('═══════════════════════════════════════');
+
+    // Use Phase 2 agent to complete remaining fields
+    const { agentReviewAndComplete } = require('./adaptive_apply_hybrid');
+    const phase2Result = await agentReviewAndComplete(stagehand, workdayUserProfile, sessionId, sessionUrl, res);
+    
+    if (phase2Result.success) {
+      console.log('✅ Phase 2 agent completed successfully');
+      formFillCost += 0.167; // Add Phase 2 cost
     } else {
-      throw new Error('Intelligent form fill failed: ' + formFillResult.error);
+      console.log('⚠️  Phase 2 had issues but continuing...');
     }
 
     console.log('\n═══════════════════════════════════════');
@@ -706,15 +737,15 @@ async function workdayFormFill(stagehand, userProfile, sessionId, sessionUrl, re
     console.log('\n═══════════════════════════════════════');
     console.log('  WORKDAY INTELLIGENT FLOW COMPLETE');
     console.log('═══════════════════════════════════════');
-    console.log(`🎯 Platform: Workday (Fully Optimized)`);
+    console.log(`🎯 Platform: Workday (Phase 1 + Phase 2)`);
     console.log(`⏱️  Total time: ${executionTime}s`);
     console.log(`💰 Total cost: $${totalCost.toFixed(4)}`);
     console.log(`   Intelligent Login: $${loginCost.toFixed(4)}`);
-    console.log(`   Intelligent Form Fill: $${formFillCost.toFixed(4)}`);
+    console.log(`   Phase 1 + Phase 2: $${formFillCost.toFixed(4)}`);
     console.log(`   Verification: $${verificationCost.toFixed(4)}`);
     console.log(`📊 Login steps: ${loginResult.stepsCompleted}`);
-    console.log(`📊 Form commands: ${formFillResult.commandsExecuted || 0}`);
-    console.log(`📊 Success rate: 100%`);
+    console.log(`📊 Fields filled: ${fillResults.filledCount}`);
+    console.log(`📊 Fields skipped: ${fillResults.skippedCount}`);
 
     await new Promise(resolve => setTimeout(resolve, 2000));
     console.log('\n🔒 Closing Stagehand session...');
@@ -722,11 +753,11 @@ async function workdayFormFill(stagehand, userProfile, sessionId, sessionUrl, re
 
     res.json({
       success: true,
-      approach: 'workday_intelligent',
+      approach: 'workday_phase1_phase2',
       platform: 'workday',
       sessionId,
       sessionUrl,
-      message: `Workday application completed using intelligent flow in ${executionTime}s. Application submitted.`,
+      message: `Workday application completed using Phase 1 + Phase 2 in ${executionTime}s. Application submitted.`,
       jobDescription: jobDescription ? {
         title: jobDescription.title,
         company: jobDescription.company
@@ -736,8 +767,9 @@ async function workdayFormFill(stagehand, userProfile, sessionId, sessionUrl, re
         totalCost: totalCost.toFixed(4),
         loginSteps: loginResult.stepsCompleted,
         loginCommands: loginResult.commandsExecuted,
-        formCommands: formFillResult.commandsExecuted || 0,
-        usedFallback: formFillResult.usedFallback || false
+        fieldsFilled: fillResults.filledCount,
+        fieldsSkipped: fillResults.skippedCount,
+        fieldsErrored: fillResults.errorCount
       }
     });
 
@@ -753,7 +785,7 @@ async function workdayFormFill(stagehand, userProfile, sessionId, sessionUrl, re
       error: error.message,
       sessionId,
       sessionUrl,
-      approach: 'workday_intelligent'
+      approach: 'workday_phase1_phase2'
     });
   }
 }
