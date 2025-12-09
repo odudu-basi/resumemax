@@ -444,7 +444,7 @@ async function intelligentJobApplication(stagehand, userProfile, jobInfo, option
   try {
     while (currentIteration < maxIterations) {
       currentIteration++;
-      const currentUrl = await stagehand.page.url();
+      const currentUrl = await stagehand.context.pages()[0].url();
 
       console.log(`\n${'─'.repeat(80)}`);
       console.log(`📍 ITERATION ${currentIteration}/${maxIterations}`);
@@ -523,7 +523,7 @@ async function intelligentJobApplication(stagehand, userProfile, jobInfo, option
       success: false,
       error: 'Maximum iterations reached without completion',
       iterations: currentIteration,
-      finalUrl: await stagehand.page.url(),
+      finalUrl: await stagehand.context.pages()[0].url(),
       totalCost: totalCost.toFixed(4)
     };
 
@@ -537,7 +537,7 @@ async function intelligentJobApplication(stagehand, userProfile, jobInfo, option
       success: false,
       error: error.message,
       iterations: currentIteration,
-      finalUrl: await stagehand.page.url().catch(() => 'unknown'),
+      finalUrl: await stagehand.context.pages()[0].url().catch(() => 'unknown'),
       totalCost: totalCost.toFixed(4)
     };
   }
