@@ -583,6 +583,120 @@ IMPORTANT:
 /**
  * Agent review with work experience included
  */
+/**
+ * Phase 0: Agent-based account creation for Workday applications
+ */
+async function agentAccountCreation(stagehand, userProfile) {
+  console.log('\n🔐 Phase 0: Agent-based account creation...');
+
+  const agent = stagehand.agent({
+    cua: true,
+    model: {
+      modelName: "google/gemini-2.5-computer-use-preview-10-2025",
+      apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
+    },
+    systemPrompt: `You are an account creation specialist for Workday job applications.
+
+Your mission is to navigate through the initial steps and create a NEW account so the user can apply for the job.
+
+CRITICAL RULES:
+1. You are creating a NEW ACCOUNT, not logging into an existing one
+2. Always choose "Create Account" or "Sign Up" over "Sign In" or "Login"
+3. Navigate step-by-step until you reach the actual application form page
+4. Stop once you see the application form fields (like name, phone, experience fields)
+5. Accept ALL consent/terms checkboxes you encounter`
+  });
+
+  const instruction = `Navigate to the job application form by creating a new account. Follow these steps IN ORDER:
+
+STEP 1: CLICK APPLY BUTTON
+- Look for and click the "Apply", "Apply Now", or similar button on the job listing page
+- This button is usually prominently displayed on the job description page
+
+STEP 2: CHOOSE APPLICATION METHOD
+- If asked "How would you like to apply?", look for options like:
+  - "Apply Manually"
+  - "Apply with Resume"
+  - "Continue with Application"
+- Click "Apply Manually" or the non-LinkedIn/non-social option
+- NEVER choose "Apply with LinkedIn" or "Apply with Indeed"
+
+STEP 3: CREATE NEW ACCOUNT
+You will see a signup/account creation form. Fill it with these details:
+
+EMAIL: ${userProfile.workEmail}
+PASSWORD: ${userProfile.workPassword}
+VERIFY PASSWORD: ${userProfile.workPassword}
+
+IMPORTANT FOR ACCOUNT CREATION:
+- If you see BOTH "Sign In" and "Create Account" tabs/buttons, click "Create Account" or "Sign Up"
+- Fill in the email field with: ${userProfile.workEmail}
+- Fill in the password field with: ${userProfile.workPassword}
+- If there's a "Verify Password" or "Confirm Password" field, also enter: ${userProfile.workPassword}
+- If there's a "First Name" field, enter: ${userProfile.fullName.split(' ')[0]}
+- If there's a "Last Name" field, enter: ${userProfile.fullName.split(' ').slice(1).join(' ')}
+
+STEP 4: ACCEPT ALL CONSENTS
+- Check ALL checkboxes for terms of service, privacy policy, consent forms, etc.
+- Look for phrases like "I agree to", "I accept", "Terms and Conditions"
+- Check every single consent box you find
+
+STEP 5: SUBMIT ACCOUNT CREATION
+- Click the "Create Account", "Sign Up", "Register", or "Continue" button
+- Wait for the page to load
+
+STEP 6: DETECT SUCCESS AND STOP
+Stop when you see ANY of these indicators:
+- Application form fields appear (fields for name, phone, address, work experience, education)
+- Page shows "Step 1 of X" or progress indicators for application steps
+- You see form sections like "Personal Information", "Work Experience", "Education"
+- The page URL changes to include words like "apply", "application", "form"
+
+YOU ARE DONE when you reach the application form. Do NOT fill out the application form itself - that's handled by Phase 1.
+
+TROUBLESHOOTING:
+- If you see "Email already exists" error: This is OK, try to proceed with "Sign In" instead using the same credentials
+- If account creation succeeds but you're stuck on a welcome page: Look for "Continue", "Start Application", or "Apply Now" buttons
+- If you complete account creation and don't see the form: Look for navigation buttons to proceed
+
+YOUR GOAL: Navigate from the job listing page to the application form page by creating an account. Stop once you see the form fields.`;
+
+  try {
+    const result = await agent.execute({
+      instruction,
+      maxSteps: 20,  // Enough steps for navigation and account creation
+      highlightCursor: false
+    });
+
+    console.log('\n✅ Phase 0 Complete (Account Creation):');
+    console.log(`  Steps taken: ${result.actions ? result.actions.length : 'N/A'}`);
+    console.log(`  Success: ${result.success}`);
+
+    if (result.usage) {
+      const inputTokens = result.usage.input_tokens || 0;
+      const outputTokens = result.usage.output_tokens || 0;
+      const inputCost = (inputTokens / 1000000) * 1.25;  // Gemini pricing (same as Phase 2)
+      const outputCost = (outputTokens / 1000000) * 10;  // Gemini pricing (same as Phase 2)
+      const totalCost = (inputCost + outputCost).toFixed(4);
+      console.log(`  💰 Phase 0 cost: $${totalCost}`);
+      console.log(`     Input tokens: ${inputTokens.toLocaleString()}`);
+      console.log(`     Output tokens: ${outputTokens.toLocaleString()}`);
+    }
+
+    return result;
+  } catch (error) {
+    console.error('  ❌ Phase 0 error:', error.message);
+
+    // Return partial success to allow continuation
+    return {
+      success: false,
+      error: error.message,
+      partialSuccess: true,
+      intermediateError: error.message
+    };
+  }
+}
+
 async function agentReviewAndComplete(stagehand, userProfile, jobDescription) {
   console.log('\n🤖 Phase 2: Agent review and completion...');
 
@@ -1204,32 +1318,35 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
 
   try {
     console.log('═══════════════════════════════════════');
-    console.log('  PHASE 0: Structured Workday Login');
+    console.log('  PHASE 0: Agent-Based Account Creation');
     console.log('═══════════════════════════════════════');
 
-    // Workday structured login steps
-    const loginResult = await executeStructuredWorkdayLogin(stagehand, workdayUserProfile);
-    phase0Cost = 0.02; // Estimated cost for structured login
-    
-    console.log('✅ Workday login completed successfully');
-    console.log(`📊 Login steps: ${loginResult.stepsCompleted || 'N/A'}`);
-    console.log(`📊 Commands executed: ${loginResult.commandsExecuted || 'N/A'}`);
-    
-    console.log('🔐 Using traditional login detection for non-Workday site...');
-      const loginDetection = await detectLoginPage(stagehand);
-      
-      if (loginDetection.isLoginPage) {
-        console.log('🔐 Login/signup page detected, handling authentication...');
-        loginResult = await handleLogin(stagehand, userProfile);
-        phase0Cost = loginResult.cost || 0;
-        
-        if (!loginResult.success) {
-          console.error('❌ Login failed, but continuing with application attempt...');
-        }
-        
-        // Wait for page to stabilize after login
-        await new Promise(resolve => setTimeout(resolve, 3000));
-      }
+    // Use agent to navigate and create account
+    const accountResult = await agentAccountCreation(stagehand, workdayUserProfile);
+
+    // Calculate Phase 0 cost from agent usage
+    if (accountResult.usage) {
+      const inputTokens = accountResult.usage.input_tokens || 0;
+      const outputTokens = accountResult.usage.output_tokens || 0;
+      const inputCost = (inputTokens / 1000000) * 1.25;  // Gemini pricing (same as Phase 2)
+      const outputCost = (outputTokens / 1000000) * 10;
+      phase0Cost = inputCost + outputCost;
+    } else {
+      phase0Cost = 0.02; // Fallback estimate
+    }
+
+    if (accountResult.success) {
+      console.log('✅ Account creation completed successfully');
+      console.log(`📊 Agent steps: ${accountResult.actions ? accountResult.actions.length : 'N/A'}`);
+    } else if (accountResult.partialSuccess) {
+      console.log('⚠️  Account creation had errors but continuing...');
+      console.log(`   Error: ${accountResult.intermediateError}`);
+    } else {
+      console.log('❌ Account creation failed, but attempting to continue with form fill...');
+    }
+
+    // Wait for page to stabilize after account creation
+    await new Promise(resolve => setTimeout(resolve, 3000));
     
     // Extract job description once
     console.log('📋 Extracting job description...');
