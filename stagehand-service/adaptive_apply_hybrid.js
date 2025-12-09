@@ -1234,148 +1234,162 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
     const jobDescription = await extractJobDescription(stagehand);
     console.log('✅ Job description extracted');
     
-    // Now execute Phase 1 and Phase 2
+    // Multi-page application loop
+    let pageNumber = 1;
+    const MAX_PAGES = 10; // Safety limit to prevent infinite loops
     let allFilledFields = [];
-    
-    console.log('\n═══════════════════════════════════════');
-    console.log('  PHASE 1: Intelligent Form Fill');
-    console.log('═══════════════════════════════════════');
+    let applicationComplete = false;
 
-    // Observe form fields
-    const formActions = await observeFormFields(stagehand);
-    if (formActions.length === 0) {
-      throw new Error('No form fields found');
-    }
+    console.log('\n🔄 Starting multi-page application loop (max ' + MAX_PAGES + ' pages)...\n');
 
-    // Get intelligent answers from ChatGPT
-    const answersResult = await getIntelligentAnswers(formActions, workdayUserProfile, jobDescription);
-    const answers = answersResult.answers;
-    chatGPTTokens = answersResult.tokens;
+    while (pageNumber <= MAX_PAGES && !applicationComplete) {
+      console.log('\n' + '═'.repeat(80));
+      console.log(`  PAGE ${pageNumber}: PHASE 1 - Intelligent Form Fill`);
+      console.log('═'.repeat(80));
 
-    // Estimate Phase 1 tokens
-    const estimatedObserveTokens = 2000;
-    const estimatedActTokens = formActions.length * 500;
-    phase1Tokens.input = estimatedObserveTokens + estimatedActTokens + chatGPTTokens;
-    phase1Tokens.output = 500;
-    phase1Cost = 0.08;
+      // Observe form fields on current page
+      const formActions = await observeFormFields(stagehand);
 
-    // Fill form (with error resilience)
-    let fillResults = { filledCount: 0, skippedCount: 0, errorCount: 0 };
-    
-    try {
-      fillResults = await fillFormFields(stagehand, formActions, answers);
-      console.log(`\n📊 Phase 1 Results: ✅ ${fillResults.filledCount} filled, ⏭️ ${fillResults.skippedCount} skipped, ❌ ${fillResults.errorCount} errors`);
-    } catch (phase1Error) {
-      console.error(`\n❌ Phase 1 failed with error: ${phase1Error.message}`);
-      console.log(`\n🔄 Continuing to Phase 2 (Agent Fallback) to handle remaining fields...`);
-      fillResults.errorCount = formActions.length; // Mark all as errors for tracking
-    }
-    
-    // Track fields from this page
-    allFilledFields.push({
-      page: 1,
-      filledCount: fillResults.filledCount,
-      skippedCount: fillResults.skippedCount,
-      errorCount: fillResults.errorCount
-    });
-    console.log(`\n💰 Phase 1 estimated cost: $${phase1Cost.toFixed(2)}`);
-
-    console.log('\n═══════════════════════════════════════');
-    console.log('  PHASE 2: Agent Review & Completion');
-    console.log('  (Handles remaining/failed fields from Phase 1)');
-    console.log('═══════════════════════════════════════');
-
-    const agentResult = await agentReviewAndComplete(stagehand, workdayUserProfile, jobDescription);
-
-    // Handle partial success from intermediate errors
-    if (agentResult.partialSuccess) {
-      console.log('  ⚠️  Agent returned partial success due to intermediate validation errors');
-      console.log('     Continuing process - errors will only be shown if final result fails');
-      console.log('     Intermediate error was:', agentResult.intermediateError);
-    }
-
-    if (agentResult.usage) {
-      const inputTokens = agentResult.usage.input_tokens || 0;
-      const outputTokens = agentResult.usage.output_tokens || 0;
-      phase2Tokens.input = inputTokens;
-      phase2Tokens.output = outputTokens;
-      const inputCost = (inputTokens / 1000000) * 1.25;
-      const outputCost = (outputTokens / 1000000) * 10;
-      phase2Cost = inputCost + outputCost;
-    }
-    
-    // Check if we moved to a new page after Phase 2 (multi-page handling)
-    await new Promise(resolve => setTimeout(resolve, 3000)); // Wait for page transition
-    
-    const pagesAfterPhase2 = stagehand.context.pages();
-    if (!pagesAfterPhase2 || pagesAfterPhase2.length === 0) {
-      console.log(`❌ No pages available in context after Phase 2`);
-      throw new Error('Browser context lost - no pages available');
-    }
-    
-    const currentUrl = pagesAfterPhase2[0].url();
-    console.log(`📍 Current URL after Phase 2: ${currentUrl}`);
-    
-    // Check if URL changed (indicating we moved to a new page)
-    if (currentUrl !== jobUrl && !currentUrl.includes('error') && !currentUrl.includes('thank') && !currentUrl.includes('success')) {
-      console.log('\n🔄 New page detected! Running Phase 1 and 2 again...');
-      
-      // Run Phase 1 and 2 again for the new page
-      console.log('\n═══════════════════════════════════════');
-      console.log('  PHASE 1 (Page 2): Intelligent Form Fill');
-      console.log('═══════════════════════════════════════');
-
-      // Observe form fields on new page
-      const formActions2 = await observeFormFields(stagehand);
-      if (formActions2.length > 0) {
-        // Get intelligent answers from ChatGPT for new page
-        const answersResult2 = await getIntelligentAnswers(formActions2, workdayUserProfile, jobDescription);
-        const answers2 = answersResult2.answers;
-        chatGPTTokens += answersResult2.tokens;
-
-        // Update Phase 1 tokens
-        phase1Tokens.input += 2000 + (formActions2.length * 500) + answersResult2.tokens;
-        phase1Tokens.output += 500;
-        phase1Cost += 0.08;
-
-        // Fill form fields on new page
-        try {
-          const fillResults2 = await fillFormFields(stagehand, formActions2, answers2);
-          console.log(`\n📊 Phase 1 (Page 2) Results: ✅ ${fillResults2.filledCount} filled, ⏭️ ${fillResults2.skippedCount} skipped, ❌ ${fillResults2.errorCount} errors`);
-          
-          // Track fields from page 2
-          allFilledFields.push({
-            page: 2,
-            filledCount: fillResults2.filledCount,
-            skippedCount: fillResults2.skippedCount,
-            errorCount: fillResults2.errorCount
-          });
-        } catch (phase1Error2) {
-          console.error(`\n❌ Phase 1 (Page 2) failed: ${phase1Error2.message}`);
+      if (formActions.length === 0) {
+        console.log(`⚠️  No form fields found on page ${pageNumber}`);
+        if (pageNumber === 1) {
+          throw new Error('No form fields found on first page');
         }
-
-        console.log('\n═══════════════════════════════════════');
-        console.log('  PHASE 2 (Page 2): Agent Review & Navigation');
-        console.log('═══════════════════════════════════════');
-
-        // Run Phase 2 again for new page
-        const agentResult2 = await agentReviewAndComplete(stagehand, workdayUserProfile, jobDescription);
-        
-        if (agentResult2.usage) {
-          const inputTokens2 = agentResult2.usage.input_tokens || 0;
-          const outputTokens2 = agentResult2.usage.output_tokens || 0;
-          phase2Tokens.input += inputTokens2;
-          phase2Tokens.output += outputTokens2;
-          const inputCost2 = (inputTokens2 / 1000000) * 1.25;
-          const outputCost2 = (outputTokens2 / 1000000) * 10;
-          phase2Cost += inputCost2 + outputCost2;
+        // If not first page, might be a confirmation page
+        console.log('📋 Checking if this is a confirmation/success page...');
+        const pageContent = await stagehand.context.pages()[0].content();
+        if (pageContent.toLowerCase().includes('thank') ||
+            pageContent.toLowerCase().includes('success') ||
+            pageContent.toLowerCase().includes('confirm')) {
+          console.log('✅ Detected confirmation page - application complete!');
+          applicationComplete = true;
+          break;
         }
-      } else {
-        console.log('ℹ️  No form fields found on new page, proceeding to verification...');
       }
-    } else {
-      console.log('✅ Same page or application completed - proceeding to verification');
+
+      // Get intelligent answers from ChatGPT for this page
+      const answersResult = await getIntelligentAnswers(formActions, workdayUserProfile, jobDescription);
+      const answers = answersResult.answers;
+      chatGPTTokens += answersResult.tokens;
+
+      // Update Phase 1 costs
+      const pageObserveTokens = 2000;
+      const pageActTokens = formActions.length * 500;
+      phase1Tokens.input += pageObserveTokens + pageActTokens + answersResult.tokens;
+      phase1Tokens.output += 500;
+      phase1Cost += 0.08;
+
+      // Fill form fields on current page
+      let fillResults = { filledCount: 0, skippedCount: 0, errorCount: 0 };
+
+      try {
+        fillResults = await fillFormFields(stagehand, formActions, answers);
+        console.log(`\n📊 Page ${pageNumber} Phase 1 Results: ✅ ${fillResults.filledCount} filled, ⏭️ ${fillResults.skippedCount} skipped, ❌ ${fillResults.errorCount} errors`);
+      } catch (phase1Error) {
+        console.error(`\n❌ Phase 1 failed on page ${pageNumber}: ${phase1Error.message}`);
+        console.log(`🔄 Continuing to Phase 2 to handle...`);
+        fillResults.errorCount = formActions.length;
+      }
+
+      // Track fields from this page
+      allFilledFields.push({
+        page: pageNumber,
+        filledCount: fillResults.filledCount,
+        skippedCount: fillResults.skippedCount,
+        errorCount: fillResults.errorCount
+      });
+
+      console.log('\n' + '═'.repeat(80));
+      console.log(`  PAGE ${pageNumber}: PHASE 2 - Agent Review & Navigation`);
+      console.log('═'.repeat(80));
+
+      // Get current URL before Phase 2
+      const urlBeforePhase2 = stagehand.context.pages()[0].url();
+      console.log(`📍 URL before Phase 2: ${urlBeforePhase2}`);
+
+      // Execute Phase 2 agent
+      const agentResult = await agentReviewAndComplete(stagehand, workdayUserProfile, jobDescription);
+
+      // Update Phase 2 costs
+      if (agentResult.usage) {
+        const inputTokens = agentResult.usage.input_tokens || 0;
+        const outputTokens = agentResult.usage.output_tokens || 0;
+        phase2Tokens.input += inputTokens;
+        phase2Tokens.output += outputTokens;
+        const inputCost = (inputTokens / 1000000) * 1.25;
+        const outputCost = (outputTokens / 1000000) * 10;
+        phase2Cost += (inputCost + outputCost);
+      }
+
+      // Wait for page transition
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      // Check what happened after Phase 2
+      const pagesAfterPhase2 = stagehand.context.pages();
+      if (!pagesAfterPhase2 || pagesAfterPhase2.length === 0) {
+        console.log(`❌ No pages available after Phase 2 on page ${pageNumber}`);
+        throw new Error('Browser context lost');
+      }
+
+      const urlAfterPhase2 = pagesAfterPhase2[0].url();
+      console.log(`📍 URL after Phase 2: ${urlAfterPhase2}`);
+
+      // Detect if application was submitted or we moved to next page
+      const urlChanged = urlAfterPhase2 !== urlBeforePhase2;
+      const isSuccessPage = urlAfterPhase2.toLowerCase().includes('thank') ||
+                           urlAfterPhase2.toLowerCase().includes('success') ||
+                           urlAfterPhase2.toLowerCase().includes('confirm') ||
+                           urlAfterPhase2.toLowerCase().includes('complete');
+
+      if (isSuccessPage) {
+        console.log('\n✅ SUCCESS PAGE DETECTED - Application submitted!');
+        console.log(`📍 Final URL: ${urlAfterPhase2}`);
+        applicationComplete = true;
+        break;
+      } else if (urlChanged) {
+        console.log(`\n🔄 URL changed - Moving to next page (Page ${pageNumber + 1})`);
+        console.log(`   From: ${urlBeforePhase2}`);
+        console.log(`   To: ${urlAfterPhase2}`);
+        pageNumber++;
+        // Loop continues to next page
+      } else {
+        console.log('\n⚠️  URL did not change after Phase 2');
+        console.log('   Checking page content for completion indicators...');
+
+        try {
+          const pageContent = await pagesAfterPhase2[0].content();
+          const contentLower = pageContent.toLowerCase();
+
+          if (contentLower.includes('application submitted') ||
+              contentLower.includes('thank you for applying') ||
+              contentLower.includes('successfully submitted')) {
+            console.log('✅ Detected submission success in page content!');
+            applicationComplete = true;
+            break;
+          } else {
+            console.log('⚠️  No clear success indicator found - assuming submission complete');
+            applicationComplete = true;
+            break;
+          }
+        } catch (contentError) {
+          console.log('⚠️  Could not check page content, assuming complete');
+          applicationComplete = true;
+          break;
+        }
+      }
+
+      // Safety check - if we've been on too many pages, stop
+      if (pageNumber > MAX_PAGES) {
+        console.log(`\n⚠️  Reached maximum page limit (${MAX_PAGES}), stopping loop`);
+        break;
+      }
     }
+
+    console.log('\n' + '═'.repeat(80));
+    console.log(`  APPLICATION LOOP COMPLETE`);
+    console.log(`  Total pages processed: ${pageNumber}`);
+    console.log(`  Status: ${applicationComplete ? 'SUBMITTED ✅' : 'INCOMPLETE ⚠️'}`);
+    console.log('═'.repeat(80));
 
     console.log('✅ Workday application flow completed (Phase 0 + Phase 1 + Phase 2)');
 
