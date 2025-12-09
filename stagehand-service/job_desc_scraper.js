@@ -33,14 +33,14 @@ const scrapeJobDetails = async (stagehand, jobUrl) => {
       jobTitle: z.string().describe("The title or name of the job position"),
       companyName: z.string().describe("The name of the company or organization hiring"),
       location: z.string().describe("The job location - city, state, country, or if it's remote/hybrid"),
-      jobType: z.string().optional().describe("Employment type: Full-time, Part-time, Contract, Internship, etc."),
-      salaryRange: z.string().optional().describe("Salary or pay range if mentioned (e.g., '$80k-$100k', 'Competitive')"),
-      datePosted: z.string().optional().describe("When the job was posted (e.g., '2 days ago', 'Posted on Jan 15')"),
-      
+      jobType: z.string().nullish().describe("Employment type: Full-time, Part-time, Contract, Internship, etc."),
+      salaryRange: z.string().nullish().describe("Salary or pay range if mentioned (e.g., '$80k-$100k', 'Competitive')"),
+      datePosted: z.string().nullish().describe("When the job was posted (e.g., '2 days ago', 'Posted on Jan 15')"),
+
       // Summaries instead of full text
       descriptionSummary: z.string().describe("A concise 2-3 sentence summary of the main responsibilities and what the role involves"),
-      requirementsSummary: z.string().optional().describe("A brief summary (2-3 sentences) of key qualifications, skills, and experience needed"),
-      benefitsSummary: z.string().optional().describe("A short summary of benefits and perks if mentioned (1-2 sentences)"),
+      requirementsSummary: z.string().nullish().describe("A brief summary (2-3 sentences) of key qualifications, skills, and experience needed"),
+      benefitsSummary: z.string().nullish().describe("A short summary of benefits and perks if mentioned (1-2 sentences)"),
     });
 
     console.log("🤖 Extracting job details using Stagehand extract()...");
