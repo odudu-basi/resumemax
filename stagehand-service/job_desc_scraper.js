@@ -21,26 +21,31 @@ const scrapeJobDetails = async (stagehand, jobUrl) => {
     // Wait a moment for dynamic content to load
     await page.waitForLoadState("networkidle");
 
-    // Define schema for job details extraction
+    // Define schema for job details extraction - with summaries only
     const jobDetailsSchema = z.object({
       jobTitle: z.string().describe("The title or name of the job position"),
       companyName: z.string().describe("The name of the company or organization hiring"),
       location: z.string().describe("The job location - city, state, country, or if it's remote/hybrid"),
       jobType: z.string().optional().describe("Employment type: Full-time, Part-time, Contract, Internship, etc."),
-      salaryRange: z.string().optional().describe("Salary, pay range, or compensation mentioned (e.g., '$80k-$100k', 'Competitive')"),
-      datePosted: z.string().optional().describe("When the job was posted (e.g., '2 days ago', 'Posted on January 15, 2025')"),
-      jobDescription: z.string().describe("The complete job description including responsibilities and what the role entails"),
-      requirements: z.string().optional().describe("Required qualifications, skills, experience, or education needed"),
-      benefits: z.string().optional().describe("Benefits, perks, or additional compensation mentioned"),
+      salaryRange: z.string().optional().describe("Salary or pay range if mentioned (e.g., '$80k-$100k', 'Competitive')"),
+      datePosted: z.string().optional().describe("When the job was posted (e.g., '2 days ago', 'Posted on Jan 15')"),
+      
+      // Summaries instead of full text
+      descriptionSummary: z.string().describe("A concise 2-3 sentence summary of the main responsibilities and what the role involves"),
+      requirementsSummary: z.string().optional().describe("A brief summary (2-3 sentences) of key qualifications, skills, and experience needed"),
+      benefitsSummary: z.string().optional().describe("A short summary of benefits and perks if mentioned (1-2 sentences)"),
     });
 
     console.log("🤖 Extracting job details using Stagehand extract()...");
 
-    // Use Stagehand's extract method to get structured data
+    // Use Stagehand's extract method to get structured data with summaries
     const jobDetails = await stagehand.extract(
-      `Extract all job posting information from this page including the job title, company name,
-      location, job type, salary range if mentioned, when it was posted, the full job description,
-      required qualifications and skills, and any benefits or perks mentioned.`,
+      `Extract job posting information from this page. For the description, requirements, and benefits,
+      provide BRIEF SUMMARIES only (2-3 sentences each), not the full text. Extract:
+      - Job title, company name, location, job type, salary range, posting date
+      - A 2-3 sentence summary of the job description and main responsibilities
+      - A 2-3 sentence summary of the key requirements and qualifications
+      - A 1-2 sentence summary of benefits/perks if mentioned`,
       jobDetailsSchema
     );
 
@@ -51,6 +56,7 @@ const scrapeJobDetails = async (stagehand, jobUrl) => {
     console.log(`  Type: ${jobDetails.jobType || 'N/A'}`);
     console.log(`  Salary: ${jobDetails.salaryRange || 'N/A'}`);
     console.log(`  Posted: ${jobDetails.datePosted || 'N/A'}`);
+    console.log(`  Description: ${jobDetails.descriptionSummary.substring(0, 100)}...`);
 
     // Return the extracted details along with the original URL
     return {
