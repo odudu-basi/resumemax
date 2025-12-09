@@ -42,7 +42,7 @@ app.post('/apply', async (req, res) => {
     stagehand = new Stagehand({
       apiKey: process.env.BROWSERBASE_API_KEY,
       projectId: process.env.BROWSERBASE_PROJECT_ID,
-      model: "openai/gpt-4o",
+      model: "openai/gpt-4o-mini", // 16x cheaper than gpt-4o!
       env: 'BROWSERBASE',
       verbose: 1,
       enableCaching: true,
@@ -157,6 +157,7 @@ app.post('/scrape-job-details', async (req, res) => {
     stagehand = new Stagehand({
       apiKey: process.env.BROWSERBASE_API_KEY,
       projectId: process.env.BROWSERBASE_PROJECT_ID,
+      model: "openai/gpt-4o-mini", // 16x cheaper than gpt-4o!
       env: 'BROWSERBASE',
       verbose: 1,
       enableCaching: true,
