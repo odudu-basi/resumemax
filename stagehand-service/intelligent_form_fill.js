@@ -147,13 +147,56 @@ function summarizeFormFieldsForChatGPT(pageState) {
 }
 
 /**
+ * Summarize user profile to reduce tokens dramatically
+ */
+function summarizeUserProfile(userProfile) {
+  console.log('🔄 Summarizing user profile to reduce tokens...');
+  
+  // Extract only essential user data for form filling
+  const essentialProfile = {
+    // Basic info
+    fullName: userProfile.fullName || '',
+    firstName: userProfile.firstName || userProfile.fullName?.split(' ')[0] || '',
+    lastName: userProfile.lastName || userProfile.fullName?.split(' ').slice(1).join(' ') || '',
+    
+    // Contact
+    workEmail: userProfile.workEmail || userProfile.email || '',
+    phone: userProfile.phone || '',
+    
+    // Location (simplified)
+    location: userProfile.location || userProfile.city || '',
+    country: userProfile.country || 'United States',
+    
+    // Work authorization (simplified)
+    workAuth: userProfile.workAuth || userProfile.workAuthorization || 'authorized',
+    needsVisa: userProfile.needsVisa || false,
+    
+    // Experience (simplified to just years)
+    yearsExperience: userProfile.yearsExperience || '3-5 years',
+    
+    // Education (just degree level)
+    education: userProfile.education?.level || userProfile.educationLevel || 'Bachelor\'s',
+    
+    // Key skills (limit to 5)
+    skills: userProfile.skills?.slice(0, 5) || [],
+    
+    // Remove: resume content, detailed work history, projects, etc.
+  };
+
+  console.log('✅ User profile summarized to essential fields only');
+  
+  return essentialProfile;
+}
+
+/**
  * Step 2: Generate act() commands using ChatGPT (Token Optimized)
  */
 async function generateCommandsFromChatGPT(pageState, userProfile, jobUrl) {
   console.log('\n🧠 [Phase 0] Generating commands with ChatGPT (token optimized)...');
 
-  // Summarize form fields to reduce tokens
+  // Summarize form fields and user profile to reduce tokens
   const summarizedData = summarizeFormFieldsForChatGPT(pageState);
+  const summarizedProfile = summarizeUserProfile(userProfile);
 
   // Build the prompt with summarized data
   const prompt = `
@@ -175,8 +218,8 @@ ${JSON.stringify(summarizedData.fields, null, 2)}
 **Page Context:**
 ${JSON.stringify(summarizedData.context, null, 2)}
 
-**User Profile:**
-${JSON.stringify(userProfile, null, 2)}
+**User Profile (Essential Data Only):**
+${JSON.stringify(summarizedProfile, null, 2)}
 
 # REQUIREMENTS
 
