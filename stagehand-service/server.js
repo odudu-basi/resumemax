@@ -4,6 +4,8 @@ const cors = require('cors');
 const { Stagehand } = require('@browserbasehq/stagehand');
 const { adaptiveFormFillAgent } = require('./adaptive_apply_agent');
 const { hybridFormFill } = require('./adaptive_apply_hybrid');
+const { intelligentFormFill } = require('./intelligent_form_fill'); // Phase 0
+const { intelligentJobApplication } = require('./GPT_pattern_recognition_apply'); // NEW: GPT Pattern Recognition
 const { uploadResumeToForm } = require('./resume_upload_helper');
 const { scrapeJobDetails } = require('./job_desc_scraper');
 
@@ -36,7 +38,7 @@ app.post('/apply', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Missing required fields' });
     }
 
-    const selectedApproach = approach || 'hybrid'; // Default to hybrid mode
+    const selectedApproach = approach || 'pattern_recognition'; // Default to new GPT pattern recognition
     console.log(`🚀 Starting ${selectedApproach} application for:`, jobUrl);
 
     stagehand = new Stagehand({
@@ -70,7 +72,7 @@ app.post('/apply', async (req, res) => {
       }
     }
 
-    // Always attempt to upload cover letter if provided (helper will check if form has cover letter field)
+    // Always attempt to upload cover letter if provided
     if (coverLetter) {
       console.log('📝 Checking for cover letter field in application...');
       const coverLetterUploaded = await uploadResumeToForm(page, coverLetter, 'cover letter');
@@ -81,10 +83,41 @@ app.post('/apply', async (req, res) => {
       }
     }
 
+    // Extract job info for context
+    const jobInfo = {
+      title: 'Position', // You can enhance this by scraping the page
+      company: 'Company',
+      url: jobUrl
+    };
+
     // Route to selected approach
-    if (selectedApproach === 'hybrid') {
+    if (selectedApproach === 'pattern_recognition') {
+      console.log('🧠 Using GPT PATTERN RECOGNITION approach (Intelligent, adaptive, flexible)');
+
+      const result = await intelligentJobApplication(stagehand, userProfile, jobInfo, {
+        maxIterations: 20
+      });
+
+      await stagehand.close();
+
+      return res.json({
+        success: result.success,
+        message: result.message || result.error,
+        sessionId,
+        sessionUrl,
+        iterations: result.iterations,
+        finalUrl: result.finalUrl,
+        totalCost: result.totalCost
+      });
+
+    } else if (selectedApproach === 'intelligent') {
+      console.log('🧠 Using INTELLIGENT approach (Phase 0: ChatGPT-directed commands with agent fallback)');
+      await intelligentFormFill(stagehand, userProfile, jobUrl, sessionId, sessionUrl, res);
+
+    } else if (selectedApproach === 'hybrid') {
       console.log('🔄 Using HYBRID approach (observe + ChatGPT + agent)');
       await hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res, jobUrl);
+
     } else {
       console.log('🤖 Using AGENT-ONLY approach');
       await adaptiveFormFillAgent(stagehand, userProfile, sessionId, sessionUrl, res);
@@ -147,5 +180,10 @@ app.get('/session/:sessionId', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Stagehand API on port ${PORT}`);
+  console.log(`🚀 Stagehand API running on port ${PORT}`);
+  console.log(`📋 Available approaches:`);
+  console.log(`   - pattern_recognition (default, GPT-based adaptive)`);
+  console.log(`   - intelligent (Phase 0 ChatGPT)`);
+  console.log(`   - hybrid (observe + ChatGPT + agent)`);
+  console.log(`   - agent (agent-only)`);
 });
