@@ -56,30 +56,54 @@ app.post('/apply', async (req, res) => {
     const sessionId = stagehand.browserbaseSessionID || null;
     console.log('✅ Stagehand initialized. Session URL:', sessionUrl);
 
-    // Get page from context and navigate
-    const page = stagehand.context.pages()[0];
-    console.log("📄 Page object:", page ? "exists" : "undefined");
-    await page.goto(jobUrl);
+    // Wait for browser to be fully ready
+    await new Promise(r => setTimeout(r, 2000));
+
+    // Get page - use stagehand.page directly
+    const page = stagehand.page;
+    if (!page) {
+      throw new Error('Page object not available after Stagehand init');
+    }
+    
+    console.log("📄 Page object ready");
+    
+    // Navigate to job URL with timeout
+    console.log(`🔗 Navigating to: ${jobUrl}`);
+    try {
+      await page.goto(jobUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+      console.log('✅ Navigation complete');
+    } catch (navError) {
+      console.error('❌ Navigation failed:', navError.message);
+      throw new Error(`Failed to navigate to job URL: ${navError.message}`);
+    }
 
     // Pre-upload resume if available (before agent starts)
     if (userProfile.resumeFile && userProfile.resumeFile.contentBase64) {
       console.log('📄 Attempting to pre-upload resume...');
-      const resumeUploaded = await uploadResumeToForm(page, userProfile.resumeFile, 'resume');
-      if (resumeUploaded) {
-        console.log('✅ Resume pre-uploaded successfully');
-      } else {
-        console.log('⚠️  Resume pre-upload failed, agent will handle manually');
+      try {
+        const resumeUploaded = await uploadResumeToForm(page, userProfile.resumeFile, 'resume');
+        if (resumeUploaded) {
+          console.log('✅ Resume pre-uploaded successfully');
+        } else {
+          console.log('⚠️  Resume pre-upload failed, agent will handle manually');
+        }
+      } catch (uploadError) {
+        console.log('⚠️  Resume upload error:', uploadError.message);
       }
     }
 
     // Always attempt to upload cover letter if provided
     if (coverLetter) {
       console.log('📝 Checking for cover letter field in application...');
-      const coverLetterUploaded = await uploadResumeToForm(page, coverLetter, 'cover letter');
-      if (coverLetterUploaded) {
-        console.log('✅ Cover letter uploaded to form');
-      } else {
-        console.log('ℹ️  No cover letter field in this application form');
+      try {
+        const coverLetterUploaded = await uploadResumeToForm(page, coverLetter, 'cover letter');
+        if (coverLetterUploaded) {
+          console.log('✅ Cover letter uploaded to form');
+        } else {
+          console.log('ℹ️  No cover letter field in this application form');
+        }
+      } catch (uploadError) {
+        console.log('⚠️  Cover letter upload error:', uploadError.message);
       }
     }
 
