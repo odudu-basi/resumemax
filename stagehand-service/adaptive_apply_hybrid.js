@@ -108,7 +108,8 @@ Summary: ${jobDescription.summary}
   }
 
   let allAnswers = {};
-  let totalTokens = 0;
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
 
   for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
     const chunk = chunks[chunkIndex];
@@ -167,8 +168,9 @@ IMPORTANT: Return JSON where the keys are the EXACT field descriptions (copy the
 
       const chunkAnswers = JSON.parse(response.choices[0].message.content);
       allAnswers = { ...allAnswers, ...chunkAnswers };
-      totalTokens += response.usage.total_tokens;
-      console.log(`  ✅ Chunk ${chunkIndex + 1} completed. Tokens: ${response.usage.total_tokens}`);
+      totalInputTokens += response.usage.prompt_tokens;
+      totalOutputTokens += response.usage.completion_tokens;
+      console.log(`  ✅ Chunk ${chunkIndex + 1} completed. Input: ${response.usage.prompt_tokens}, Output: ${response.usage.completion_tokens}, Total: ${response.usage.total_tokens}`);
     } catch (error) {
       console.error(`  ❌ ChatGPT error for chunk ${chunkIndex + 1}:`, error.status, error.message);
       // Continue with other chunks even if one fails
@@ -176,10 +178,11 @@ IMPORTANT: Return JSON where the keys are the EXACT field descriptions (copy the
   }
 
   console.log(`  ✅ Got answers for ${Object.keys(allAnswers).length} fields`);
-  console.log(`  💰 Total tokens used: ${totalTokens}`);
+  console.log(`  💰 ChatGPT tokens - Input: ${totalInputTokens}, Output: ${totalOutputTokens}, Total: ${totalInputTokens + totalOutputTokens}`);
   return {
     answers: allAnswers,
-    tokens: totalTokens
+    inputTokens: totalInputTokens,
+    outputTokens: totalOutputTokens
   };
 }
 
@@ -1198,7 +1201,6 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
   let verificationCost = 0;
   let phase1Tokens = { input: 0, output: 0 };
   let phase2Tokens = { input: 0, output: 0 };
-  let chatGPTTokens = 0;
 
   try {
     console.log('═══════════════════════════════════════');
@@ -1270,14 +1272,26 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
       // Get intelligent answers from ChatGPT for this page
       const answersResult = await getIntelligentAnswers(formActions, workdayUserProfile, jobDescription);
       const answers = answersResult.answers;
-      chatGPTTokens += answersResult.tokens;
 
-      // Update Phase 1 costs
-      const pageObserveTokens = 2000;
-      const pageActTokens = formActions.length * 500;
-      phase1Tokens.input += pageObserveTokens + pageActTokens + answersResult.tokens;
-      phase1Tokens.output += 500;
-      phase1Cost += 0.08;
+      // Calculate accurate Phase 1 cost
+      // ChatGPT (gpt-4o-mini) pricing: $0.150/1M input, $0.600/1M output
+      const chatGPTInputCost = (answersResult.inputTokens / 1_000_000) * 0.150;
+      const chatGPTOutputCost = (answersResult.outputTokens / 1_000_000) * 0.600;
+      const chatGPTCost = chatGPTInputCost + chatGPTOutputCost;
+
+      // Stagehand observe() and act() costs (estimates since Stagehand doesn't return usage)
+      const pageObserveTokens = 2000; // Estimated
+      const pageActTokens = formActions.length * 500; // Estimated
+      const stagehandCost = 0.02; // Small estimate for Stagehand operations
+
+      // Track tokens
+      phase1Tokens.input += answersResult.inputTokens + pageObserveTokens + pageActTokens;
+      phase1Tokens.output += answersResult.outputTokens;
+
+      // Accumulate cost
+      phase1Cost += chatGPTCost + stagehandCost;
+
+      console.log(`  💰 Page ${pageNumber} ChatGPT cost: $${chatGPTCost.toFixed(4)} (Input: ${answersResult.inputTokens} tokens, Output: ${answersResult.outputTokens} tokens)`);
 
       // Fill form fields on current page
       let fillResults = { filledCount: 0, skippedCount: 0, errorCount: 0 };
@@ -1466,9 +1480,8 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
     console.log(`\n🔢 Token Usage:`);
     console.log(`   Total: ${totalTokens.toLocaleString()} tokens`);
     console.log(`   ${isWorkday ? 'Phase 0.5' : 'Phase 1'}: ${(phase1Tokens.input + phase1Tokens.output).toLocaleString()} tokens`);
-    if (!isWorkday) {
-      console.log(`     - ChatGPT: ${chatGPTTokens.toLocaleString()} tokens`);
-    }
+    console.log(`     - Input: ${phase1Tokens.input.toLocaleString()}`);
+    console.log(`     - Output: ${phase1Tokens.output.toLocaleString()}`);
     console.log(`   Phase 2: ${(phase2Tokens.input + phase2Tokens.output).toLocaleString()} tokens`);
     console.log(`     - Input: ${phase2Tokens.input.toLocaleString()}`);
     console.log(`     - Output: ${phase2Tokens.output.toLocaleString()}`);
@@ -1616,8 +1629,7 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
           phase1Total: phase1Tokens.input + phase1Tokens.output,
           phase2Total: phase2Tokens.input + phase2Tokens.output,
           inputTokens: phase1Tokens.input + phase2Tokens.input,
-          outputTokens: phase1Tokens.output + phase2Tokens.output,
-          chatGPTTokens: chatGPTTokens
+          outputTokens: phase1Tokens.output + phase2Tokens.output
         },
         pages: 1, // Workday single-flow completion
         allPagesFields: allFilledFields,
