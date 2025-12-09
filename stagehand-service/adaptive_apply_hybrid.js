@@ -131,15 +131,26 @@ Top Skills: ${(userProfile.skills?.technical || []).slice(0, 8).join(', ')}
 
 ${jobContext}
 
-FORM FIELDS TO FILL:
-${chunk.map((field, i) => `${i + 1}. ${field.description} (${field.method})`).join('\n')}
+FORM QUESTIONS AND FILLING METHODS:
+${chunk.map((field, i) => `${i + 1}. Question: "${field.description}"
+   Filling Method: ${field.method}`).join('\n\n')}
 
 INSTRUCTIONS:
-- For each field, provide a concise, accurate answer based on the user profile
-- For essay questions (like "Why do you want to work here?"), write professional 2-3 sentence responses tailored to the job description
-- For yes/no questions, answer based on the profile data
-- For dropdown/select fields, return "SKIP" (these will be handled in Phase 2)
-- If you don't have information for a field, return "SKIP"
+Analyze each question carefully along with its filling method and the job description context to provide the best possible answer.
+
+- For TEXT/TEXTAREA questions: Provide accurate answers from the user profile
+  - Essay questions ("Why do you want to work here?", "What interests you?"): Write 2-3 professional sentences tailored to THIS SPECIFIC job and company
+  - Short text questions: Provide concise, direct answers
+  
+- For DROPDOWN/SELECT questions: Choose the most appropriate option based on the profile and job context
+  
+- For YES/NO questions: Answer truthfully based on the profile data
+
+- For CHECKBOX questions: Select if applicable to the user
+
+- If you don't have relevant information for a question, return "SKIP"
+
+KEY: Look at the QUESTION being asked, the FILLING METHOD, and the JOB DESCRIPTION to craft the most relevant answer.
 
 IMPORTANT: Return JSON where the keys are the EXACT field descriptions (copy them exactly, including all punctuation and wording). Example format: { "Input field for the applicant's first name.": "John", "Input field for the applicant's last name.": "Doe" }`;
 
@@ -181,7 +192,7 @@ async function observeFormFields(stagehand) {
   try {
     // observe() returns Action[] with { description, method, arguments, selector }
     const actions = await stagehand.observe(
-      "Find all form input fields, textareas, and dropdown selects. Exclude file upload inputs. Describe what each field is for."
+      "Find all form questions asked and their filling methods (text input, dropdown, checkbox, etc.). Exclude file upload fields. For each question, describe what is being asked."
     );
 
     console.log(`  ✅ Found ${actions.length} form fields`);
