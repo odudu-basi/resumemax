@@ -1221,34 +1221,12 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
     const jobDescription = await extractJobDescription(stagehand);
     console.log('✅ Job description extracted');
     
-    // Conditional form filling based on platform
-    let formFillResult;
+    // Phase 1 and Phase 2 have already been completed above
+    // Prepare for Phase 3 verification
     let allFilledFields = [];
     
-    if (isWorkday) {
-      console.log('\n═══════════════════════════════════════');
-      console.log('  PHASE 0.5: Intelligent Form Fill');
-      console.log('  (Workday-Optimized ChatGPT Commands)');
-      console.log('═══════════════════════════════════════');
-
-      formFillResult = await intelligentFormFill(stagehand, userProfile, jobUrl, sessionId, sessionUrl, res);
-      
-      if (formFillResult.success) {
-        console.log('✅ Workday form completed with intelligent fill');
-        phase1Cost = formFillResult.usedFallback ? 0.167 : 0.017;
-        phase1Tokens.input = 8000; // Estimated intelligent fill tokens
-        phase1Tokens.output = 500;
-        
-        allFilledFields = [{
-          page: 'all',
-          method: 'intelligent_fill',
-          commandsExecuted: formFillResult.commandsExecuted || 0,
-          commandsSucceeded: formFillResult.commandsSucceeded || 0,
-          usedFallback: formFillResult.usedFallback || false
-        }];
-      } else {
-        throw new Error('Intelligent form fill failed: ' + formFillResult.error);
-      }
+    // Phase 1 and Phase 2 have already been completed above in the structured Workday flow
+    console.log('✅ Workday application flow completed (Phase 0 + Phase 1 + Phase 2)');
       
     } else {
       console.log('\n═══════════════════════════════════════');
