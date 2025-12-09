@@ -335,6 +335,12 @@ async function executeActionPlan(stagehand, actionPlan, userProfile) {
   console.log('\n⚡ Executing action plan...');
 
   const results = [];
+  
+  // Validate action plan has actions
+  if (!actionPlan || !actionPlan.actions || !Array.isArray(actionPlan.actions)) {
+    console.error('  ❌ Invalid action plan - no actions array');
+    return { success: false, results: [], error: 'Invalid action plan structure' };
+  }
 
   for (let i = 0; i < actionPlan.actions.length; i++) {
     const action = actionPlan.actions[i];
@@ -444,7 +450,7 @@ async function intelligentJobApplication(stagehand, userProfile, jobInfo, option
   try {
     while (currentIteration < maxIterations) {
       currentIteration++;
-      const currentUrl = await stagehand.context.pages()[0].url();
+      const currentUrl = await stagehand.page.url();
 
       console.log(`\n${'─'.repeat(80)}`);
       console.log(`📍 ITERATION ${currentIteration}/${maxIterations}`);
@@ -523,7 +529,7 @@ async function intelligentJobApplication(stagehand, userProfile, jobInfo, option
       success: false,
       error: 'Maximum iterations reached without completion',
       iterations: currentIteration,
-      finalUrl: await stagehand.context.pages()[0].url(),
+      finalUrl: await stagehand.page.url(),
       totalCost: totalCost.toFixed(4)
     };
 
@@ -537,7 +543,7 @@ async function intelligentJobApplication(stagehand, userProfile, jobInfo, option
       success: false,
       error: error.message,
       iterations: currentIteration,
-      finalUrl: await stagehand.context.pages()[0].url().catch(() => 'unknown'),
+      finalUrl: await stagehand.page.url().catch(() => 'unknown'),
       totalCost: totalCost.toFixed(4)
     };
   }
