@@ -1036,7 +1036,7 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
         // Wait for page to stabilize after login
         await new Promise(resolve => setTimeout(resolve, 3000));
       }
-    }
+    
     // Extract job description once
     console.log('📋 Extracting job description...');
     const jobDescription = await extractJobDescription(stagehand);
