@@ -147,45 +147,44 @@ function summarizeFormFieldsForChatGPT(pageState) {
 }
 
 /**
- * Summarize user profile to reduce tokens dramatically
+ * Remove resume data from user profile to prevent token overflow
+ * Keep all other user context for good decision making
  */
-function summarizeUserProfile(userProfile) {
-  console.log('🔄 Summarizing user profile to reduce tokens...');
+function removeResumeData(userProfile) {
+  console.log('🔄 Removing resume data to prevent token overflow...');
   
-  // Extract only essential user data for form filling
-  const essentialProfile = {
-    // Basic info
-    fullName: userProfile.fullName || '',
-    firstName: userProfile.firstName || userProfile.fullName?.split(' ')[0] || '',
-    lastName: userProfile.lastName || userProfile.fullName?.split(' ').slice(1).join(' ') || '',
-    
-    // Contact
-    workEmail: userProfile.workEmail || userProfile.email || '',
-    phone: userProfile.phone || '',
-    
-    // Location (simplified)
-    location: userProfile.location || userProfile.city || '',
-    country: userProfile.country || 'United States',
-    
-    // Work authorization (simplified)
-    workAuth: userProfile.workAuth || userProfile.workAuthorization || 'authorized',
-    needsVisa: userProfile.needsVisa || false,
-    
-    // Experience (simplified to just years)
-    yearsExperience: userProfile.yearsExperience || '3-5 years',
-    
-    // Education (just degree level)
-    education: userProfile.education?.level || userProfile.educationLevel || 'Bachelor\'s',
-    
-    // Key skills (limit to 5)
-    skills: userProfile.skills?.slice(0, 5) || [],
-    
-    // Remove: resume content, detailed work history, projects, etc.
-  };
-
-  console.log('✅ User profile summarized to essential fields only');
+  // Create a copy of the user profile
+  const profileWithoutResume = { ...userProfile };
   
-  return essentialProfile;
+  // Remove the massive resume content fields that cause token overflow
+  const resumeFields = [
+    'resume', 'resumeContent', 'resumeText', 'resumeData',
+    'cv', 'cvContent', 'cvText', 'cvData',
+    'document', 'documentContent', 'documentText',
+    'fileContent', 'parsedResume', 'resumeParsed'
+  ];
+  
+  resumeFields.forEach(field => {
+    if (profileWithoutResume[field]) {
+      delete profileWithoutResume[field];
+      console.log(`  ✅ Removed ${field} field`);
+    }
+  });
+  
+  // Also remove any nested resume content
+  if (profileWithoutResume.documents) {
+    delete profileWithoutResume.documents;
+    console.log('  ✅ Removed documents field');
+  }
+  
+  if (profileWithoutResume.files) {
+    delete profileWithoutResume.files;
+    console.log('  ✅ Removed files field');
+  }
+  
+  console.log('✅ Resume data removed, keeping all other user context');
+  
+  return profileWithoutResume;
 }
 
 /**
@@ -194,9 +193,9 @@ function summarizeUserProfile(userProfile) {
 async function generateCommandsFromChatGPT(pageState, userProfile, jobUrl) {
   console.log('\n🧠 [Phase 0] Generating commands with ChatGPT (token optimized)...');
 
-  // Summarize form fields and user profile to reduce tokens
+  // Summarize form fields and remove resume data to reduce tokens
   const summarizedData = summarizeFormFieldsForChatGPT(pageState);
-  const summarizedProfile = summarizeUserProfile(userProfile);
+  const userProfileWithoutResume = removeResumeData(userProfile);
 
   // Build the prompt with summarized data
   const prompt = `
@@ -218,8 +217,8 @@ ${JSON.stringify(summarizedData.fields, null, 2)}
 **Page Context:**
 ${JSON.stringify(summarizedData.context, null, 2)}
 
-**User Profile (Essential Data Only):**
-${JSON.stringify(summarizedProfile, null, 2)}
+**User Profile (Resume Data Removed):**
+${JSON.stringify(userProfileWithoutResume, null, 2)}
 
 # REQUIREMENTS
 
