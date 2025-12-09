@@ -4,21 +4,19 @@ const cors = require('cors');
 const { Stagehand } = require('@browserbasehq/stagehand');
 const { adaptiveFormFillAgent } = require('./adaptive_apply_agent');
 const { hybridFormFill } = require('./adaptive_apply_hybrid');
-const { intelligentFormFill } = require('./intelligent_form_fill'); // Phase 0
-const { intelligentJobApplication } = require('./GPT_pattern_recognition_apply'); // NEW: GPT Pattern Recognition
+const { intelligentFormFill } = require('./intelligent_form_fill');
+const { intelligentJobApplication } = require('./GPT_pattern_recognition_apply');
 const { uploadResumeToForm } = require('./resume_upload_helper');
 const { scrapeJobDetails } = require('./job_desc_scraper');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Debug: Log environment variables on startup
 console.log("🔍 Environment variables loaded:");
 console.log("BROWSERBASE_API_KEY:", process.env.BROWSERBASE_API_KEY || "❌ NOT SET");
 console.log("BROWSERBASE_PROJECT_ID:", process.env.BROWSERBASE_PROJECT_ID || "❌ NOT SET");
 console.log("NODE_ENV:", process.env.NODE_ENV);
 console.log("OPENAI_API_KEY:", process.env.OPENAI_API_KEY ? "✅ Set (length: " + process.env.OPENAI_API_KEY.length + ")" : "❌ NOT SET");
-console.log("GOOGLE_GENERATIVE_AI_API_KEY:", process.env.GOOGLE_GENERATIVE_AI_API_KEY ? "✅ Set (length: " + process.env.GOOGLE_GENERATIVE_AI_API_KEY.length + ")" : "❌ NOT SET");
 console.log("PORT:", PORT);
 
 app.use(cors());
@@ -38,7 +36,7 @@ app.post('/apply', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Missing required fields' });
     }
 
-    const selectedApproach = approach || 'pattern_recognition'; // Default to new GPT pattern recognition
+    const selectedApproach = approach || 'pattern_recognition';
     console.log(`🚀 Starting ${selectedApproach} application for:`, jobUrl);
 
     stagehand = new Stagehand({
@@ -56,28 +54,16 @@ app.post('/apply', async (req, res) => {
     const sessionId = stagehand.browserbaseSessionID || null;
     console.log('✅ Stagehand initialized. Session URL:', sessionUrl);
 
-    // Wait for browser to be fully ready
-    await new Promise(r => setTimeout(r, 2000));
-
-    // Get page - use stagehand.page directly
-    const page = stagehand.page;
-    if (!page) {
-      throw new Error('Page object not available after Stagehand init');
-    }
+    // Get page using official Stagehand method
+    const page = stagehand.context.pages()[0];
+    console.log("📄 Page object:", page ? "ready" : "undefined");
     
-    console.log("📄 Page object ready");
-    
-    // Navigate to job URL with timeout
+    // Navigate to job URL
     console.log(`🔗 Navigating to: ${jobUrl}`);
-    try {
-      await page.goto(jobUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
-      console.log('✅ Navigation complete');
-    } catch (navError) {
-      console.error('❌ Navigation failed:', navError.message);
-      throw new Error(`Failed to navigate to job URL: ${navError.message}`);
-    }
+    await page.goto(jobUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    console.log('✅ Navigation complete');
 
-    // Pre-upload resume if available (before agent starts)
+    // Pre-upload resume if available
     if (userProfile.resumeFile && userProfile.resumeFile.contentBase64) {
       console.log('📄 Attempting to pre-upload resume...');
       try {
@@ -92,15 +78,15 @@ app.post('/apply', async (req, res) => {
       }
     }
 
-    // Always attempt to upload cover letter if provided
+    // Upload cover letter if provided
     if (coverLetter) {
-      console.log('📝 Checking for cover letter field in application...');
+      console.log('📝 Checking for cover letter field...');
       try {
         const coverLetterUploaded = await uploadResumeToForm(page, coverLetter, 'cover letter');
         if (coverLetterUploaded) {
-          console.log('✅ Cover letter uploaded to form');
+          console.log('✅ Cover letter uploaded');
         } else {
-          console.log('ℹ️  No cover letter field in this application form');
+          console.log('ℹ️  No cover letter field in form');
         }
       } catch (uploadError) {
         console.log('⚠️  Cover letter upload error:', uploadError.message);
@@ -109,14 +95,14 @@ app.post('/apply', async (req, res) => {
 
     // Extract job info for context
     const jobInfo = {
-      title: 'Position', // You can enhance this by scraping the page
+      title: 'Position',
       company: 'Company',
       url: jobUrl
     };
 
     // Route to selected approach
     if (selectedApproach === 'pattern_recognition') {
-      console.log('🧠 Using GPT PATTERN RECOGNITION approach (Intelligent, adaptive, flexible)');
+      console.log('🧠 Using GPT PATTERN RECOGNITION approach');
 
       const result = await intelligentJobApplication(stagehand, userProfile, jobInfo, {
         maxIterations: 20
@@ -135,11 +121,11 @@ app.post('/apply', async (req, res) => {
       });
 
     } else if (selectedApproach === 'intelligent') {
-      console.log('🧠 Using INTELLIGENT approach (Phase 0: ChatGPT-directed commands with agent fallback)');
+      console.log('🧠 Using INTELLIGENT approach');
       await intelligentFormFill(stagehand, userProfile, jobUrl, sessionId, sessionUrl, res);
 
     } else if (selectedApproach === 'hybrid') {
-      console.log('🔄 Using HYBRID approach (observe + ChatGPT + agent)');
+      console.log('🔄 Using HYBRID approach');
       await hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res, jobUrl);
 
     } else {
@@ -163,10 +149,10 @@ app.post('/scrape-job-details', async (req, res) => {
     const { jobUrl } = req.body;
 
     if (!jobUrl) {
-      return res.status(400).json({ success: false, error: 'Missing jobUrl in request body' });
+      return res.status(400).json({ success: false, error: 'Missing jobUrl' });
     }
 
-    console.log('🔍 Starting job details scraping for:', jobUrl);
+    console.log('🔍 Starting job scraping:', jobUrl);
 
     stagehand = new Stagehand({
       apiKey: process.env.BROWSERBASE_API_KEY,
@@ -180,17 +166,15 @@ app.post('/scrape-job-details', async (req, res) => {
     await stagehand.init();
     console.log('✅ Stagehand initialized for scraping');
 
-    // Scrape job details
     const jobDetails = await scrapeJobDetails(stagehand, jobUrl);
 
-    // Close the browser
     await stagehand.close();
-    console.log('✅ Job scraping completed successfully');
+    console.log('✅ Job scraping completed');
 
     res.json(jobDetails);
 
   } catch (error) {
-    console.error('❌ Error scraping job details:', error);
+    console.error('❌ Error scraping job:', error);
     if (stagehand) {
       try { await stagehand.close(); } catch (e) {}
     }
