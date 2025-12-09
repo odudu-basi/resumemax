@@ -36,7 +36,7 @@ app.post('/apply', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Missing required fields' });
     }
 
-    const selectedApproach = approach || 'pattern_recognition';
+    const selectedApproach = approach || 'hybrid';
     console.log(`🚀 Starting ${selectedApproach} application for:`, jobUrl);
 
     stagehand = new Stagehand({
