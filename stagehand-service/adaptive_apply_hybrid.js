@@ -195,7 +195,7 @@ async function observeFormFields(stagehand) {
   try {
     // observe() returns Action[] with { description, method, arguments, selector }
     const actions = await stagehand.observe(
-      "Find all form questions asked and their filling methods (text input, dropdown, checkbox, etc.). Exclude file upload fields. For each question, describe what is being asked."
+      "Find all form questions and their filling methods (text input, dropdown, checkbox, etc.). Exclude file upload fields. For each question, provide a CONCISE description (max 10 words) of what is being asked."
     );
 
     console.log(`  ✅ Found ${actions.length} form fields`);
@@ -787,9 +787,9 @@ YOUR TASK:
 6. For yes/no or dropdown questions, choose the most appropriate answer based on the profile
    - For COUNTRY CODE dropdowns: Look for phone country codes (+1, +44, +61, etc.) if you see them in dropdowns
    - For STATE/PROVINCE dropdowns: Use standard abbreviations (CA for California, NY for New York, etc.) if needed
-7. After filling all fields, look for a NEXT button (check for buttons labeled "Next", "Continue", "Next Page", "Next Step")
+7. After filling all fields, look for a NEXT button (check for buttons labeled "Next", "Continue", "Next Page", "Next Step", "Proceed")
 8. If NEXT button exists: Click it to proceed to the next page
-9. If NO NEXT button exists: Look for SUBMIT button (labeled "Submit", "Submit Application", "Apply Now") and click it
+9. If NO NEXT button exists: Look for SUBMIT button (labeled "Submit", "Submit Application", "Apply Now", "Send Application") and click it
 10. If the page says "Review your application" or similar, click the SUBMIT button`;
 
   try {
@@ -803,17 +803,38 @@ YOUR TASK:
     console.log(`  Steps taken: ${result.actions ? result.actions.length : 'N/A'}`);
     console.log(`  Success: ${result.success}`);
 
+    // Detect what button was clicked by analyzing the last few actions
+    let navigationAction = 'unknown';
+    if (result.actions && result.actions.length > 0) {
+      // Check last 3 actions for navigation keywords
+      const recentActions = result.actions.slice(-3).map(a =>
+        typeof a === 'string' ? a.toLowerCase() : (a.action || a.description || '').toLowerCase()
+      ).join(' ');
+
+      if (recentActions.includes('next') || recentActions.includes('continue') ||
+          recentActions.includes('proceed') || recentActions.includes('next step')) {
+        navigationAction = 'next';
+        console.log(`  🔄 Detected: NEXT/CONTINUE button clicked`);
+      } else if (recentActions.includes('submit') || recentActions.includes('apply') ||
+                 recentActions.includes('send application')) {
+        navigationAction = 'submit';
+        console.log(`  ✅ Detected: SUBMIT button clicked`);
+      }
+    }
+
     if (result.usage) {
       const inputTokens = result.usage.input_tokens || 0;
       const outputTokens = result.usage.output_tokens || 0;
       const inputCost = (inputTokens / 1000000) * 1.25;
-      const outputCost = (outputTokens / 1000000) * 10;
+      const outputCost = (inputTokens / 1000000) * 10;
       const totalCost = (inputCost + outputCost).toFixed(4);
       console.log(`  💰 Phase 2 cost: $${totalCost}`);
       console.log(`     Input tokens: ${inputTokens.toLocaleString()}`);
       console.log(`     Output tokens: ${outputTokens.toLocaleString()}`);
     }
 
+    // Add navigation action to result
+    result.navigationAction = navigationAction;
     return result;
   } catch (error) {
     console.error('  ❌ Phase 2 error:', error.message);
@@ -1455,55 +1476,43 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
       // Wait for page transition
       await new Promise(resolve => setTimeout(resolve, 3000));
 
-      // Check what happened after Phase 2
-      const pagesAfterPhase2 = stagehand.context.pages();
-      if (!pagesAfterPhase2 || pagesAfterPhase2.length === 0) {
-        console.log(`❌ No pages available after Phase 2 on page ${pageNumber}`);
-        throw new Error('Browser context lost');
-      }
+      // Check navigation action from Phase 2 agent
+      const navigationAction = agentResult.navigationAction || 'unknown';
+      console.log(`\n🎯 Phase 2 Navigation Action: ${navigationAction.toUpperCase()}`);
 
-      const urlAfterPhase2 = pagesAfterPhase2[0].url();
-      console.log(`📍 URL after Phase 2: ${urlAfterPhase2}`);
-
-      // Detect if application was submitted or we moved to next page
-      const urlChanged = urlAfterPhase2 !== urlBeforePhase2;
-      const isSuccessPage = urlAfterPhase2.toLowerCase().includes('thank') ||
-                           urlAfterPhase2.toLowerCase().includes('success') ||
-                           urlAfterPhase2.toLowerCase().includes('confirm') ||
-                           urlAfterPhase2.toLowerCase().includes('complete');
-
-      if (isSuccessPage) {
-        console.log('\n✅ SUCCESS PAGE DETECTED - Application submitted!');
-        console.log(`📍 Final URL: ${urlAfterPhase2}`);
+      if (navigationAction === 'submit') {
+        console.log('\n✅ SUBMIT detected - Application submitted!');
+        console.log('   Moving to Phase 3 (Verification)...');
         applicationComplete = true;
         break;
-      } else if (urlChanged) {
-        console.log(`\n🔄 URL changed - Moving to next page (Page ${pageNumber + 1})`);
-        console.log(`   From: ${urlBeforePhase2}`);
-        console.log(`   To: ${urlAfterPhase2}`);
+      } else if (navigationAction === 'next') {
+        console.log(`\n🔄 NEXT detected - Moving to next page (Page ${pageNumber + 1})`);
         pageNumber++;
-        // Loop continues to next page
+        // Loop continues to Phase 1 on next page
       } else {
-        console.log('\n⚠️  URL did not change after Phase 2');
-        console.log('   Checking page content for completion indicators...');
+        // Unknown navigation action - check URL as fallback
+        console.log('⚠️  Unknown navigation action - using URL detection as fallback');
 
-        try {
-          const pageContent = await pagesAfterPhase2[0].content();
-          const contentLower = pageContent.toLowerCase();
+        const pagesAfterPhase2 = stagehand.context.pages();
+        if (!pagesAfterPhase2 || pagesAfterPhase2.length === 0) {
+          console.log(`❌ No pages available after Phase 2`);
+          throw new Error('Browser context lost');
+        }
 
-          if (contentLower.includes('application submitted') ||
-              contentLower.includes('thank you for applying') ||
-              contentLower.includes('successfully submitted')) {
-            console.log('✅ Detected submission success in page content!');
-            applicationComplete = true;
-            break;
-          } else {
-            console.log('⚠️  No clear success indicator found - assuming submission complete');
-            applicationComplete = true;
-            break;
-          }
-        } catch (contentError) {
-          console.log('⚠️  Could not check page content, assuming complete');
+        const urlAfterPhase2 = pagesAfterPhase2[0].url();
+        const urlBeforePhase2 = stagehand.context.pages()[0].url();
+
+        if (urlAfterPhase2.toLowerCase().includes('thank') ||
+            urlAfterPhase2.toLowerCase().includes('success') ||
+            urlAfterPhase2.toLowerCase().includes('confirm')) {
+          console.log('✅ Success page detected in URL - assuming submitted');
+          applicationComplete = true;
+          break;
+        } else if (urlAfterPhase2 !== urlBeforePhase2) {
+          console.log('🔄 URL changed - assuming next page');
+          pageNumber++;
+        } else {
+          console.log('⚠️  No clear indicator - assuming complete');
           applicationComplete = true;
           break;
         }
@@ -1575,15 +1584,14 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
     const totalTokens = phase1Tokens.input + phase1Tokens.output + phase2Tokens.input + phase2Tokens.output;
 
     console.log('\n═══════════════════════════════════════');
-    console.log(`  ${isWorkday ? 'WORKDAY INTELLIGENT' : 'GENERIC HYBRID'} APPROACH COMPLETE`);
+    console.log(`  HYBRID APPROACH COMPLETE`);
     console.log('═══════════════════════════════════════');
-    console.log(`🎯 Platform: ${isWorkday ? 'Workday (Fully Optimized)' : 'Generic (Traditional)'}`);
     console.log(`⏱️  Total time: ${executionTime}s`);
     console.log(`💰 Total cost: $${totalCost.toFixed(4)}`);
-    console.log(`   Phase 0 (${isWorkday ? 'Intelligent Login' : 'Traditional Login'}): $${phase0Cost.toFixed(4)}`);
-    console.log(`   ${isWorkday ? 'Phase 0.5 (Intelligent Form)' : 'Phase 1 (Form)'}: $${phase1Cost.toFixed(4)}`);
-    console.log(`   Phase 2 (Agent): $${phase2Cost.toFixed(4)}`);
-    console.log(`   Verification: $${verificationCost.toFixed(4)}`);
+    console.log(`   Phase 0 (Account Creation): $${phase0Cost.toFixed(4)}`);
+    console.log(`   Phase 1 (Form Fill): $${phase1Cost.toFixed(4)}`);
+    console.log(`   Phase 2 (Agent Review): $${phase2Cost.toFixed(4)}`);
+    console.log(`   Phase 3 (Verification): $${verificationCost.toFixed(4)}`);
     
     if (isWorkday) {
       console.log(`📊 Commands executed: ${allFilledFields[0]?.commandsExecuted || 0}`);
@@ -1596,10 +1604,10 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
     
     console.log(`\n🔢 Token Usage:`);
     console.log(`   Total: ${totalTokens.toLocaleString()} tokens`);
-    console.log(`   ${isWorkday ? 'Phase 0.5' : 'Phase 1'}: ${(phase1Tokens.input + phase1Tokens.output).toLocaleString()} tokens`);
+    console.log(`   Phase 1 (Form Fill): ${(phase1Tokens.input + phase1Tokens.output).toLocaleString()} tokens`);
     console.log(`     - Input: ${phase1Tokens.input.toLocaleString()}`);
     console.log(`     - Output: ${phase1Tokens.output.toLocaleString()}`);
-    console.log(`   Phase 2: ${(phase2Tokens.input + phase2Tokens.output).toLocaleString()} tokens`);
+    console.log(`   Phase 2 (Agent Review): ${(phase2Tokens.input + phase2Tokens.output).toLocaleString()} tokens`);
     console.log(`     - Input: ${phase2Tokens.input.toLocaleString()}`);
     console.log(`     - Output: ${phase2Tokens.output.toLocaleString()}`);
 
