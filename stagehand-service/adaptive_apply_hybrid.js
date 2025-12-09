@@ -1227,130 +1227,6 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
     
     // Phase 1 and Phase 2 have already been completed above in the structured Workday flow
     console.log('✅ Workday application flow completed (Phase 0 + Phase 1 + Phase 2)');
-      
-    } else {
-      console.log('\n═══════════════════════════════════════');
-      console.log('  GENERIC PLATFORM: Traditional Hybrid');
-      console.log('  (Multi-page Phase 1 + Phase 2 approach)');
-      console.log('═══════════════════════════════════════');
-
-      // Use original multi-page approach for non-Workday sites
-      let pageNumber = 1;
-      let continueToNextPage = true;
-      
-      while (continueToNextPage) {
-        console.log(`\n${'═'.repeat(50)}`);
-        console.log(`  PAGE ${pageNumber}: Form Filling`);
-        console.log(`${'═'.repeat(50)}`);
-        
-        const pages = stagehand.context.pages();
-        if (!pages || pages.length === 0) {
-          console.log(`❌ No pages available in context for page ${pageNumber}`);
-          throw new Error('Browser context lost - no pages available');
-        }
-        const page = pages[0];
-        const urlBeforePhase2 = page.url();
-
-        console.log('═══════════════════════════════════════');
-        console.log('  PHASE 1: Traditional Stagehand');
-        console.log('═══════════════════════════════════════');
-
-        // Observe form fields
-        const formActions = await observeFormFields(stagehand);
-        if (formActions.length === 0) {
-          throw new Error('No form fields found');
-        }
-
-        // Get intelligent answers from ChatGPT
-        const answersResult = await getIntelligentAnswers(formActions, workdayUserProfile, jobDescription);
-        const answers = answersResult.answers;
-        chatGPTTokens = answersResult.tokens;
-
-        // Estimate Phase 1 tokens
-        const estimatedObserveTokens = 2000;
-        const estimatedActTokens = formActions.length * 500;
-        phase1Tokens.input = estimatedObserveTokens + estimatedActTokens + chatGPTTokens;
-        phase1Tokens.output = 500;
-        phase1Cost = 0.08;
-
-        // Fill form (with error resilience)
-        let fillResults = { filledCount: 0, skippedCount: 0, errorCount: 0 };
-        
-        try {
-          fillResults = await fillFormFields(stagehand, formActions, answers);
-          console.log(`\n📊 Phase 1 Results: ✅ ${fillResults.filledCount} filled, ⏭️ ${fillResults.skippedCount} skipped, ❌ ${fillResults.errorCount} errors`);
-        } catch (phase1Error) {
-          console.error(`\n❌ Phase 1 failed with error: ${phase1Error.message}`);
-          console.log(`\n🔄 Continuing to Phase 2 (Agent Fallback) to handle remaining fields...`);
-          fillResults.errorCount = formActions.length; // Mark all as errors for tracking
-        }
-        
-        // Track fields from this page
-        allFilledFields.push({
-          page: pageNumber,
-          filledCount: fillResults.filledCount,
-          skippedCount: fillResults.skippedCount,
-          errorCount: fillResults.errorCount
-        });
-        console.log(`\n💰 Phase 1 estimated cost: $${phase1Cost.toFixed(2)}`);
-
-        console.log('\n═══════════════════════════════════════');
-        console.log('  PHASE 2: Agent Review & Completion');
-        console.log('  (Handles remaining/failed fields from Phase 1)');
-        console.log('═══════════════════════════════════════');
-
-        const agentResult = await agentReviewAndComplete(stagehand, workdayUserProfile, jobDescription);
-
-        // Handle partial success from intermediate errors
-        if (agentResult.partialSuccess) {
-          console.log('  ⚠️  Agent returned partial success due to intermediate validation errors');
-          console.log('     Continuing process - errors will only be shown if final result fails');
-          console.log('     Intermediate error was:', agentResult.intermediateError);
-        }
-
-        if (agentResult.usage) {
-          const inputTokens = agentResult.usage.input_tokens || 0;
-          const outputTokens = agentResult.usage.output_tokens || 0;
-          phase2Tokens.input = inputTokens;
-          phase2Tokens.output = outputTokens;
-          const inputCost = (inputTokens / 1000000) * 1.25;
-          const outputCost = (outputTokens / 1000000) * 10;
-          phase2Cost = inputCost + outputCost;
-        }
-        
-        // Check if we moved to a new page (Next clicked) or stayed (Submit clicked)
-        await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for page transition
-        
-        const pagesAfterPhase2 = stagehand.context.pages();
-        if (!pagesAfterPhase2 || pagesAfterPhase2.length === 0) {
-          console.log(`❌ No pages available in context after Phase 2`);
-          throw new Error('Browser context lost - no pages available');
-        }
-        
-        const page2 = pagesAfterPhase2[0];
-        const urlAfterPhase2 = page2.url();
-        
-        // Check if URL changed or if we can find new form fields
-        const urlChanged = urlBeforePhase2 !== urlAfterPhase2;
-        
-        if (urlChanged) {
-          console.log(`\n✅ Moved to next page (URL changed)`);
-          console.log(`   Previous URL: ${urlBeforePhase2}`);
-          console.log(`   New URL: ${urlAfterPhase2}`);
-          console.log(`   Waiting 5 seconds for page to load...`);
-          await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
-          pageNumber++;
-          continueToNextPage = true; // Continue to next page
-        } else {
-          console.log(`\n✅ Submit clicked or no more pages (URL unchanged)`);
-          console.log(`   Final URL: ${urlAfterPhase2}`);
-          continueToNextPage = false; // Exit loop
-        }
-      }
-      
-      console.log(`\n📊 Completed ${pageNumber} page(s) using traditional approach`);
-    }
-    
 
     console.log('\n═══════════════════════════════════════');
     console.log('  PHASE 3: Verification Check');
@@ -1617,7 +1493,6 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
         }
       }
     });
-
   } catch (error) {
     console.error('\n❌ Hybrid form fill error:', error);
     try {
@@ -1632,6 +1507,7 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
       sessionUrl
     });
   }
+}
 
 
 module.exports = { 
