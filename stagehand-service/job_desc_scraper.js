@@ -20,6 +20,13 @@ const scrapeJobDetails = async (stagehand, jobUrl) => {
 
     // Wait a moment for dynamic content to load
     await page.waitForLoadState("networkidle");
+    console.log("✅ Page reached networkidle state");
+
+    // Verify page content is accessible
+    const pageTitle = await page.title();
+    const pageUrl = page.url();
+    console.log(`📄 Page title: ${pageTitle}`);
+    console.log(`📍 Final URL: ${pageUrl}`);
 
     // Define schema for job details extraction - with summaries only
     const jobDetailsSchema = z.object({
@@ -39,15 +46,25 @@ const scrapeJobDetails = async (stagehand, jobUrl) => {
     console.log("🤖 Extracting job details using Stagehand extract()...");
 
     // Use Stagehand's extract method to get structured data with summaries
-    const jobDetails = await stagehand.extract(
-      `Extract job posting information from this page. For the description, requirements, and benefits,
-      provide BRIEF SUMMARIES only (2-3 sentences each), not the full text. Extract:
-      - Job title, company name, location, job type, salary range, posting date
-      - A 2-3 sentence summary of the job description and main responsibilities
-      - A 2-3 sentence summary of the key requirements and qualifications
-      - A 1-2 sentence summary of benefits/perks if mentioned`,
-      jobDetailsSchema
-    );
+    let jobDetails;
+    try {
+      jobDetails = await stagehand.extract(
+        `Extract job posting information from this page. For the description, requirements, and benefits,
+        provide BRIEF SUMMARIES only (2-3 sentences each), not the full text. Extract:
+        - Job title, company name, location, job type, salary range, posting date
+        - A 2-3 sentence summary of the job description and main responsibilities
+        - A 2-3 sentence summary of the key requirements and qualifications
+        - A 1-2 sentence summary of benefits/perks if mentioned`,
+        jobDetailsSchema
+      );
+    } catch (extractError) {
+      console.error('❌ Extract failed with detailed error:');
+      console.error('   Error name:', extractError.name);
+      console.error('   Error message:', extractError.message);
+      console.error('   Error stack:', extractError.stack);
+      console.error('   Full error object:', JSON.stringify(extractError, null, 2));
+      throw extractError; // Re-throw to maintain error flow
+    }
 
     console.log("✅ Job details extracted successfully:");
     console.log(`  Title: ${jobDetails.jobTitle}`);
