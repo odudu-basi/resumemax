@@ -1454,7 +1454,7 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
           outputTokens: phase1Tokens.output + phase2Tokens.output,
           chatGPTTokens: chatGPTTokens
         },
-        pages: pageNumber,
+        pages: 1, // Workday single-flow completion
         allPagesFields: allFilledFields,
         totalFieldsFilled: allFilledFields.reduce((sum, p) => sum + p.filledCount, 0),
         totalFieldsSkipped: allFilledFields.reduce((sum, p) => sum + p.skippedCount, 0),
