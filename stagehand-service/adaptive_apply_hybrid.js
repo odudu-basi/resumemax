@@ -1632,7 +1632,7 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
       sessionUrl
     });
   }
-}
+
 
 module.exports = { 
   hybridFormFill,
