@@ -1221,11 +1221,76 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
     const jobDescription = await extractJobDescription(stagehand);
     console.log('✅ Job description extracted');
     
-    // Phase 1 and Phase 2 have already been completed above
-    // Prepare for Phase 3 verification
+    // Now execute Phase 1 and Phase 2
     let allFilledFields = [];
     
-    // Phase 1 and Phase 2 have already been completed above in the structured Workday flow
+    console.log('\n═══════════════════════════════════════');
+    console.log('  PHASE 1: Intelligent Form Fill');
+    console.log('═══════════════════════════════════════');
+
+    // Observe form fields
+    const formActions = await observeFormFields(stagehand);
+    if (formActions.length === 0) {
+      throw new Error('No form fields found');
+    }
+
+    // Get intelligent answers from ChatGPT
+    const answersResult = await getIntelligentAnswers(formActions, workdayUserProfile, jobDescription);
+    const answers = answersResult.answers;
+    chatGPTTokens = answersResult.tokens;
+
+    // Estimate Phase 1 tokens
+    const estimatedObserveTokens = 2000;
+    const estimatedActTokens = formActions.length * 500;
+    phase1Tokens.input = estimatedObserveTokens + estimatedActTokens + chatGPTTokens;
+    phase1Tokens.output = 500;
+    phase1Cost = 0.08;
+
+    // Fill form (with error resilience)
+    let fillResults = { filledCount: 0, skippedCount: 0, errorCount: 0 };
+    
+    try {
+      fillResults = await fillFormFields(stagehand, formActions, answers);
+      console.log(`\n📊 Phase 1 Results: ✅ ${fillResults.filledCount} filled, ⏭️ ${fillResults.skippedCount} skipped, ❌ ${fillResults.errorCount} errors`);
+    } catch (phase1Error) {
+      console.error(`\n❌ Phase 1 failed with error: ${phase1Error.message}`);
+      console.log(`\n🔄 Continuing to Phase 2 (Agent Fallback) to handle remaining fields...`);
+      fillResults.errorCount = formActions.length; // Mark all as errors for tracking
+    }
+    
+    // Track fields from this page
+    allFilledFields.push({
+      page: 1,
+      filledCount: fillResults.filledCount,
+      skippedCount: fillResults.skippedCount,
+      errorCount: fillResults.errorCount
+    });
+    console.log(`\n💰 Phase 1 estimated cost: $${phase1Cost.toFixed(2)}`);
+
+    console.log('\n═══════════════════════════════════════');
+    console.log('  PHASE 2: Agent Review & Completion');
+    console.log('  (Handles remaining/failed fields from Phase 1)');
+    console.log('═══════════════════════════════════════');
+
+    const agentResult = await agentReviewAndComplete(stagehand, workdayUserProfile, jobDescription);
+
+    // Handle partial success from intermediate errors
+    if (agentResult.partialSuccess) {
+      console.log('  ⚠️  Agent returned partial success due to intermediate validation errors');
+      console.log('     Continuing process - errors will only be shown if final result fails');
+      console.log('     Intermediate error was:', agentResult.intermediateError);
+    }
+
+    if (agentResult.usage) {
+      const inputTokens = agentResult.usage.input_tokens || 0;
+      const outputTokens = agentResult.usage.output_tokens || 0;
+      phase2Tokens.input = inputTokens;
+      phase2Tokens.output = outputTokens;
+      const inputCost = (inputTokens / 1000000) * 1.25;
+      const outputCost = (outputTokens / 1000000) * 10;
+      phase2Cost = inputCost + outputCost;
+    }
+    
     console.log('✅ Workday application flow completed (Phase 0 + Phase 1 + Phase 2)');
 
     console.log('\n═══════════════════════════════════════');
