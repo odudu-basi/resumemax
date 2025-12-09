@@ -3,6 +3,7 @@ const { z } = require('zod');
 
 const { detectLoginPage, handleLogin } = require('./login_handler');
 const { intelligentFormFill, observeAndExtractPage, executeCommands } = require('./intelligent_form_fill');
+const { workdayFormFill } = require('./adaptive_apply_workday');
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
@@ -1008,27 +1009,19 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
   let chatGPTTokens = 0;
 
   try {
+    // Route to dedicated Workday flow if detected
+    if (isWorkday) {
+      console.log('🎯 Routing to dedicated Workday intelligent flow...');
+      return await workdayFormFill(stagehand, userProfile, sessionId, sessionUrl, res, jobUrl);
+    }
+
     console.log('═══════════════════════════════════════');
     console.log('  PHASE 0: Login Detection & Handling');
     console.log('═══════════════════════════════════════');
 
     let loginResult = { success: true, cost: 0 };
     
-    if (isWorkday) {
-      console.log('🎯 Using intelligent Workday login flow...');
-      loginResult = await intelligentWorkdayLogin(stagehand, userProfile, jobUrl);
-      phase0Cost = 0.02; // Estimated cost for intelligent login
-      
-      if (!loginResult.success) {
-        console.error('❌ Intelligent login failed, but continuing with application attempt...');
-      } else {
-        console.log('✅ Workday login completed successfully');
-        if (loginResult.alreadyOnApplicationPage) {
-          console.log('ℹ️  Already on application page, proceeding to form fill...');
-        }
-      }
-    } else {
-      console.log('🔐 Using traditional login detection for non-Workday site...');
+    console.log('🔐 Using traditional login detection for non-Workday site...');
       const loginDetection = await detectLoginPage(stagehand);
       
       if (loginDetection.isLoginPage) {
