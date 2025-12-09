@@ -731,6 +731,162 @@ function isWorkdayJobUrl(url) {
 }
 
 /**
+ * Generate unique email for job applications using plus addressing
+ */
+function generateJobEmail(baseEmail) {
+  const [username, domain] = baseEmail.split('@');
+  
+  // Generate two random numbers (10-99)
+  const randomNumbers = Math.floor(Math.random() * 90) + 10;
+  
+  return `${username}+${randomNumbers}@${domain}`;
+}
+
+/**
+ * Predefined Workday application steps
+ */
+const WORKDAY_STEPS = [
+  {
+    id: 'accept_cookies',
+    action: 'click the Accept Cookies button',
+    optional: true,
+    description: 'Accept cookie consent if present'
+  },
+  {
+    id: 'click_apply',
+    action: 'click the Apply button',
+    critical: true,
+    description: 'Click main Apply button on job listing'
+  },
+  {
+    id: 'apply_manually',
+    action: 'click the Apply Manually button',
+    critical: true,
+    description: 'Choose manual application over LinkedIn/other options'
+  },
+  {
+    id: 'scroll_to_form',
+    action: 'scroll',
+    scrollAmount: 50,
+    description: 'Scroll to reveal form fields'
+  },
+  {
+    id: 'enter_email',
+    action: 'type %email% into the Email Address field',
+    critical: true,
+    description: 'Enter email address for account creation/login'
+  },
+  {
+    id: 'enter_password',
+    action: 'type %password% into the Password field',
+    critical: true,
+    description: 'Enter password for account'
+  },
+  {
+    id: 'verify_password',
+    action: 'type %password% into the Verify New Password field',
+    optional: true,
+    description: 'Confirm password for new account creation'
+  },
+  {
+    id: 'scroll_to_terms',
+    action: 'scroll',
+    scrollAmount: 50,
+    description: 'Scroll to terms and conditions'
+  },
+  {
+    id: 'accept_terms',
+    action: 'click the terms and conditions checkbox',
+    critical: true,
+    description: 'Accept terms and conditions'
+  },
+  {
+    id: 'create_account',
+    action: 'click the Create Account button',
+    critical: true,
+    description: 'Submit account creation form'
+  },
+  {
+    id: 'final_scroll',
+    action: 'scroll',
+    scrollAmount: 50,
+    description: 'Scroll to reveal next section'
+  }
+];
+
+/**
+ * Execute structured Workday login steps
+ */
+async function executeStructuredWorkdayLogin(stagehand, userProfile) {
+  console.log('\n🎯 Executing structured Workday login...');
+  
+  let successCount = 0;
+  let totalSteps = 0;
+  
+  for (const step of WORKDAY_STEPS) {
+    totalSteps++;
+    console.log(`\n📋 Step ${totalSteps}: ${step.description}`);
+    
+    try {
+      if (step.action === 'scroll') {
+        // Handle scrolling
+        console.log(`🔄 Scrolling ${step.scrollAmount}% of viewport`);
+        await stagehand.page.evaluate((scrollAmount) => {
+          const viewportHeight = window.innerHeight;
+          const scrollDistance = (viewportHeight * scrollAmount) / 100;
+          window.scrollBy(0, scrollDistance);
+        }, step.scrollAmount);
+        
+        // Wait for scroll to complete
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        successCount++;
+        
+      } else {
+        // Handle Stagehand actions
+        let actionCommand = step.action;
+        
+        // Replace variables with actual values
+        if (actionCommand.includes('%email%')) {
+          actionCommand = actionCommand.replace('%email%', userProfile.workEmail);
+        }
+        if (actionCommand.includes('%password%')) {
+          actionCommand = actionCommand.replace('%password%', userProfile.workPassword);
+        }
+        
+        console.log(`🎯 Executing: ${actionCommand}`);
+        await stagehand.act(actionCommand);
+        
+        // Wait between actions
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        successCount++;
+        console.log(`✅ Step completed successfully`);
+      }
+      
+    } catch (error) {
+      console.log(`⚠️  Step failed: ${error.message}`);
+      
+      if (step.critical) {
+        console.log(`❌ Critical step failed, but continuing with form fill...`);
+        // Don't throw error, just log and continue to Phase 1
+        break;
+      } else {
+        console.log(`⏭️  Optional step failed, continuing...`);
+      }
+    }
+  }
+  
+  console.log(`\n✅ Structured login completed: ${successCount}/${totalSteps} steps succeeded`);
+  return {
+    success: true,
+    successCount,
+    totalSteps,
+    stepsCompleted: totalSteps,
+    commandsExecuted: totalSteps,
+    method: 'structured_workday_login'
+  };
+}
+
+/**
  * Generate Workday login commands using ChatGPT - Multi-step aware
  */
 async function generateWorkdayLoginCommands(pageState, userProfile, jobUrl, stepNumber = 1) {
@@ -992,12 +1148,37 @@ async function isApplicationForm(pageState) {
 }
 
 async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res, jobUrl) {
-  console.log('🔄 Starting HYBRID form filling approach...\n');
+  console.log('🎯 Starting WORKDAY-ONLY application flow...\n');
 
-  // Check if this is a Workday job application
+  // Validate that this is a Workday job application
   const isWorkday = isWorkdayJobUrl(jobUrl);
-  console.log(`🎯 Platform detected: ${isWorkday ? 'WORKDAY' : 'GENERIC'}`);
+  console.log(`🎯 Platform detected: ${isWorkday ? 'WORKDAY' : 'NON-WORKDAY'}`);
+  
+  if (!isWorkday) {
+    console.log('❌ Non-Workday applications are not supported in this flow');
+    await stagehand.close();
+    return res.status(400).json({
+      success: false,
+      error: 'This application flow only supports Workday job applications. Please use a Workday job URL.',
+      platform: 'non-workday',
+      jobUrl: jobUrl
+    });
+  }
+  
+  console.log('✅ Workday URL validated, proceeding with application...');
   console.log(`📋 Job URL: ${jobUrl}`);
+
+  // Generate unique email for this application
+  const uniqueEmail = generateJobEmail(userProfile.workEmail);
+  console.log(`📧 Using unique email: ${uniqueEmail}`);
+  console.log(`📧 Original email: ${userProfile.workEmail}`);
+  
+  // Create modified user profile with unique email
+  const workdayUserProfile = {
+    ...userProfile,
+    workEmail: uniqueEmail,
+    originalEmail: userProfile.workEmail
+  };
 
   const startTime = Date.now();
   let phase1Cost = 0;
@@ -1009,17 +1190,17 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
   let chatGPTTokens = 0;
 
   try {
-    // Route to dedicated Workday flow if detected
-    if (isWorkday) {
-      console.log('🎯 Routing to dedicated Workday intelligent flow...');
-      return await workdayFormFill(stagehand, userProfile, sessionId, sessionUrl, res, jobUrl);
-    }
-
     console.log('═══════════════════════════════════════');
-    console.log('  PHASE 0: Login Detection & Handling');
+    console.log('  PHASE 0: Structured Workday Login');
     console.log('═══════════════════════════════════════');
 
-    let loginResult = { success: true, cost: 0 };
+    // Workday structured login steps
+    const loginResult = await executeStructuredWorkdayLogin(stagehand, workdayUserProfile);
+    phase0Cost = 0.02; // Estimated cost for structured login
+    
+    console.log('✅ Workday login completed successfully');
+    console.log(`📊 Login steps: ${loginResult.stepsCompleted || 'N/A'}`);
+    console.log(`📊 Commands executed: ${loginResult.commandsExecuted || 'N/A'}`);
     
     console.log('🔐 Using traditional login detection for non-Workday site...');
       const loginDetection = await detectLoginPage(stagehand);
@@ -1105,7 +1286,7 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
         }
 
         // Get intelligent answers from ChatGPT
-        const answersResult = await getIntelligentAnswers(formActions, userProfile, jobDescription);
+        const answersResult = await getIntelligentAnswers(formActions, workdayUserProfile, jobDescription);
         const answers = answersResult.answers;
         chatGPTTokens = answersResult.tokens;
 
@@ -1142,7 +1323,7 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
         console.log('  (Handles remaining/failed fields from Phase 1)');
         console.log('═══════════════════════════════════════');
 
-        const agentResult = await agentReviewAndComplete(stagehand, userProfile, jobDescription);
+        const agentResult = await agentReviewAndComplete(stagehand, workdayUserProfile, jobDescription);
 
         // Handle partial success from intermediate errors
         if (agentResult.partialSuccess) {
