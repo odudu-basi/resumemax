@@ -2,8 +2,6 @@ const OpenAI = require('openai');
 const { z } = require('zod');
 
 const { detectLoginPage, handleLogin } = require('./login_handler');
-const { intelligentFormFill, observeAndExtractPage, executeCommands } = require('./intelligent_form_fill');
-const { workdayFormFill } = require('./adaptive_apply_workday');
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
