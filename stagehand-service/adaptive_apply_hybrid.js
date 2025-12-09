@@ -224,12 +224,25 @@ async function fillFormFields(stagehand, actions, answers) {
     try {
       const descLower = description.toLowerCase();
 
-      // DROPDOWN LOGIC: Skip all dropdowns in Phase 1
+      // DROPDOWN LOGIC: Fill dropdowns in Phase 1 (no longer skip)
       if (descLower.includes('dropdown') || descLower.includes('select') || action.method === 'selectOption') {
-        console.log(`  ⏭️  Skipping dropdown: ${description.substring(0, 50)}... (will be handled in Phase 2)`);
-          skippedCount++;
-        continue; // Skip to next field
-
+        console.log(`  📋 Filling dropdown: ${description.substring(0, 50)}...`);
+        
+        try {
+          const result = await stagehand.act(`select "${answer}" from the ${description}`, {});
+          
+          if (result && typeof result === 'object') {
+            filledCount++;
+            console.log(`    ✅ Selected: ${answer.substring(0, 50)}${answer.length > 50 ? '...' : ''}`);
+          } else {
+            console.log(`    ⚠️  Invalid response from stagehand.act, but continuing...`);
+            filledCount++;
+          }
+        } catch (actError) {
+          console.log(`    ❌ Dropdown selection failed: ${actError.message}`);
+          errorCount++;
+          continue;
+        }
       }
       // TEXT/TEXTAREA LOGIC
       else {
@@ -568,33 +581,22 @@ async function agentReviewAndComplete(stagehand, userProfile, jobDescription) {
     systemPrompt: `You are a quality control assistant for job application forms.
 
 Your task:
-1. Review the entire job application to see which fields are filled vs empty
-2. Fill any empty/missing fields using the user profile and job description provided
-3. Ensure all required fields have appropriate values
-4. Click the NEXT button to proceed to the next page (if available)
-5. If no NEXT button exists, click the SUBMIT button to submit the application
+1. REVIEW ONLY - Check if all fields on the current page are filled and complete
+2. DO NOT FILL ANY FIELDS - Phase 1 has already filled all fields
+3. Your job is to verify completeness and navigate to the next step
+4. Click the NEXT or CONTINUE button to proceed to the next page (PRIORITY)
+5. If no NEXT/CONTINUE button exists, click the SUBMIT button to submit the application
 
-IMPORTANT:
-- Only fill fields that are empty or incomplete
-- Do not modify fields that are already filled correctly
-- For fields without direct information in the user profile, INFER reasonable answers based on:
-  * The user's work experience, education, and skills
-  * The job description and requirements
-  * The user's best interests while remaining truthful
-- For COUNTRY CODE dropdowns: Some forms use phone country codes instead of country names. Common mappings:
-  * United States = +1
-  * Canada = +1
-  * United Kingdom = +44
-  * Australia = +61
-  * Germany = +49
-  * France = +33
-  * India = +91
-  * China = +86
-  * Mexico = +52
-  * Brazil = +55
-  If you see a dropdown with phone country codes (+1, +44, etc.), use the appropriate code for the user's location.
-- Be efficient - focus on completing the form accurately
-- ALWAYS click NEXT (priority) or SUBMIT (if no Next button) when done filling`
+IMPORTANT NAVIGATION PRIORITY:
+- FIRST: Look for "Next", "Continue", "Proceed" buttons
+- SECOND: Look for "Submit", "Apply", "Send Application" buttons
+- ONLY click Submit if no Next/Continue options are available
+
+REVIEW GUIDELINES:
+- Quickly scan the form to ensure fields appear filled
+- Do not spend time filling empty fields - that's Phase 1's job
+- Focus on finding and clicking the correct navigation button
+- Be efficient - your main job is navigation, not form filling`
   });
 
   const firstName = userProfile.fullName.split(' ')[0] || '';
@@ -1291,6 +1293,79 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
       phase2Cost = inputCost + outputCost;
     }
     
+    // Check if we moved to a new page after Phase 2 (multi-page handling)
+    await new Promise(resolve => setTimeout(resolve, 3000)); // Wait for page transition
+    
+    const pagesAfterPhase2 = stagehand.context.pages();
+    if (!pagesAfterPhase2 || pagesAfterPhase2.length === 0) {
+      console.log(`❌ No pages available in context after Phase 2`);
+      throw new Error('Browser context lost - no pages available');
+    }
+    
+    const currentUrl = pagesAfterPhase2[0].url();
+    console.log(`📍 Current URL after Phase 2: ${currentUrl}`);
+    
+    // Check if URL changed (indicating we moved to a new page)
+    if (currentUrl !== jobUrl && !currentUrl.includes('error') && !currentUrl.includes('thank') && !currentUrl.includes('success')) {
+      console.log('\n🔄 New page detected! Running Phase 1 and 2 again...');
+      
+      // Run Phase 1 and 2 again for the new page
+      console.log('\n═══════════════════════════════════════');
+      console.log('  PHASE 1 (Page 2): Intelligent Form Fill');
+      console.log('═══════════════════════════════════════');
+
+      // Observe form fields on new page
+      const formActions2 = await observeFormFields(stagehand);
+      if (formActions2.length > 0) {
+        // Get intelligent answers from ChatGPT for new page
+        const answersResult2 = await getIntelligentAnswers(formActions2, workdayUserProfile, jobDescription);
+        const answers2 = answersResult2.answers;
+        chatGPTTokens += answersResult2.tokens;
+
+        // Update Phase 1 tokens
+        phase1Tokens.input += 2000 + (formActions2.length * 500) + answersResult2.tokens;
+        phase1Tokens.output += 500;
+        phase1Cost += 0.08;
+
+        // Fill form fields on new page
+        try {
+          const fillResults2 = await fillFormFields(stagehand, formActions2, answers2);
+          console.log(`\n📊 Phase 1 (Page 2) Results: ✅ ${fillResults2.filledCount} filled, ⏭️ ${fillResults2.skippedCount} skipped, ❌ ${fillResults2.errorCount} errors`);
+          
+          // Track fields from page 2
+          allFilledFields.push({
+            page: 2,
+            filledCount: fillResults2.filledCount,
+            skippedCount: fillResults2.skippedCount,
+            errorCount: fillResults2.errorCount
+          });
+        } catch (phase1Error2) {
+          console.error(`\n❌ Phase 1 (Page 2) failed: ${phase1Error2.message}`);
+        }
+
+        console.log('\n═══════════════════════════════════════');
+        console.log('  PHASE 2 (Page 2): Agent Review & Navigation');
+        console.log('═══════════════════════════════════════');
+
+        // Run Phase 2 again for new page
+        const agentResult2 = await agentReviewAndComplete(stagehand, workdayUserProfile, jobDescription);
+        
+        if (agentResult2.usage) {
+          const inputTokens2 = agentResult2.usage.input_tokens || 0;
+          const outputTokens2 = agentResult2.usage.output_tokens || 0;
+          phase2Tokens.input += inputTokens2;
+          phase2Tokens.output += outputTokens2;
+          const inputCost2 = (inputTokens2 / 1000000) * 1.25;
+          const outputCost2 = (outputTokens2 / 1000000) * 10;
+          phase2Cost += inputCost2 + outputCost2;
+        }
+      } else {
+        console.log('ℹ️  No form fields found on new page, proceeding to verification...');
+      }
+    } else {
+      console.log('✅ Same page or application completed - proceeding to verification');
+    }
+
     console.log('✅ Workday application flow completed (Phase 0 + Phase 1 + Phase 2)');
 
     console.log('\n═══════════════════════════════════════');
