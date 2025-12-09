@@ -98,93 +98,58 @@ async function observeAndExtractPage(stagehand) {
 }
 
 /**
- * Summarize form fields to reduce tokens (imported from workday file concept)
+ * Create minimal field list like Phase 1 (text only, no JSON)
  */
-function summarizeFormFieldsForChatGPT(pageState) {
-  console.log('🔄 Summarizing form fields to reduce tokens...');
+function createMinimalFieldList(pageState) {
+  console.log('🔄 Creating minimal field list like Phase 1...');
   
-  // Extract only essential field information
-  const summarizedFields = pageState.actions
+  // Filter to form fields only and create simple text list
+  const formFields = pageState.actions
     .filter(action => 
       action.method === 'fill' || 
       action.method === 'selectOption' || 
       action.method === 'click'
     )
-    .map(action => {
-      const summarized = {
-        description: action.description,
-        method: action.method
-      };
-      
-      // Add options for dropdowns/selects (limit to 10)
-      if (action.method === 'selectOption' && action.options) {
-        summarized.options = action.options.slice(0, 10);
-      }
-      
-      // Add current value if exists
-      if (action.arguments && action.arguments.length > 0) {
-        summarized.currentValue = action.arguments[0];
-      }
-      
-      return summarized;
-    })
-    .slice(0, 15); // Limit to 15 most relevant fields
+    .slice(0, 50) // Limit to 50 fields max (like Phase 1)
+    .map((action, index) => `${index + 1}. ${action.description} (${action.method})`)
+    .join('\n');
 
-  // Extract minimal page context
-  const minimalContext = {
-    title: pageState.pageContent.title || '',
-    currentStep: pageState.pageContent.currentStep || '',
-    errors: pageState.pageContent.errors || [],
-    requiredFields: pageState.pageContent.requiredFields || []
-  };
-
-  console.log(`✅ Reduced form data from ${pageState.actions.length} to ${summarizedFields.length} fields`);
+  console.log(`✅ Created minimal field list: ${pageState.actions.length} → 50 max fields`);
   
-  return {
-    fields: summarizedFields,
-    context: minimalContext
-  };
+  return formFields;
 }
 
 /**
- * Remove resume data from user profile to prevent token overflow
- * Keep all other user context for good decision making
+ * Create minimal user profile like Phase 1 (structured text, not JSON)
  */
-function removeResumeData(userProfile) {
-  console.log('🔄 Removing resume data to prevent token overflow...');
+function createMinimalUserProfile(userProfile) {
+  console.log('🔄 Creating minimal user profile like Phase 1...');
   
-  // Create a copy of the user profile
-  const profileWithoutResume = { ...userProfile };
-  
-  // Remove the massive resume content fields that cause token overflow
-  const resumeFields = [
-    'resume', 'resumeContent', 'resumeText', 'resumeData',
-    'cv', 'cvContent', 'cvText', 'cvData',
-    'document', 'documentContent', 'documentText',
-    'fileContent', 'parsedResume', 'resumeParsed'
-  ];
-  
-  resumeFields.forEach(field => {
-    if (profileWithoutResume[field]) {
-      delete profileWithoutResume[field];
-      console.log(`  ✅ Removed ${field} field`);
-    }
-  });
-  
-  // Also remove any nested resume content
-  if (profileWithoutResume.documents) {
-    delete profileWithoutResume.documents;
-    console.log('  ✅ Removed documents field');
-  }
-  
-  if (profileWithoutResume.files) {
-    delete profileWithoutResume.files;
-    console.log('  ✅ Removed files field');
-  }
-  
-  console.log('✅ Resume data removed, keeping all other user context');
-  
-  return profileWithoutResume;
+  // Extract only essential fields that Phase 1 uses
+  return {
+    fullName: userProfile.fullName || '',
+    workEmail: userProfile.workEmail || userProfile.email || '',
+    phone: userProfile.phone || '',
+    location: userProfile.location || '',
+    workAuthorized: userProfile.workAuthorized || true,
+    requiresSponsorship: userProfile.requiresSponsorship || false,
+    yearsOfExperience: userProfile.yearsOfExperience || '3-5',
+    linkedinUrl: userProfile.linkedinUrl || 'N/A',
+    // Recent work (max 2)
+    recentWork: (userProfile.workExperience || [])
+      .slice(0, 2)
+      .map(exp => `${exp.position} at ${exp.company}`)
+      .join(', ') || 'N/A',
+    // Education (max 2)  
+    education: (userProfile.education || [])
+      .slice(0, 2)
+      .map(edu => `${edu.degree} from ${edu.school}`)
+      .join(', ') || 'N/A',
+    // Top skills (max 8)
+    topSkills: (userProfile.skills?.technical || userProfile.skills || [])
+      .slice(0, 8)
+      .join(', ') || 'N/A'
+  };
 }
 
 /**
@@ -193,77 +158,51 @@ function removeResumeData(userProfile) {
 async function generateCommandsFromChatGPT(pageState, userProfile, jobUrl) {
   console.log('\n🧠 [Phase 0] Generating commands with ChatGPT (token optimized)...');
 
-  // Summarize form fields and remove resume data to reduce tokens
-  const summarizedData = summarizeFormFieldsForChatGPT(pageState);
-  const userProfileWithoutResume = removeResumeData(userProfile);
+  // Create minimal data like Phase 1 (no JSON, just text)
+  const minimalFields = createMinimalFieldList(pageState);
+  const minimalProfile = createMinimalUserProfile(userProfile);
 
-  // Build the prompt with summarized data
-  const prompt = `
-You are an expert at web automation using Stagehand, a browser automation library.
+  // Build the prompt using Phase 1's minimal approach
+  const prompt = `You are a job application assistant. Given a user's profile and form fields, generate Stagehand act() commands to complete this page.
 
-${STAGEHAND_DOCS}
+USER PROFILE:
+Name: ${minimalProfile.fullName}
+Email: ${minimalProfile.workEmail}
+Phone: ${minimalProfile.phone}
+Location: ${minimalProfile.location}
+Work Authorization: ${minimalProfile.workAuthorized ? 'Yes' : 'No'}
+Requires Sponsorship: ${minimalProfile.requiresSponsorship ? 'Yes' : 'No'}
+Years of Experience: ${minimalProfile.yearsOfExperience}
+LinkedIn: ${minimalProfile.linkedinUrl}
+Recent Work: ${minimalProfile.recentWork}
+Education: ${minimalProfile.education}
+Top Skills: ${minimalProfile.topSkills}
 
-# YOUR TASK
+FORM FIELDS TO FILL:
+${minimalFields}
 
-You are filling out a job application form at: ${jobUrl}
+TASK: Generate Stagehand act() commands to fill these fields and advance to the next page.
 
-Analyze the current page state and generate a sequence of Stagehand act() commands to complete this page.
+INSTRUCTIONS:
+- Generate act() commands using format: act("enter %fullName% into the name field", { variables: { fullName: "John Doe" } })
+- Use variables for all personal data from user profile
+- Skip fields you cannot fill accurately
+- End with clicking "Next", "Continue", or "Submit" button
+- For dropdowns, use act("select %option% from the dropdown", { variables: { option: "value" } })
 
-# CURRENT PAGE STATE (SUMMARIZED)
-
-**Form Fields:**
-${JSON.stringify(summarizedData.fields, null, 2)}
-
-**Page Context:**
-${JSON.stringify(summarizedData.context, null, 2)}
-
-**User Profile (Resume Data Removed):**
-${JSON.stringify(userProfileWithoutResume, null, 2)}
-
-# REQUIREMENTS
-
-1. **Generate act() commands** to fill all relevant fields and advance to next page
-2. **Use variables** for all personal data from user profile (use %variableName% syntax)
-3. **Prioritize required fields** - fill them first
-4. **Handle conditionals** - if page asks questions (like "Do you need visa sponsorship?"), answer based on user profile
-5. **End with navigation** - click "Next", "Continue", or "Submit" button at the end
-6. **Skip irrelevant fields** - don't fill optional fields that don't apply to this user
-7. **Be specific** - use descriptive element references ("the blue submit button", "email field in contact section")
-
-# RESPONSE FORMAT
-
-Return ONLY valid JSON (no markdown, no code blocks, no explanations outside JSON):
-
+Return ONLY valid JSON (no markdown, no explanations):
 {
-  "reasoning": "Brief strategy explanation (2-3 sentences)",
+  "reasoning": "Brief strategy (1-2 sentences)",
   "commands": [
     {
       "instruction": "enter %fullName% into the full name field",
       "variables": { "fullName": "John Doe" },
-      "critical": true,
-      "fieldType": "name"
-    },
-    {
-      "instruction": "enter %email% into email address field",
-      "variables": { "email": "john@example.com" },
-      "critical": true,
-      "fieldType": "email"
+      "critical": true
     }
   ],
   "nextPageExpected": true,
-  "isComplete": false,
   "confidence": 0.95
 }
-
-**Field Types:** name, email, phone, location, experience, education, skills, resume, coverLetter, workAuth, custom
-
-**Critical:** true = must succeed for application to continue, false = optional/nice-to-have
-
-**nextPageExpected:** true if clicking a "Next" button, false if clicking final "Submit"
-
-**isComplete:** true if this is the final submission, false if more pages expected
-
-**confidence:** 0-1 score of how confident you are these commands will work (be honest!)
 `.trim();
 
   try {
