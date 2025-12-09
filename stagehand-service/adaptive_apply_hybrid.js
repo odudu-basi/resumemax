@@ -1477,4 +1477,10 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
   }
 }
 
-module.exports = { hybridFormFill };
+module.exports = { 
+  hybridFormFill,
+  getIntelligentAnswers,
+  fillFormFields,
+  agentReviewAndComplete,
+  agentVerificationFallback
+};
