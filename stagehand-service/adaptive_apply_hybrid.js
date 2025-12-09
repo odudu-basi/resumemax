@@ -643,23 +643,26 @@ STEP 4: ACCEPT ALL CONSENTS
 
 STEP 5: SUBMIT ACCOUNT CREATION
 - Click the "Create Account", "Sign Up", "Register", or "Continue" button
-- Wait for the page to load
+- Wait 2-3 seconds for the page to change
+- Observe the new page content
 
-STEP 6: DETECT SUCCESS AND STOP
-Stop when you see ANY of these indicators:
-- Application form fields appear (fields for name, phone, address, work experience, education)
-- Page shows "Step 1 of X" or progress indicators for application steps
-- You see form sections like "Personal Information", "Work Experience", "Education"
-- The page URL changes to include words like "apply", "application", "form"
+STEP 6: VERIFY PAGE CHANGED AND STOP
+After clicking "Create Account", check if the page has changed:
+- The page content is different from before (new headings, different layout)
+- You see a new page (application form, dashboard, next step, etc.)
+- The URL has changed
+- Loading indicators have disappeared
 
-YOU ARE DONE when you reach the application form. Do NOT fill out the application form itself - that's handled by Phase 1.
+WHEN TO STOP:
+✅ STOP IMMEDIATELY when you confirm the page has changed after clicking "Create Account"
+✅ You do NOT need to see the application form - just confirm the page changed
+✅ Even if you land on an intermediate page, STOP - Phase 1 will handle the rest
 
 TROUBLESHOOTING:
-- If you see "Email already exists" error: This is OK, try to proceed with "Sign In" instead using the same credentials
-- If account creation succeeds but you're stuck on a welcome page: Look for "Continue", "Start Application", or "Apply Now" buttons
-- If you complete account creation and don't see the form: Look for navigation buttons to proceed
+- If you see "Email already exists" error: Try "Sign In" instead with same credentials, then wait for page change
+- If stuck on same page after clicking: Look for error messages or try clicking the button again
 
-YOUR GOAL: Navigate from the job listing page to the application form page by creating an account. Stop once you see the form fields.`;
+YOUR GOAL: Create account → Click "Create Account" → Wait for page to change → STOP and hand off to Phase 1.`;
 
   try {
     const result = await agent.execute({
