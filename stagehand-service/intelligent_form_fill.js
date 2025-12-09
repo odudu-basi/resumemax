@@ -98,12 +98,64 @@ async function observeAndExtractPage(stagehand) {
 }
 
 /**
- * Step 2: Generate act() commands using ChatGPT
+ * Summarize form fields to reduce tokens (imported from workday file concept)
+ */
+function summarizeFormFieldsForChatGPT(pageState) {
+  console.log('🔄 Summarizing form fields to reduce tokens...');
+  
+  // Extract only essential field information
+  const summarizedFields = pageState.actions
+    .filter(action => 
+      action.method === 'fill' || 
+      action.method === 'selectOption' || 
+      action.method === 'click'
+    )
+    .map(action => {
+      const summarized = {
+        description: action.description,
+        method: action.method
+      };
+      
+      // Add options for dropdowns/selects (limit to 10)
+      if (action.method === 'selectOption' && action.options) {
+        summarized.options = action.options.slice(0, 10);
+      }
+      
+      // Add current value if exists
+      if (action.arguments && action.arguments.length > 0) {
+        summarized.currentValue = action.arguments[0];
+      }
+      
+      return summarized;
+    })
+    .slice(0, 15); // Limit to 15 most relevant fields
+
+  // Extract minimal page context
+  const minimalContext = {
+    title: pageState.pageContent.title || '',
+    currentStep: pageState.pageContent.currentStep || '',
+    errors: pageState.pageContent.errors || [],
+    requiredFields: pageState.pageContent.requiredFields || []
+  };
+
+  console.log(`✅ Reduced form data from ${pageState.actions.length} to ${summarizedFields.length} fields`);
+  
+  return {
+    fields: summarizedFields,
+    context: minimalContext
+  };
+}
+
+/**
+ * Step 2: Generate act() commands using ChatGPT (Token Optimized)
  */
 async function generateCommandsFromChatGPT(pageState, userProfile, jobUrl) {
-  console.log('\n🧠 [Phase 0] Generating commands with ChatGPT...');
+  console.log('\n🧠 [Phase 0] Generating commands with ChatGPT (token optimized)...');
 
-  // Build the prompt
+  // Summarize form fields to reduce tokens
+  const summarizedData = summarizeFormFieldsForChatGPT(pageState);
+
+  // Build the prompt with summarized data
   const prompt = `
 You are an expert at web automation using Stagehand, a browser automation library.
 
@@ -115,13 +167,13 @@ You are filling out a job application form at: ${jobUrl}
 
 Analyze the current page state and generate a sequence of Stagehand act() commands to complete this page.
 
-# CURRENT PAGE STATE
+# CURRENT PAGE STATE (SUMMARIZED)
 
-**Observed Elements:**
-${JSON.stringify(pageState.actions, null, 2)}
+**Form Fields:**
+${JSON.stringify(summarizedData.fields, null, 2)}
 
-**Page Content:**
-${JSON.stringify(pageState.pageContent, null, 2)}
+**Page Context:**
+${JSON.stringify(summarizedData.context, null, 2)}
 
 **User Profile:**
 ${JSON.stringify(userProfile, null, 2)}
