@@ -293,11 +293,6 @@ async function handleMyExperiencePage(stagehand, userProfile, jobDescription) {
     console.log('\n' + '═'.repeat(80));
     console.log('✅ My Experience page handling complete');
     console.log(`   Sections filled: ${totalFilled}`);
-    console.log(`   Errors: ${totalErrors}`);
-    console.log('═'.repeat(80));
-
-    // Click navigation button to proceed to next page
-    console.log('\n🔘 Clicking Save and Continue button...');
     await stagehand.act("click the Save and Continue or Next button");
     await new Promise(resolve => setTimeout(resolve, 3000));
     console.log('✅ Navigation button clicked');
@@ -2334,7 +2329,147 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
           console.log(`🔄 Continuing to Phase 2 to handle...`);
           fillResults.errorCount = formActions.length;
         }
+
+        // ===== SECOND PASS: Click Continue and Handle Validation Errors =====
+        console.log('\n' + '─'.repeat(80));
+        console.log('🔄 SECOND PASS: Validation & Error Handling');
+        console.log('─'.repeat(80));
+
+        // Step 1: Click Continue/Next button
+        console.log('\n🔘 Step 1: Clicking Continue/Next button...');
+        try {
+          await stagehand.act("click the Continue or Next or Save and Continue button");
+          await new Promise(resolve => setTimeout(resolve, 4000));
+          console.log('✅ Continue button clicked, waiting for page response...');
+        } catch (clickError) {
+          console.error('❌ Error clicking Continue button:', clickError.message);
+          console.log('⚠️ Proceeding to check for errors anyway...');
+        }
+
+        // Step 2: Check for validation errors using extract
+        console.log('\n🔍 Step 2: Checking for validation errors...');
+        let hasValidationErrors = false;
+        let errorFieldsObserved = [];
+
+        try {
+          const errorCheck = await stagehand.extract(
+            "Check if there are any error messages, validation errors, or required field warnings on this page",
+            z.object({
+              hasErrors: z.boolean().describe("Whether there are any error messages or validation errors visible"),
+              errorMessages: z.array(z.string()).optional().describe("List of error messages if any")
+            })
+          );
+
+          hasValidationErrors = errorCheck.hasErrors;
+          
+          if (hasValidationErrors) {
+            console.log('⚠️ Validation errors detected:');
+            if (errorCheck.errorMessages && errorCheck.errorMessages.length > 0) {
+              errorCheck.errorMessages.forEach(msg => console.log(`   - ${msg}`));
+            }
+          } else {
+            console.log('✅ No validation errors found - page is clean!');
+          }
+
+        } catch (extractError) {
+          console.error('❌ Error checking for validation errors:', extractError.message);
+          console.log('⚠️ Assuming no errors and proceeding...');
+        }
+
+        // Step 3: If errors found, observe and fill them
+        if (hasValidationErrors) {
+          console.log('\n📝 Step 3: Observing and filling error fields...');
+          
+          try {
+            // Observe fields with errors
+            errorFieldsObserved = await stagehand.observe(
+              "Find all input fields, dropdowns, or checkboxes that have error messages or validation warnings next to them"
+            );
+
+            if (errorFieldsObserved.length > 0) {
+              console.log(`   Found ${errorFieldsObserved.length} fields with errors`);
+
+              // Get intelligent answers for error fields
+              const errorAnswersResult = await getIntelligentAnswers(
+                errorFieldsObserved,
+                workdayUserProfile,
+                jobDescription
+              );
+
+              // Update costs for error field answers
+              const errorChatGPTCost = 
+                (errorAnswersResult.inputTokens / 1_000_000) * 0.150 +
+                (errorAnswersResult.outputTokens / 1_000_000) * 0.600;
+              phase1Cost += errorChatGPTCost;
+              phase1Tokens.input += errorAnswersResult.inputTokens;
+              phase1Tokens.output += errorAnswersResult.outputTokens;
+
+              console.log(`   💰 Error fields ChatGPT cost: $${errorChatGPTCost.toFixed(4)}`);
+
+              // Fill error fields
+              const errorFillResults = await fillFormFields(
+                stagehand,
+                errorFieldsObserved,
+                errorAnswersResult.answers
+              );
+
+              console.log(`   ✅ ${errorFillResults.filledCount} error fields filled`);
+
+              // Click Continue/Next again
+              console.log('\n🔘 Clicking Continue/Next button again after fixing errors...');
+              await stagehand.act("click the Continue or Next or Save and Continue button");
+              await new Promise(resolve => setTimeout(resolve, 4000));
+              console.log('✅ Continue button clicked');
+
+              // Step 4: Check for errors AGAIN
+              console.log('\n🔍 Step 4: Checking if errors persist...');
+              const finalErrorCheck = await stagehand.extract(
+                "Check if there are any error messages, validation errors, or required field warnings on this page",
+                z.object({
+                  hasErrors: z.boolean().describe("Whether there are any error messages or validation errors visible"),
+                  errorMessages: z.array(z.string()).optional().describe("List of error messages if any")
+                })
+              );
+
+              if (finalErrorCheck.hasErrors) {
+                console.log('⚠️ Validation errors still persist after second attempt!');
+                console.log('🤖 Calling Phase 2 agent to resolve...');
+
+                // Call Phase 2 to handle persistent errors
+                const agentResult = await agentReviewAndComplete(stagehand, workdayUserProfile, jobDescription);
+
+                // Update Phase 2 costs
+                if (agentResult.usage) {
+                  const inputTokens = agentResult.usage.input_tokens || 0;
+                  const outputTokens = agentResult.usage.output_tokens || 0;
+                  phase2Tokens.input += inputTokens;
+                  phase2Tokens.output += outputTokens;
+                  const inputCost = (inputTokens / 1000000) * 1.25;
+                  const outputCost = (outputTokens / 1000000) * 10;
+                  phase2Cost += (inputCost + outputCost);
+                }
+
+                console.log('✅ Phase 2 completed, proceeding to next page...');
+              } else {
+                console.log('✅ All errors resolved! Proceeding to next page...');
+              }
+
+            } else {
+              console.log('⚠️ No error fields found despite error check, proceeding...');
+            }
+
+          } catch (errorHandlingError) {
+            console.error('❌ Error during error field handling:', errorHandlingError.message);
+            console.log('⚠️ Proceeding to next page despite error...');
+          }
+        }
+
+        console.log('\n' + '─'.repeat(80));
+        console.log('✅ Second Pass Complete');
+        console.log('─'.repeat(80));
       }
+
+
 
       // Track fields from this page
       allFilledFields.push({
@@ -2344,72 +2479,9 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
         errorCount: fillResults.errorCount
       });
 
-      console.log('\n' + '═'.repeat(80));
-      console.log(`  PAGE ${pageNumber}: PHASE 2 - Agent Review & Navigation`);
-      console.log('═'.repeat(80));
-
-      // Get current URL before Phase 2
-      const urlBeforePhase2 = stagehand.context.pages()[0].url();
-      console.log(`📍 URL before Phase 2: ${urlBeforePhase2}`);
-
-      // Execute Phase 2 agent
-      const agentResult = await agentReviewAndComplete(stagehand, workdayUserProfile, jobDescription);
-
-      // Update Phase 2 costs
-      if (agentResult.usage) {
-        const inputTokens = agentResult.usage.input_tokens || 0;
-        const outputTokens = agentResult.usage.output_tokens || 0;
-        phase2Tokens.input += inputTokens;
-        phase2Tokens.output += outputTokens;
-        const inputCost = (inputTokens / 1000000) * 1.25;
-        const outputCost = (outputTokens / 1000000) * 10;
-        phase2Cost += (inputCost + outputCost);
-      }
-
-      // Wait for page transition
-      await new Promise(resolve => setTimeout(resolve, 3000));
-
-      // Check navigation action from Phase 2 agent
-      const navigationAction = agentResult.navigationAction || 'unknown';
-      console.log(`\n🎯 Phase 2 Navigation Action: ${navigationAction.toUpperCase()}`);
-
-      if (navigationAction === 'submit') {
-        console.log('\n✅ SUBMIT detected - Application submitted!');
-        console.log('   Moving to Phase 3 (Verification)...');
-        applicationComplete = true;
-        break;
-      } else if (navigationAction === 'next') {
-        console.log(`\n🔄 NEXT detected - Moving to next page (Page ${pageNumber + 1})`);
-        pageNumber++;
-        // Loop continues to Phase 1 on next page
-      } else {
-        // Unknown navigation action - check URL as fallback
-        console.log('⚠️  Unknown navigation action - using URL detection as fallback');
-
-        const pagesAfterPhase2 = stagehand.context.pages();
-        if (!pagesAfterPhase2 || pagesAfterPhase2.length === 0) {
-          console.log(`❌ No pages available after Phase 2`);
-          throw new Error('Browser context lost');
-        }
-
-        const urlAfterPhase2 = pagesAfterPhase2[0].url();
-        const urlBeforePhase2 = stagehand.context.pages()[0].url();
-
-        if (urlAfterPhase2.toLowerCase().includes('thank') ||
-            urlAfterPhase2.toLowerCase().includes('success') ||
-            urlAfterPhase2.toLowerCase().includes('confirm')) {
-          console.log('✅ Success page detected in URL - assuming submitted');
-          applicationComplete = true;
-          break;
-        } else if (urlAfterPhase2 !== urlBeforePhase2) {
-          console.log('🔄 URL changed - assuming next page');
-          pageNumber++;
-        } else {
-          console.log('⚠️  No clear indicator - assuming complete');
-          applicationComplete = true;
-          break;
-        }
-      }
+      // Increment page number for next iteration
+      pageNumber++;
+      console.log(`\n🔄 Moving to page ${pageNumber}...`);
 
       // Safety check - if we've been on too many pages, stop
       if (pageNumber > MAX_PAGES) {
