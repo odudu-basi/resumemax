@@ -187,6 +187,697 @@ IMPORTANT: Return JSON where the keys are the EXACT field descriptions (copy the
 }
 
 /**
+ * Extract the page title/heading
+ * Returns the main title/heading on the current page
+ */
+async function extractPageTitle(stagehand) {
+  console.log('\n📋 Extracting page title...');
+
+  try {
+    const titleSchema = z.object({
+      title: z.string().describe("The main title or heading displayed on the page")
+    });
+
+    const result = await stagehand.extract(
+      "Find and extract the main title or heading on this page (usually displayed prominently in the center)",
+      titleSchema
+    );
+
+    console.log(`  ✅ Page title extracted: "${result.title}"`);
+    return result.title;
+
+  } catch (error) {
+    console.error('  ⚠️  Page title extraction failed:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Handle "My Experience" page
+ * TODO: Implement logic for filling work experience section
+ */
+async function handleMyExperiencePage(stagehand, userProfile, jobDescription) {
+  console.log('\n💼 Handling "My Experience" page...');
+  console.log('═'.repeat(80));
+
+  let totalFilled = 0;
+  let totalErrors = 0;
+
+  try {
+    // SECTION 1: Upload Resume
+    console.log('\n📄 === RESUME SECTION ===');
+    if (userProfile.resumeFile && userProfile.resumeFile.contentBase64) {
+      try {
+        const page = stagehand.context.pages()[0];
+        const resumeUploaded = await uploadResumeToForm(page, userProfile.resumeFile, 'resume');
+        if (resumeUploaded) {
+          console.log('✅ Resume uploaded successfully');
+          totalFilled++;
+        } else {
+          console.log('⚠️  Resume upload returned false');
+        }
+      } catch (resumeError) {
+        console.error('❌ Resume upload error:', resumeError.message);
+        totalErrors++;
+      }
+    } else {
+      console.log('ℹ️  No resume file provided, skipping resume upload');
+    }
+
+    // SECTION 2: Handle Work Experience
+    console.log('\n💼 === WORK EXPERIENCE SECTION ===');
+    if (userProfile.workExperience && userProfile.workExperience.length > 0) {
+      try {
+        const workExpResult = await handleWorkExperienceSection(
+          stagehand,
+          userProfile.workExperience,
+          jobDescription
+        );
+        totalFilled += workExpResult.entriesFilled || 0;
+        totalErrors += workExpResult.errors || 0;
+
+        console.log(`✅ Work Experience section complete: ${workExpResult.entriesFilled} entries filled`);
+      } catch (workExpError) {
+        console.error('❌ Work Experience section error:', workExpError.message);
+        totalErrors++;
+      }
+    } else {
+      console.log('ℹ️  No work experience entries provided, skipping');
+    }
+
+
+    // SECTION 3: Handle Education
+    console.log('\n🎓 === EDUCATION SECTION ===');
+    if (userProfile.education && userProfile.education.length > 0) {
+      try {
+        const educationResult = await handleEducationSection(
+          stagehand,
+          userProfile.education,
+          jobDescription
+        );
+        totalFilled += educationResult.entriesFilled || 0;
+        totalErrors += educationResult.errors || 0;
+
+        console.log(`✅ Education section complete: ${educationResult.entriesFilled} entries filled`);
+      } catch (educationError) {
+        console.error('❌ Education section error:', educationError.message);
+        totalErrors++;
+      }
+    } else {
+      console.log('ℹ️  No education entries provided, skipping');
+    }
+
+
+
+
+    console.log('\n' + '═'.repeat(80));
+    console.log('✅ My Experience page handling complete');
+    console.log(`   Sections filled: ${totalFilled}`);
+    console.log(`   Errors: ${totalErrors}`);
+    console.log('═'.repeat(80));
+
+    // Click navigation button to proceed to next page
+    console.log('\n🔘 Clicking Save and Continue button...');
+    await stagehand.act("click the Save and Continue or Next button");
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    console.log('✅ Navigation button clicked');
+
+    return {
+      success: true,
+      message: 'My Experience page filled successfully',
+      filledCount: totalFilled,
+      skippedCount: 0,
+      errorCount: totalErrors
+    };
+
+  } catch (error) {
+    console.error('❌ Error in handleMyExperiencePage:', error);
+    return {
+      success: false,
+      message: error.message,
+      filledCount: totalFilled,
+      skippedCount: 0,
+      errorCount: totalErrors + 1
+    };
+  }
+}
+
+/**
+ * Handle Work Experience Section
+ * Detects existing entries, fills them, and adds new ones as needed
+ */
+async function handleWorkExperienceSection(stagehand, workExperiences, jobDescription) {
+  console.log(`\n📋 Processing ${workExperiences.length} work experience entries...`);
+  
+  let entriesFilled = 0;
+  let errors = 0;
+
+  try {
+    // Step 1: Observe existing work experience entries
+    console.log('\n🔍 Step 1: Detecting existing work experience entries...');
+    const existingEntries = await observeWorkExperienceEntries(stagehand);
+    const existingCount = existingEntries.length;
+    
+    console.log(`   Found ${existingCount} existing work experience entry/entries`);
+    console.log(`   User has ${workExperiences.length} total work experience(s) in profile`);
+    console.log(`   Will process all ${workExperiences.length} entries`);
+
+    // Step 2: Process each work experience entry
+    for (let i = 0; i < workExperiences.length; i++) {
+      const entryNumber = i + 1;
+      const entryData = workExperiences[i];
+      
+      console.log(`\n--- Processing Work Experience Entry #${entryNumber}/${workExperiences.length} ---`);
+      console.log(`   Position: ${entryData.position || 'N/A'}`);
+      console.log(`   Company: ${entryData.company || 'N/A'}`);
+
+      try {
+        // If this is not the first entry, we need to click "Add" or "Add Another"
+        if (i >= existingCount) {
+          console.log(`\n🔘 Clicking Add button to create entry #${entryNumber}...`);
+          await stagehand.act("click the Add button under Work Experience section");
+          
+          // Wait for fields to appear
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          console.log('✅ Add button clicked, fields should now be visible');
+        } else {
+          console.log(`\n📋 Entry #${entryNumber} already exists, will fill existing fields`);
+        }
+
+        // Step 3: Observe fields for this entry
+        console.log(`\n👀 Observing fields for entry #${entryNumber}...`);
+        const entryFields = await stagehand.observe(
+          `Find all form fields in work experience entry #${entryNumber} (job title, company, dates, description)`
+        );
+        
+        if (entryFields.length === 0) {
+          console.log(`⚠️  No fields found for entry #${entryNumber}, skipping`);
+          errors++;
+          continue;
+        }
+        
+        console.log(`   Found ${entryFields.length} fields to fill`);
+
+        // Step 4: Get intelligent answers for this specific entry
+        console.log(`\n🤖 Getting answers from ChatGPT for entry #${entryNumber}...`);
+        const answersResult = await getAnswersForWorkExp(entryFields, entryData, jobDescription);
+        
+        console.log(`   ✅ Received ${Object.keys(answersResult.answers).length} answers`);
+        console.log(`   💰 Tokens - Input: ${answersResult.inputTokens}, Output: ${answersResult.outputTokens}`);
+
+        // Step 5: Fill the fields
+        console.log(`\n✍️  Filling fields for entry #${entryNumber}...`);
+        const fillResult = await fillWorkExperienceFields(stagehand, entryFields, answersResult.answers);
+        
+        console.log(`   ✅ ${fillResult.filledCount} filled, ⏭️  ${fillResult.skippedCount} skipped, ❌ ${fillResult.errorCount} errors`);
+        
+        if (fillResult.filledCount > 0) {
+          entriesFilled++;
+        }
+        if (fillResult.errorCount > 0) {
+          errors += fillResult.errorCount;
+        }
+
+      } catch (entryError) {
+        console.error(`❌ Error processing entry #${entryNumber}:`, entryError.message);
+        errors++;
+      }
+    }
+
+    console.log(`\n=== Work Experience section complete ===`);
+    console.log(`   Entries filled: ${entriesFilled}/${workExperiences.length}`);
+    console.log(`   Errors: ${errors}`);
+
+    return {
+      success: entriesFilled > 0,
+      entriesFilled: entriesFilled,
+      errors: errors
+    };
+
+  } catch (error) {
+    console.error('❌ Error in handleWorkExperienceSection:', error);
+    return {
+      success: false,
+      entriesFilled: entriesFilled,
+      errors: errors + 1
+    };
+  }
+}
+
+/**
+ * Handle Education Section
+ * Detects existing entries, fills them, and adds new ones as needed
+ */
+async function handleEducationSection(stagehand, educationEntries, jobDescription) {
+  console.log(`\n📋 Processing ${educationEntries.length} education entries...`);
+  
+  let entriesFilled = 0;
+  let errors = 0;
+
+  try {
+    // Step 1: Observe existing education entries
+    console.log('\n🔍 Step 1: Detecting existing education entries...');
+    const existingEntries = await observeEducationEntries(stagehand);
+    const existingCount = existingEntries.length;
+    
+    console.log(`   Found ${existingCount} existing education entry/entries`);
+    console.log(`   User has ${educationEntries.length} total education entry/entries in profile`);
+    console.log(`   Will process all ${educationEntries.length} entries`);
+
+    // Step 2: Process each education entry
+    for (let i = 0; i < educationEntries.length; i++) {
+      const entryNumber = i + 1;
+      const entryData = educationEntries[i];
+      
+      console.log(`\n--- Processing Education Entry #${entryNumber}/${educationEntries.length} ---`);
+      console.log(`   School: ${entryData.school || entryData.institution || 'N/A'}`);
+      console.log(`   Degree: ${entryData.degree || 'N/A'}`);
+
+      try {
+        // If this is not the first entry, we need to click "Add" or "Add Another"
+        if (i >= existingCount) {
+          console.log(`\n🔘 Clicking Add button to create entry #${entryNumber}...`);
+          await stagehand.act("click the Add button under Education section");
+          
+          // Wait for fields to appear
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          console.log('✅ Add button clicked, fields should now be visible');
+        } else {
+          console.log(`\n📋 Entry #${entryNumber} already exists, will fill existing fields`);
+        }
+
+        // Step 3: Observe fields for this entry
+        console.log(`\n👀 Observing fields for entry #${entryNumber}...`);
+        const entryFields = await stagehand.observe(
+          `Find all form fields in education entry #${entryNumber} (school, degree, field of study, dates, GPA)`
+        );
+        
+        if (entryFields.length === 0) {
+          console.log(`⚠️  No fields found for entry #${entryNumber}, skipping`);
+          errors++;
+          continue;
+        }
+        
+        console.log(`   Found ${entryFields.length} fields to fill`);
+
+        // Step 4: Get intelligent answers for this specific entry
+        console.log(`\n🤖 Getting answers from ChatGPT for entry #${entryNumber}...`);
+        const answersResult = await getAnswersForEducation(entryFields, entryData, jobDescription);
+        
+        console.log(`   ✅ Received ${Object.keys(answersResult.answers).length} answers`);
+        console.log(`   💰 Tokens - Input: ${answersResult.inputTokens}, Output: ${answersResult.outputTokens}`);
+
+        // Step 5: Fill the fields
+        console.log(`\n✍️  Filling fields for entry #${entryNumber}...`);
+        const fillResult = await fillEducationFields(stagehand, entryFields, answersResult.answers);
+        
+        console.log(`   ✅ ${fillResult.filledCount} filled, ⏭️  ${fillResult.skippedCount} skipped, ❌ ${fillResult.errorCount} errors`);
+        
+        if (fillResult.filledCount > 0) {
+          entriesFilled++;
+        }
+        if (fillResult.errorCount > 0) {
+          errors += fillResult.errorCount;
+        }
+
+      } catch (entryError) {
+        console.error(`❌ Error processing entry #${entryNumber}:`, entryError.message);
+        errors++;
+      }
+    }
+
+    console.log(`\n=== Education section complete ===`);
+    console.log(`   Entries filled: ${entriesFilled}/${educationEntries.length}`);
+    console.log(`   Errors: ${errors}`);
+
+    return {
+      success: entriesFilled > 0,
+      entriesFilled: entriesFilled,
+      errors: errors
+    };
+
+  } catch (error) {
+    console.error('❌ Error in handleEducationSection:', error);
+    return {
+      success: false,
+      entriesFilled: entriesFilled,
+      errors: errors + 1
+    };
+  }
+}
+
+/**
+ * Observe existing work experience entries on the page
+ * Returns array of existing entry elements
+ */
+async function observeWorkExperienceEntries(stagehand) {
+  console.log('   🔍 Looking for existing work experience entries...');
+
+  try {
+    const existingEntries = await stagehand.observe(
+      "Find all existing work experience entries or form fields already visible in the Work Experience section"
+    );
+
+    // Filter to get only meaningful entries (exclude the Add button itself)
+    const actualEntries = existingEntries.filter(entry => {
+      const desc = entry.description.toLowerCase();
+      return !desc.includes('add button') &&
+             !desc.includes('add another button') &&
+             (desc.includes('input') || desc.includes('field') || desc.includes('text') || desc.includes('company') || desc.includes('title') || desc.includes('date'));
+    });
+
+    console.log(`   Found ${actualEntries.length} existing entry fields`);
+    return actualEntries;
+
+  } catch (error) {
+    console.error('   ⚠️  Error observing existing entries:', error.message);
+    return [];
+  }
+}
+
+/**
+ * Get intelligent answers from ChatGPT for a specific work experience entry
+ * Only passes the specific entry data, not the entire user profile
+ */
+async function getAnswersForWorkExp(fields, entryData, jobDescription) {
+  console.log(`   🤖 Asking ChatGPT for answers (${fields.length} fields)...`);
+
+  const jobContext = jobDescription ? `
+JOB CONTEXT:
+Title: ${jobDescription.title}
+Company: ${jobDescription.company}
+Summary: ${jobDescription.summary}
+` : '';
+
+  const fieldDescriptions = fields.map((field, i) =>
+    `${i + 1}. Question: "${field.description}"
+   Filling Method: ${field.method}`
+  ).join('\n\n');
+
+  const prompt = `You are filling out a work experience entry for a job application.
+
+WORK EXPERIENCE ENTRY DATA:
+Position/Title: ${entryData.position || entryData.title || 'N/A'}
+Company: ${entryData.company || 'N/A'}
+Location: ${entryData.location || 'N/A'}
+Start Date: ${entryData.startDate || entryData.start_date || 'N/A'}
+End Date: ${entryData.endDate || entryData.end_date || entryData.current ? 'Present' : 'N/A'}
+Currently Working: ${entryData.current || false}
+Duration: ${entryData.duration || 'N/A'}
+Description: ${entryData.description || 'N/A'}
+
+${jobContext}
+
+FORM FIELDS TO FILL:
+${fieldDescriptions}
+
+INSTRUCTIONS:
+For each field, provide the most appropriate answer based on the work experience data above.
+
+- For job title/position fields: Use the Position/Title
+- For company name fields: Use the Company
+- For location fields: Use the Location
+- For start date fields: Use the Start Date (format as shown or MM/YYYY if needed)
+- For end date fields: Use the End Date, or "Present" if currently working
+- For description/responsibilities fields: Use the Description
+- For "currently working here" checkboxes: Answer based on Currently Working status
+- For any other fields: Provide the most relevant answer from the data above
+- If you don't have the information for a field, return "SKIP"
+
+IMPORTANT: Return JSON where the keys are the EXACT field descriptions (copy them exactly, including all punctuation and wording).
+
+Example format: { "Input field for job title.": "Software Engineer", "Input field for company name.": "Google Inc." }`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: 'You are a helpful assistant that fills out work experience entries accurately.' },
+        { role: 'user', content: prompt }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.7
+    });
+
+    const answers = JSON.parse(response.choices[0].message.content);
+    const inputTokens = response.usage.prompt_tokens;
+    const outputTokens = response.usage.completion_tokens;
+
+    console.log(`   ✅ ChatGPT response received (${Object.keys(answers).length} answers)`);
+
+    return {
+      answers: answers,
+      inputTokens: inputTokens,
+      outputTokens: outputTokens
+    };
+
+  } catch (error) {
+    console.error(`   ❌ ChatGPT error:`, error.message);
+    return {
+      answers: {},
+      inputTokens: 0,
+      outputTokens: 0
+    };
+  }
+}
+
+/**
+ * Fill work experience fields using act() commands
+ */
+async function fillWorkExperienceFields(stagehand, fields, answers) {
+  console.log(`   ✍️  Filling ${fields.length} fields...`);
+
+  let filledCount = 0;
+  let skippedCount = 0;
+  let errorCount = 0;
+
+  for (const field of fields) {
+    const description = field.description || '';
+    const answer = answers[description];
+
+    if (!answer || answer === 'SKIP') {
+      console.log(`      ⏭️  Skipping: ${description.substring(0, 50)}...`);
+      skippedCount++;
+      continue;
+    }
+
+    try {
+      const descLower = description.toLowerCase();
+
+      // Handle checkboxes
+      if (descLower.includes('checkbox') || descLower.includes('check box') || field.method === 'check') {
+        if (answer.toLowerCase() === 'true' || answer.toLowerCase() === 'yes') {
+          await stagehand.act(`check the ${description}`);
+          filledCount++;
+          console.log(`      ✅ Checked: ${description.substring(0, 40)}...`);
+        } else {
+          skippedCount++;
+        }
+        continue;
+      }
+
+      // Handle dropdowns/selects
+      if (descLower.includes('dropdown') || descLower.includes('select') || field.method === 'selectOption') {
+        await stagehand.act(`select "${answer}" from the ${description}`);
+        filledCount++;
+        console.log(`      ✅ Selected "${answer}" in: ${description.substring(0, 40)}...`);
+        continue;
+      }
+
+      // Handle text inputs (default)
+      await stagehand.act(`enter "${answer}" into the ${description}`, {});
+      filledCount++;
+      console.log(`      ✅ Filled: ${description.substring(0, 40)}... = "${String(answer).substring(0, 30)}..."`);
+
+    } catch (fillError) {
+      console.error(`      ❌ Error filling "${description}": ${fillError.message}`);
+      errorCount++;
+    }
+
+    // Small delay between fields
+    await new Promise(resolve => setTimeout(resolve, 300));
+  }
+
+  return {
+    filledCount: filledCount,
+    skippedCount: skippedCount,
+    errorCount: errorCount
+  };
+}
+
+/**
+ * Observe existing education entries on the page
+ * Returns array of existing entry elements
+ */
+async function observeEducationEntries(stagehand) {
+  console.log('   🔍 Looking for existing education entries...');
+  
+  try {
+    const existingEntries = await stagehand.observe(
+      "Find all existing education entries or form fields already visible in the Education section"
+    );
+    
+    const actualEntries = existingEntries.filter(entry => {
+      const desc = entry.description.toLowerCase();
+      return !desc.includes('add button') &&
+             !desc.includes('add another button') &&
+             (desc.includes('input') || desc.includes('field') || desc.includes('text') || desc.includes('school') || desc.includes('degree') || desc.includes('date'));
+    });
+    
+    console.log(`   Found \${actualEntries.length} existing entry fields`);
+    return actualEntries;
+    
+  } catch (error) {
+    console.error('   ⚠️  Error observing existing entries:', error.message);
+    return [];
+  }
+}
+
+/**
+ * Get intelligent answers from ChatGPT for a specific education entry
+ */
+async function getAnswersForEducation(fields, entryData, jobDescription) {
+  console.log(`   🤖 Asking ChatGPT for answers (\${fields.length} fields)...`);
+  
+  const jobContext = jobDescription ? `
+JOB CONTEXT:
+Title: \${jobDescription.title}
+Company: \${jobDescription.company}
+Summary: \${jobDescription.summary}
+` : '';
+
+  const fieldDescriptions = fields.map((field, i) =>
+    `\${i + 1}. Question: "\${field.description}"
+   Filling Method: \${field.method}`
+  ).join('\n\n');
+
+  const prompt = `You are filling out an education entry for a job application.
+
+EDUCATION ENTRY DATA:
+School/Institution: \${entryData.school || entryData.institution || 'N/A'}
+Degree: \${entryData.degree || 'N/A'}
+Field of Study/Major: \${entryData.field || entryData.major || entryData.field_of_study || 'N/A'}
+Start Date: \${entryData.startDate || entryData.start_date || 'N/A'}
+End Date: \${entryData.endDate || entryData.end_date || entryData.current ? 'Present' : 'N/A'}
+Currently Enrolled: \${entryData.current || false}
+Graduation Year: \${entryData.graduation_year || entryData.year || 'N/A'}
+GPA: \${entryData.gpa || 'N/A'}
+Activities: \${entryData.activities || 'N/A'}
+
+\${jobContext}
+
+FORM FIELDS TO FILL:
+\${fieldDescriptions}
+
+INSTRUCTIONS:
+For each field, provide the most appropriate answer based on the education data above.
+
+- For school/institution fields: Use the School/Institution
+- For degree fields: Use the Degree
+- For field of study/major fields: Use the Field of Study/Major
+- For start/end date fields: Use the Start/End Date
+- For graduation year fields: Use the Graduation Year
+- For GPA fields: Use the GPA if available
+- If you don't have the information for a field, return "SKIP"
+
+IMPORTANT: Return JSON where the keys are the EXACT field descriptions.
+
+Example: { "Input field for school name.": "MIT", "Input field for degree.": "Bachelor of Science" }`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: 'You are a helpful assistant that fills out education entries accurately.' },
+        { role: 'user', content: prompt }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.7
+    });
+
+    const answers = JSON.parse(response.choices[0].message.content);
+    const inputTokens = response.usage.prompt_tokens;
+    const outputTokens = response.usage.completion_tokens;
+
+    console.log(`   ✅ ChatGPT response received (\${Object.keys(answers).length} answers)`);
+
+    return {
+      answers: answers,
+      inputTokens: inputTokens,
+      outputTokens: outputTokens
+    };
+
+  } catch (error) {
+    console.error(`   ❌ ChatGPT error:`, error.message);
+    return {
+      answers: {},
+      inputTokens: 0,
+      outputTokens: 0
+    };
+  }
+}
+
+/**
+ * Fill education fields using act() commands
+ */
+async function fillEducationFields(stagehand, fields, answers) {
+  console.log(`   ✍️  Filling \${fields.length} fields...`);
+  
+  let filledCount = 0;
+  let skippedCount = 0;
+  let errorCount = 0;
+
+  for (const field of fields) {
+    const description = field.description || '';
+    const answer = answers[description];
+
+    if (!answer || answer === 'SKIP') {
+      console.log(`      ⏭️  Skipping: \${description.substring(0, 50)}...`);
+      skippedCount++;
+      continue;
+    }
+
+    try {
+      const descLower = description.toLowerCase();
+
+      if (descLower.includes('checkbox') || descLower.includes('check box') || field.method === 'check') {
+        if (answer.toLowerCase() === 'true' || answer.toLowerCase() === 'yes') {
+          await stagehand.act(`check the \${description}`);
+          filledCount++;
+          console.log(`      ✅ Checked: \${description.substring(0, 40)}...`);
+        } else {
+          skippedCount++;
+        }
+        continue;
+      }
+
+      if (descLower.includes('dropdown') || descLower.includes('select') || field.method === 'selectOption') {
+        await stagehand.act(`select "\${answer}" from the \${description}`);
+        filledCount++;
+        console.log(`      ✅ Selected "\${answer}" in: \${description.substring(0, 40)}...`);
+        continue;
+      }
+
+      await stagehand.act(`enter "\${answer}" into the \${description}`, {});
+      filledCount++;
+      console.log(`      ✅ Filled: \${description.substring(0, 40)}... = "\${String(answer).substring(0, 30)}..."`);
+
+    } catch (fillError) {
+      console.error(`      ❌ Error filling "\${description}":`, fillError.message);
+      errorCount++;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 300));
+  }
+
+  return {
+    filledCount: filledCount,
+    skippedCount: skippedCount,
+    errorCount: errorCount
+  };
+}
+
+/**
  * Observe form fields - returns Action[] with selectors
  */
 async function observeFormFields(stagehand) {
@@ -247,7 +938,8 @@ async function fillFormFields(stagehand, actions, answers) {
           
           if (result && typeof result === 'object') {
             filledCount++;
-            console.log(`    ✅ Selected: ${answer.substring(0, 50)}${answer.length > 50 ? '...' : ''}`);
+            const answerStr = String(answer);
+            console.log(`    ✅ Selected: ${answerStr.substring(0, 50)}${answerStr.length > 50 ? '...' : ''}`);
           } else {
             console.log(`    ⚠️  Invalid response from stagehand.act, but continuing...`);
             filledCount++;
@@ -268,7 +960,8 @@ async function fillFormFields(stagehand, actions, answers) {
           // Validate that we got a proper response
           if (result && typeof result === 'object') {
         filledCount++;
-        console.log(`    ✅ Entered: ${answer.substring(0, 50)}${answer.length > 50 ? '...' : ''}`);
+        const answerStr = String(answer);
+        console.log(`    ✅ Entered: ${answerStr.substring(0, 50)}${answerStr.length > 50 ? '...' : ''}`);
           } else {
             console.log(`    ⚠️  Invalid response from stagehand.act, but continuing...`);
             filledCount++; // Still count as filled since no error was thrown
@@ -585,7 +1278,140 @@ IMPORTANT:
  */
 /**
  * Phase 0: Agent-based account creation for Workday applications
+
+/**
+ * Detect if the current page is asking for email verification
  */
+async function detectVerificationPage(stagehand) {
+  console.log('\n🔍 Checking if email verification is required...');
+  
+  try {
+    const verificationCheck = await stagehand.extract(
+      "Check if this page is asking for email verification, to check email, or waiting for confirmation",
+      z.object({
+        isVerificationPage: z.boolean().describe("Whether this page is asking the user to verify their email or check their inbox"),
+        message: z.string().describe("The message or instruction shown on the page")
+      })
+    );
+    
+    if (verificationCheck.isVerificationPage) {
+      console.log('✅ Email verification required');
+      console.log(`   Message: "${verificationCheck.message}"`);
+      return true;
+    } else {
+      console.log('ℹ️  No email verification required');
+      return false;
+    }
+    
+  } catch (error) {
+    console.error('⚠️  Error detecting verification page:', error.message);
+    return false;
+  }
+}
+
+/**
+ * Handle email verification flow via Gmail
+ */
+async function handleEmailVerification(stagehand, userProfile, companyName) {
+  console.log('\n📧 Starting email verification flow...');
+  console.log(`   Company: ${companyName}`);
+  console.log(`   Work Email: ${userProfile.workEmail}`);
+  
+  try {
+    console.log('\n🌐 Step 1: Navigating to Gmail...');
+    const page = stagehand.context.pages()[0];
+    await page.goto('https://mail.google.com', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    console.log('✅ Gmail loaded');
+    
+    console.log('\n📝 Step 2: Entering email...');
+    await stagehand.act(`enter "${userProfile.workEmail}" into the email field`, {});
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    console.log('🔘 Clicking Next...');
+    await stagehand.act("click the Next button");
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    console.log('✅ Email page complete');
+    
+    console.log('\n🔑 Step 3: Entering password...');
+    await stagehand.act(`enter the password into the password field`, { 
+      variables: { password: userProfile.workPassword } 
+    });
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    console.log('🔘 Clicking Next...');
+    await stagehand.act("click the Next button");
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    console.log('✅ Password page complete, waiting for inbox...');
+    
+    console.log('\n⏳ Step 4: Waiting 5 seconds for verification email to arrive...');
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    
+    console.log('\n🤖 Step 5: Using AI agent to find verification email...');
+    const agent = stagehand.agent({
+      cua: true,
+      provider: 'google',
+      model: 'gemini-2.0-flash-exp',
+    });
+    
+    const agentResult = await agent.execute(
+      `Go to inbox, find the most recent email from ${companyName}, open it, and click the verification link`,
+      { maxSteps: 15 }
+    );
+    
+    console.log('✅ Agent completed email verification');
+    console.log(`   Steps taken: ${agentResult.actions ? agentResult.actions.length : 'N/A'}`);
+    
+    console.log('\n🔄 Step 6: Switching to verification tab...');
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    
+    const pages = stagehand.context.pages();
+    console.log(`   Found ${pages.length} tabs open`);
+    
+    if (pages.length > 1) {
+      const verificationPage = pages[pages.length - 1];
+      await verificationPage.bringToFront();
+      console.log('✅ Switched to verification tab');
+      
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      console.log('\n🔍 Step 7: Checking if login required...');
+      const loginElements = await stagehand.observe(
+        "Find login or sign in fields (email, password, or sign in button)"
+      );
+      
+      if (loginElements.length > 0) {
+        console.log('🔐 Login page detected, logging in...');
+        
+        await stagehand.act(`enter "${userProfile.workEmail}" into the email field`, {});
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        await stagehand.act(`enter the password into the password field`, { 
+          variables: { password: userProfile.workPassword } 
+        });
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        await stagehand.act("click the Sign In button");
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        
+        console.log('✅ Logged in successfully');
+      } else {
+        console.log('ℹ️  No login required, already authenticated');
+      }
+      
+    } else {
+      console.log('⚠️  No new tab opened, verification may have completed in same tab');
+    }
+    
+    console.log('\n✅ Email verification flow complete!');
+    return { success: true };
+    
+  } catch (error) {
+    console.error('❌ Error in email verification:', error.message);
+    console.log('⚠️  Continuing despite error, assuming verification completed...');
+    return { success: false, error: error.message };
+  }
+}
 async function agentAccountCreation(stagehand, userProfile) {
   console.log('\n🔐 Phase 0: Agent-based account creation...');
 
@@ -1376,6 +2202,30 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
     console.log('📋 Extracting job description...');
     const jobDescription = await extractJobDescription(stagehand);
     console.log('✅ Job description extracted');
+
+    
+    // Check if email verification is required
+    const needsVerification = await detectVerificationPage(stagehand);
+    
+    if (needsVerification) {
+      console.log('\n📧 Email verification detected, starting verification flow...');
+      const companyName = jobDescription ? jobDescription.company : 'the company';
+      
+      const verificationResult = await handleEmailVerification(
+        stagehand, 
+        workdayUserProfile, 
+        companyName
+      );
+      
+      if (verificationResult.success) {
+        console.log('✅ Email verification completed successfully');
+      } else {
+        console.log('⚠️  Email verification encountered issues, continuing anyway...');
+      }
+      
+      // Small wait after verification
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
     
     // Multi-page application loop
     let pageNumber = 1;
@@ -1390,60 +2240,100 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
       console.log(`  PAGE ${pageNumber}: PHASE 1 - Intelligent Form Fill`);
       console.log('═'.repeat(80));
 
-      // Observe form fields on current page
-      const formActions = await observeFormFields(stagehand);
+      // Extract page title to determine handling approach
+      const pageTitle = await extractPageTitle(stagehand);
 
-      if (formActions.length === 0) {
-        console.log(`⚠️  No form fields found on page ${pageNumber}`);
-        if (pageNumber === 1) {
-          throw new Error('No form fields found on first page');
-        }
-        // If not first page, might be a confirmation page
-        console.log('📋 Checking if this is a confirmation/success page...');
-        const pageContent = await stagehand.context.pages()[0].content();
-        if (pageContent.toLowerCase().includes('thank') ||
-            pageContent.toLowerCase().includes('success') ||
-            pageContent.toLowerCase().includes('confirm')) {
-          console.log('✅ Detected confirmation page - application complete!');
-          applicationComplete = true;
-          break;
-        }
-      }
-
-      // Get intelligent answers from ChatGPT for this page
-      const answersResult = await getIntelligentAnswers(formActions, workdayUserProfile, jobDescription);
-      const answers = answersResult.answers;
-
-      // Calculate accurate Phase 1 cost
-      // ChatGPT (gpt-4o-mini) pricing: $0.150/1M input, $0.600/1M output
-      const chatGPTInputCost = (answersResult.inputTokens / 1_000_000) * 0.150;
-      const chatGPTOutputCost = (answersResult.outputTokens / 1_000_000) * 0.600;
-      const chatGPTCost = chatGPTInputCost + chatGPTOutputCost;
-
-      // Stagehand observe() and act() costs (estimates since Stagehand doesn't return usage)
-      const pageObserveTokens = 2000; // Estimated
-      const pageActTokens = formActions.length * 500; // Estimated
-      const stagehandCost = 0.02; // Small estimate for Stagehand operations
-
-      // Track tokens
-      phase1Tokens.input += answersResult.inputTokens + pageObserveTokens + pageActTokens;
-      phase1Tokens.output += answersResult.outputTokens;
-
-      // Accumulate cost
-      phase1Cost += chatGPTCost + stagehandCost;
-
-      console.log(`  💰 Page ${pageNumber} ChatGPT cost: $${chatGPTCost.toFixed(4)} (Input: ${answersResult.inputTokens} tokens, Output: ${answersResult.outputTokens} tokens)`);
-
-      // Fill form fields on current page
       let fillResults = { filledCount: 0, skippedCount: 0, errorCount: 0 };
+      let answersResult = { inputTokens: 0, outputTokens: 0 };
 
-      try {
-        fillResults = await fillFormFields(stagehand, formActions, answers);
-        console.log(`\n📊 Page ${pageNumber} Phase 1 Results: ✅ ${fillResults.filledCount} filled, ⏭️ ${fillResults.skippedCount} skipped, ❌ ${fillResults.errorCount} errors`);
-      } catch (phase1Error) {
-        console.error(`\n❌ Phase 1 failed on page ${pageNumber}: ${phase1Error.message}`);
-        console.log(`🔄 Continuing to Phase 2 to handle...`);
-        fillResults.errorCount = formActions.length;
+      // Conditional handling based on page title
+      if (pageTitle === "My Experience") {
+        console.log('🎯 Detected "My Experience" page - using specialized handler');
+
+        // TODO: Call specialized My Experience handler
+        const myExpResult = await handleMyExperiencePage(stagehand, workdayUserProfile, jobDescription);
+
+        // If handler is not implemented or fails, fall back to standard flow
+        if (!myExpResult.success) {
+          console.log('⚠️  Specialized handler failed, falling back to standard flow...');
+
+          // Standard flow: observe → get answers → fill
+          const formActions = await observeFormFields(stagehand);
+          answersResult = await getIntelligentAnswers(formActions, workdayUserProfile, jobDescription);
+
+          // Calculate accurate Phase 1 cost
+          const chatGPTInputCost = (answersResult.inputTokens / 1_000_000) * 0.150;
+          const chatGPTOutputCost = (answersResult.inputTokens / 1_000_000) * 0.600;
+          const chatGPTCost = chatGPTInputCost + chatGPTOutputCost;
+          const pageObserveTokens = 2000;
+          const pageActTokens = formActions.length * 500;
+          const stagehandCost = 0.02;
+          phase1Tokens.input += answersResult.inputTokens + pageObserveTokens + pageActTokens;
+          phase1Tokens.output += answersResult.outputTokens;
+          phase1Cost += chatGPTCost + stagehandCost;
+          console.log(`  💰 Page ${pageNumber} ChatGPT cost: $${chatGPTCost.toFixed(4)} (Input: ${answersResult.inputTokens} tokens, Output: ${answersResult.outputTokens} tokens)`);
+
+          fillResults = await fillFormFields(stagehand, formActions, answersResult.answers);
+        } else {
+          fillResults = myExpResult;
+        }
+
+      } else {
+        console.log(`📄 Standard page detected (title: "${pageTitle || 'Unknown'}") - using standard form fill`);
+
+        // Observe form fields on current page
+        const formActions = await observeFormFields(stagehand);
+
+        if (formActions.length === 0) {
+          console.log(`⚠️  No form fields found on page ${pageNumber}`);
+          if (pageNumber === 1) {
+            throw new Error('No form fields found on first page');
+          }
+          // If not first page, might be a confirmation page
+          console.log('📋 Checking if this is a confirmation/success page...');
+          const pageContent = await stagehand.context.pages()[0].content();
+          if (pageContent.toLowerCase().includes('thank') ||
+              pageContent.toLowerCase().includes('success') ||
+              pageContent.toLowerCase().includes('confirm')) {
+            console.log('✅ Detected confirmation page - application complete!');
+            applicationComplete = true;
+            break;
+          }
+        }
+
+        // Get intelligent answers from ChatGPT for this page
+        answersResult = await getIntelligentAnswers(formActions, workdayUserProfile, jobDescription);
+        const answers = answersResult.answers;
+
+        // Calculate accurate Phase 1 cost
+        // ChatGPT (gpt-4o-mini) pricing: $0.150/1M input, $0.600/1M output
+        const chatGPTInputCost = (answersResult.inputTokens / 1_000_000) * 0.150;
+        const chatGPTOutputCost = (answersResult.outputTokens / 1_000_000) * 0.600;
+        const chatGPTCost = chatGPTInputCost + chatGPTOutputCost;
+
+        // Stagehand observe() and act() costs (estimates since Stagehand doesn't return usage)
+        const pageObserveTokens = 2000; // Estimated
+        const pageActTokens = formActions.length * 500; // Estimated
+        const stagehandCost = 0.02; // Small estimate for Stagehand operations
+
+        // Track tokens
+        phase1Tokens.input += answersResult.inputTokens + pageObserveTokens + pageActTokens;
+        phase1Tokens.output += answersResult.outputTokens;
+
+        // Accumulate cost
+        phase1Cost += chatGPTCost + stagehandCost;
+
+        console.log(`  💰 Page ${pageNumber} ChatGPT cost: $${chatGPTCost.toFixed(4)} (Input: ${answersResult.inputTokens} tokens, Output: ${answersResult.outputTokens} tokens)`);
+
+        // Fill form fields on current page
+        try {
+          fillResults = await fillFormFields(stagehand, formActions, answers);
+          console.log(`\n📊 Page ${pageNumber} Phase 1 Results: ✅ ${fillResults.filledCount} filled, ⏭️ ${fillResults.skippedCount} skipped, ❌ ${fillResults.errorCount} errors`);
+        } catch (phase1Error) {
+          console.error(`\n❌ Phase 1 failed on page ${pageNumber}: ${phase1Error.message}`);
+          console.log(`🔄 Continuing to Phase 2 to handle...`);
+          fillResults.errorCount = formActions.length;
+        }
       }
 
       // Track fields from this page

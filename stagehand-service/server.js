@@ -63,35 +63,6 @@ app.post('/apply', async (req, res) => {
     await page.goto(jobUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
     console.log('✅ Navigation complete');
 
-    // Pre-upload resume if available
-    if (userProfile.resumeFile && userProfile.resumeFile.contentBase64) {
-      console.log('📄 Attempting to pre-upload resume...');
-      try {
-        const resumeUploaded = await uploadResumeToForm(page, userProfile.resumeFile, 'resume');
-        if (resumeUploaded) {
-          console.log('✅ Resume pre-uploaded successfully');
-        } else {
-          console.log('⚠️  Resume pre-upload failed, agent will handle manually');
-        }
-      } catch (uploadError) {
-        console.log('⚠️  Resume upload error:', uploadError.message);
-      }
-    }
-
-    // Upload cover letter if provided
-    if (coverLetter) {
-      console.log('📝 Checking for cover letter field...');
-      try {
-        const coverLetterUploaded = await uploadResumeToForm(page, coverLetter, 'cover letter');
-        if (coverLetterUploaded) {
-          console.log('✅ Cover letter uploaded');
-        } else {
-          console.log('ℹ️  No cover letter field in form');
-        }
-      } catch (uploadError) {
-        console.log('⚠️  Cover letter upload error:', uploadError.message);
-      }
-    }
 
     // Extract job info for context
     const jobInfo = {
