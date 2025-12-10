@@ -1530,25 +1530,22 @@ async function agentReviewAndComplete(stagehand, userProfile, jobDescription) {
       modelName: "google/gemini-2.5-computer-use-preview-10-2025",
       apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
     },
-    systemPrompt: `You are a quality control assistant for job application forms.
+    systemPrompt: `You are an error correction assistant for job application forms.
 
-Your task:
-1. REVIEW ONLY - Check if all fields on the current page are filled and complete
-2. DO NOT FILL ANY FIELDS - Phase 1 has already filled all fields
-3. Your job is to verify completeness and navigate to the next step
-4. Click the NEXT or CONTINUE button to proceed to the next page (PRIORITY)
-5. If no NEXT/CONTINUE button exists, click the SUBMIT button to submit the application
+IMPORTANT: Phase 1 has already filled the form. You are ONLY called when validation errors persist.
 
-IMPORTANT NAVIGATION PRIORITY:
-- FIRST: Look for "Next", "Continue", "Proceed" buttons
-- SECOND: Look for "Submit", "Apply", "Send Application" buttons
-- ONLY click Submit if no Next/Continue options are available
+YOUR TASK (IN ORDER):
+1. Look for fields with validation errors or error messages
+2. Fill ONLY those error fields with appropriate information
+3. Click the "Next", "Continue", or "Save and Continue" button
+4. STOP IMMEDIATELY after clicking - do not evaluate the next page
 
-REVIEW GUIDELINES:
-- Quickly scan the form to ensure fields appear filled
-- Do not spend time filling empty fields - that's Phase 1's job
-- Focus on finding and clicking the correct navigation button
-- Be efficient - your main job is navigation, not form filling`
+CRITICAL RULES:
+- DO NOT review or evaluate fields after clicking Continue/Next
+- DO NOT scroll down on the next page
+- DO NOT verify if fields are filled on the next page
+- Your job ends the moment you click Continue/Next
+- Maximum 5-8 steps: find errors → fill errors → click button → STOP`
   });
 
   const firstName = userProfile.fullName.split(' ')[0] || '';
@@ -1567,59 +1564,34 @@ Use this job context and users information to answer questions like:
 - "What interests you about this opportunity?" - Connect your experience to the job
 ` : '';
 
-  const instruction = `Review this job application form and fill any missing or empty fields with the following user information:
+  const instruction = `You are fixing validation errors on a job application form that Phase 1 could not resolve.
 
-PERSONAL INFO:
+USER INFORMATION:
 - Full Name: ${userProfile.fullName}
-- First Name: ${firstName}
-- Last Name: ${lastName}
 - Email: ${userProfile.workEmail}
 - Phone: ${userProfile.phone}
 - Location: ${userProfile.location}
 
-WORK EXPERIENCE:
-${userProfile.workExperience.map((exp, i) => `
-${i + 1}. ${exp.position} at ${exp.company}${exp.location ? ` (${exp.location})` : ''}
-   Duration: ${exp.duration}
-   Description: ${exp.description}
-`).join('\n')}
-
-EDUCATION:
-${userProfile.education.map((edu, i) => `
-${i + 1}. ${edu.degree}
-   School: ${edu.school}
-   ${edu.dateRange}
-`).join('\n')}
-
-WORK AUTHORIZATION:
-- Authorized to work: ${userProfile.workAuthorized ? 'Yes' : 'No'}
-- Requires sponsorship: ${userProfile.requiresSponsorship ? 'Yes' : 'No'}
-
-${jobContextText}
-
 YOUR TASK:
-1. Look at the form and identify any empty or incomplete fields
-2. Fill them with appropriate information from above
-3. IMPORTANT: For each field, try filling it a maximum of 2 times. If a field fails twice, move on to the next field - do not spend more time on it
-4. For questions without direct answers in the profile:
-   - Use the job description and user's background to infer reasonable, truthful answers
-   - Write responses that represent the user's best interests while being honest
-5. For essay/paragraph questions about motivation or interest, write 2-3 professional sentences that:
-   - Reference the specific company and role
-   - Connect the user's relevant experience to job requirements
-   - Show genuine interest based on the job context
-6. For yes/no or dropdown questions, choose the most appropriate answer based on the profile
-   - For COUNTRY CODE dropdowns: Look for phone country codes (+1, +44, +61, etc.) if you see them in dropdowns
-   - For STATE/PROVINCE dropdowns: Use standard abbreviations (CA for California, NY for New York, etc.) if needed
-7. After filling all fields, look for a NEXT button (check for buttons labeled "Next", "Continue", "Next Page", "Next Step", "Proceed")
-8. If NEXT button exists: Click it to proceed to the next page
-9. If NO NEXT button exists: Look for SUBMIT button (labeled "Submit", "Submit Application", "Apply Now", "Send Application") and click it
-10. If the page says "Review your application" or similar, click the SUBMIT button`;
+1. Find fields with validation errors (red text, error messages, required field warnings)
+2. Fill ONLY those error fields with the appropriate information above
+3. Click the "Next", "Continue", or "Save and Continue" button
+4. STOP IMMEDIATELY - do not evaluate or scroll on the next page
+
+DO NOT:
+- Fill fields that do not have errors
+- Review the entire form
+- Evaluate the next page after clicking Continue
+- Scroll down on the next page
+- Spend more than 5-8 steps total
+
+
+Your job ends when you click the Continue/Next button.`;
 
   try {
     const result = await agent.execute({
       instruction,
-      maxSteps: 30,  // Increased to allow more steps for complex forms
+      maxSteps: 10,  // Limited steps: find errors → fill → click continue → stop
       highlightCursor: false
     });
 
