@@ -2245,8 +2245,158 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
           fillResults = myExpResult;
         }
 
-      } else {
-        console.log(`📄 Standard page detected (title: "${pageTitle || 'Unknown'}") - using standard form fill`);
+      } else if (pageTitle === "My Information") {
+        console.log('🎯 Detected "My Information" page - using specialized handler');
+
+        // ===== FIRST PASS: Observe and fill all form fields =====
+        console.log('\n📋 First Pass: Observing all form fields...');
+        const myInfoFormActions = await observeFormFields(stagehand);
+        console.log(`   Found ${myInfoFormActions.length} form fields`);
+
+        if (myInfoFormActions.length > 0) {
+          // Get intelligent answers from ChatGPT
+          console.log('🤖 Getting answers from ChatGPT...');
+          answersResult = await getIntelligentAnswers(myInfoFormActions, workdayUserProfile, jobDescription);
+          
+          // Calculate Phase 1 costs
+          const chatGPTInputCost = (answersResult.inputTokens / 1_000_000) * 0.150;
+          const chatGPTOutputCost = (answersResult.outputTokens / 1_000_000) * 0.600;
+          const chatGPTCost = chatGPTInputCost + chatGPTOutputCost;
+          const pageObserveTokens = 2000;
+          const pageActTokens = myInfoFormActions.length * 500;
+          const stagehandCost = 0.02;
+          phase1Tokens.input += answersResult.inputTokens + pageObserveTokens + pageActTokens;
+          phase1Tokens.output += answersResult.outputTokens;
+          phase1Cost += chatGPTCost + stagehandCost;
+          console.log(`   💰 First Pass ChatGPT cost: $${chatGPTCost.toFixed(4)} (Input: ${answersResult.inputTokens} tokens, Output: ${answersResult.outputTokens} tokens)`);
+
+          // Fill the form fields
+          console.log('✍️  Filling form fields...');
+          fillResults = await fillFormFields(stagehand, formActions, answersResult.answers);
+          console.log(`   ✅ ${fillResults.filledCount} filled, ⏭️  ${fillResults.skippedCount} skipped, ❌ ${fillResults.errorCount} errors`);
+        } else {
+          console.log('⚠️  No form fields found in first pass');
+          fillResults = { filledCount: 0, skippedCount: 0, errorCount: 0 };
+        }
+
+        // ===== SECOND PASS: Look for unfilled fields =====
+        console.log('\n📋 Second Pass: Looking for unfilled fields...');
+        const unfilledFields = await observeFormFields(stagehand);
+        const actuallyUnfilled = unfilledFields.filter(field => {
+          // Filter to only get fields that appear empty/unfilled
+          const desc = field.description.toLowerCase();
+          return desc.includes('empty') || desc.includes('required') || desc.includes('enter');
+        });
+
+        console.log(`   Found ${actuallyUnfilled.length} potentially unfilled fields`);
+
+        if (actuallyUnfilled.length > 0) {
+          // Get answers for unfilled fields
+          console.log('🤖 Getting answers for unfilled fields...');
+          const unfilledAnswersResult = await getIntelligentAnswers(actuallyUnfilled, workdayUserProfile, jobDescription);
+          
+          // Update costs
+          const unfilledChatGPTCost = 
+            (unfilledAnswersResult.inputTokens / 1_000_000) * 0.150 +
+            (unfilledAnswersResult.outputTokens / 1_000_000) * 0.600;
+          phase1Cost += unfilledChatGPTCost;
+          phase1Tokens.input += unfilledAnswersResult.inputTokens;
+          phase1Tokens.output += unfilledAnswersResult.outputTokens;
+          console.log(`   💰 Second Pass ChatGPT cost: $${unfilledChatGPTCost.toFixed(4)}`);
+
+          // Fill unfilled fields
+          console.log('✍️  Filling unfilled fields...');
+          const unfilledFillResults = await fillFormFields(stagehand, actuallyUnfilled, unfilledAnswersResult.answers);
+          console.log(`   ✅ ${unfilledFillResults.filledCount} filled, ⏭️  ${unfilledFillResults.skippedCount} skipped`);
+          
+          // Update totals
+          fillResults.filledCount += unfilledFillResults.filledCount;
+          fillResults.skippedCount += unfilledFillResults.skippedCount;
+          fillResults.errorCount += unfilledFillResults.errorCount;
+        } else {
+          console.log('✅ No unfilled fields detected');
+        }
+
+        // ===== NAVIGATION: Click Continue/Next button =====
+        console.log('\n🔘 Clicking Continue/Next/Save and Continue button...');
+        try {
+          await stagehand.act("click the Continue or Next or Save and Continue button");
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          console.log('✅ Navigation button clicked successfully');
+
+        // ===== AGENT CHECK: Verify page changed or handle remaining questions =====
+        console.log('\n🤖 Agent Check: Verifying page transition...');
+        
+        const myInfoAgent = stagehand.agent({
+          cua: true,
+          model: {
+            modelName: "google/gemini-2.5-computer-use-preview-10-2025",
+            apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
+          },
+          systemPrompt: `You are a page verification assistant for job applications.
+
+YOUR TASK:
+1. Check the page title/heading
+2. If title is still "My Information":
+   - Look for any unanswered questions or empty fields
+   - Fill them with appropriate information
+   - Click Continue/Next again
+3. If title is "My Experience" or different page:
+   - STOP immediately - new page detected
+
+CRITICAL:
+- Do not fill fields if page has changed to a new section
+- Maximum 5-8 steps total
+- Stop as soon as you detect a different page title`
+        });
+
+        const myInfoAgentInstruction = `Check the current page title.
+
+USER INFORMATION:
+- Full Name: ${workdayUserProfile.fullName}
+- Email: ${workdayUserProfile.workEmail}
+- Phone: ${workdayUserProfile.phone}
+- Location: ${workdayUserProfile.location}
+
+IF page title is still "My Information":
+1. Look for any unanswered questions or empty required fields
+2. Fill them with the information above
+3. Click the Continue/Next button again
+
+IF page title is "My Experience" or different:
+- STOP immediately - the page has changed successfully
+
+Do not spend more than 5-8 steps total.`;
+
+        try {
+          const agentResult = await myInfoAgent.execute({
+            instruction: myInfoAgentInstruction,
+            maxSteps: 8,
+            highlightCursor: false
+          });
+
+          console.log('✅ Agent check complete');
+          console.log(`   Steps taken: ${agentResult.actions ? agentResult.actions.length : 'N/A'}`);
+
+          // Track agent costs
+          if (agentResult.usage) {
+            const inputTokens = agentResult.usage.input_tokens || 0;
+            const outputTokens = agentResult.usage.output_tokens || 0;
+            phase2Tokens.input += inputTokens;
+            phase2Tokens.output += outputTokens;
+            const inputCost = (inputTokens / 1000000) * 1.25;
+            const outputCost = (outputTokens / 1000000) * 10;
+            phase2Cost += (inputCost + outputCost);
+            console.log(`   💰 Agent cost: $${(inputCost + outputCost).toFixed(4)}`);
+          }
+        } catch (agentError) {
+          console.error('⚠️  Agent check error:', agentError.message);
+          console.log('   Proceeding anyway...');
+        }
+        } catch (navError) {
+          console.error('❌ Error clicking navigation button:', navError.message);
+        }
+
 
         // Observe form fields on current page
         const formActions = await observeFormFields(stagehand);
