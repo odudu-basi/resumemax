@@ -1622,7 +1622,7 @@ Your job ends when you click the Continue/Next button.`;
       const inputTokens = result.usage.input_tokens || 0;
       const outputTokens = result.usage.output_tokens || 0;
       const inputCost = (inputTokens / 1000000) * 1.25;
-      const outputCost = (inputTokens / 1000000) * 10;
+      const outputCost = (outputTokens / 1000000) * 10;
       const totalCost = (inputCost + outputCost).toFixed(4);
       console.log(`  💰 Phase 2 cost: $${totalCost}`);
       console.log(`     Input tokens: ${inputTokens.toLocaleString()}`);
