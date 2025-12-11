@@ -195,11 +195,10 @@ async function extractPageTitle(stagehand) {
 
   try {
     const titleSchema = z.object({
-      title: z.string().describe("The main title or heading displayed on the page")
+      title: z.string().describe("Current application step heading (My Information, My Experience, etc.)")
     });
-
     const result = await stagehand.extract(
-      "Find and extract the main title or heading on this page (usually displayed prominently in the center)",
+      "You are on a multi-step job application form. Find the heading that tells you which step of the application you're currently on. This heading is displayed prominently in the center and matches one of the steps shown in the progress indicator. The job title (like 'Mechanical Engineer') is NOT what you're looking for.",
       titleSchema
     );
 
