@@ -2248,7 +2248,7 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
         console.log('🎯 Detected "My Information" page - using specialized handler');
 
         // ===== FIRST PASS: Observe and fill all form fields =====
-        console.log('\n📋 First Pass: Observing all form fields...');
+        console.log('\n📋 FIRST PASS: Observing all form fields...');
         const myInfoFormActions = await observeFormFields(stagehand);
         console.log(`   Found ${myInfoFormActions.length} form fields`);
 
@@ -2278,78 +2278,92 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
           fillResults = { filledCount: 0, skippedCount: 0, errorCount: 0 };
         }
 
-        // ===== SECOND PASS: Look for unfilled fields =====
-        console.log('\n📋 Second Pass: Looking for unfilled fields...');
-        const unfilledFields = await observeFormFields(stagehand);
-        const actuallyUnfilled = unfilledFields.filter(field => {
-          // Filter to only get fields that appear empty/unfilled
-          const desc = field.description.toLowerCase();
-          return desc.includes('empty') || desc.includes('required') || desc.includes('enter');
-        });
-
-        console.log(`   Found ${actuallyUnfilled.length} potentially unfilled fields`);
-
-        if (actuallyUnfilled.length > 0) {
-          // Get answers for unfilled fields
-          console.log('🤖 Getting answers for unfilled fields...');
-          const unfilledAnswersResult = await getIntelligentAnswers(actuallyUnfilled, workdayUserProfile, jobDescription);
-          
-          // Update costs
-          const unfilledChatGPTCost = 
-            (unfilledAnswersResult.inputTokens / 1_000_000) * 0.150 +
-            (unfilledAnswersResult.outputTokens / 1_000_000) * 0.600;
-          phase1Cost += unfilledChatGPTCost;
-          phase1Tokens.input += unfilledAnswersResult.inputTokens;
-          phase1Tokens.output += unfilledAnswersResult.outputTokens;
-          console.log(`   💰 Second Pass ChatGPT cost: $${unfilledChatGPTCost.toFixed(4)}`);
-
-          // Fill unfilled fields
-          console.log('✍️  Filling unfilled fields...');
-          const unfilledFillResults = await fillFormFields(stagehand, actuallyUnfilled, unfilledAnswersResult.answers);
-          console.log(`   ✅ ${unfilledFillResults.filledCount} filled, ⏭️  ${unfilledFillResults.skippedCount} skipped`);
-          
-          // Update totals
-          fillResults.filledCount += unfilledFillResults.filledCount;
-          fillResults.skippedCount += unfilledFillResults.skippedCount;
-          fillResults.errorCount += unfilledFillResults.errorCount;
-        } else {
-          console.log('✅ No unfilled fields detected');
-        }
-
-        // ===== NAVIGATION: Click Continue/Next button =====
-        console.log('\n🔘 Clicking Continue/Next/Save and Continue button...');
-        try {
-          await stagehand.act("click the Continue or Next or Save and Continue button");
-          await new Promise(resolve => setTimeout(resolve, 3000));
-          console.log('✅ Navigation button clicked successfully');
-
-        // ===== AGENT CHECK: Verify page changed or handle remaining questions =====
-        console.log('\n🤖 Agent Check: Verifying page transition...');
+        // ===== PAGE TITLE CHECK #1 =====
+        console.log('\n🔍 PAGE TITLE CHECK #1: Verifying we are still on My Information...');
+        const titleAfterFirstPass = await extractPageTitle(stagehand);
         
-        const myInfoAgent = stagehand.agent({
-          cua: true,
-          model: {
-            modelName: "google/gemini-2.5-computer-use-preview-10-2025",
-            apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
-          },
-          systemPrompt: `You are a page verification assistant for job applications.
+        if (titleAfterFirstPass !== "My Information") {
+          console.log(`✅ Page has changed to "${titleAfterFirstPass}" - stopping My Information handler`);
+          // Don't continue - we've moved to the next page
+        } else {
+          console.log('   Still on "My Information" - continuing to second pass');
+
+          // ===== SECOND PASS: Observe questions and fill =====
+          console.log('\n📋 SECOND PASS: Looking for all questions...');
+          const secondPassFields = await observeFormFields(stagehand);
+          console.log(`   Found ${secondPassFields.length} questions/fields`);
+
+          if (secondPassFields.length > 0) {
+            // Get answers for ALL questions - don't skip any
+            console.log('🤖 Getting answers for all questions (no skipping)...');
+            const secondPassAnswers = await getIntelligentAnswers(secondPassFields, workdayUserProfile, jobDescription);
+            
+            // Update costs
+            const secondPassChatGPTCost = 
+              (secondPassAnswers.inputTokens / 1_000_000) * 0.150 +
+              (secondPassAnswers.outputTokens / 1_000_000) * 0.600;
+            phase1Cost += secondPassChatGPTCost;
+            phase1Tokens.input += secondPassAnswers.inputTokens;
+            phase1Tokens.output += secondPassAnswers.outputTokens;
+            console.log(`   💰 Second Pass ChatGPT cost: $${secondPassChatGPTCost.toFixed(4)}`);
+
+            // Fill all fields
+            console.log('✍️  Filling all fields...');
+            const secondPassFillResults = await fillFormFields(stagehand, secondPassFields, secondPassAnswers.answers);
+            console.log(`   ✅ ${secondPassFillResults.filledCount} filled, ⏭️  ${secondPassFillResults.skippedCount} skipped`);
+            
+            // Update totals
+            fillResults.filledCount += secondPassFillResults.filledCount;
+            fillResults.skippedCount += secondPassFillResults.skippedCount;
+            fillResults.errorCount += secondPassFillResults.errorCount;
+          } else {
+            console.log('   No additional fields found');
+          }
+
+          // ===== NAVIGATION: Click Save/Next/Continue button =====
+          console.log('\n🔘 NAVIGATION: Clicking Save/Next/Continue button...');
+          try {
+            await stagehand.act("click the Save or Next or Save and Continue button");
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            console.log('✅ Navigation button clicked successfully');
+          } catch (navError) {
+            console.error('❌ Error clicking navigation button:', navError.message);
+          }
+
+          // ===== PAGE TITLE CHECK #2 =====
+          console.log('\n🔍 PAGE TITLE CHECK #2: Verifying page transition...');
+          const titleAfterNavigation = await extractPageTitle(stagehand);
+          
+          if (titleAfterNavigation !== "My Information") {
+            console.log(`✅ SUCCESS! Page has changed to "${titleAfterNavigation}"`);
+            // Success - we've moved on
+          } else {
+            console.log('   ⚠️  Still on "My Information" - using agent to complete');
+
+            // ===== AGENT CLEANUP: Fill missing fields and navigate =====
+            console.log('\n🤖 AGENT CLEANUP: Filling any missing fields...');
+            
+            const myInfoAgent = stagehand.agent({
+              cua: true,
+              model: {
+                modelName: "google/gemini-2.5-computer-use-preview-10-2025",
+                apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
+              },
+              systemPrompt: `You are a form completion assistant for job applications.
 
 YOUR TASK:
-1. Check the page title/heading
-2. If title is still "My Information":
-   - Look for any unanswered questions or empty fields
-   - Fill them with appropriate information
-   - Click Continue/Next again
-3. If title is "My Experience" or different page:
-   - STOP immediately - new page detected
+1. Look for any empty fields or unanswered questions on the "My Information" page
+2. Fill them with appropriate information from the user context
+3. Click the "Save" or "Next" or "Save and Continue" button
+4. STOP immediately after clicking the button
 
 CRITICAL:
-- Do not fill fields if page has changed to a new section
-- Maximum 5-8 steps total
-- Stop as soon as you detect a different page title`
-        });
+- Fill ALL missing fields before clicking the button
+- Do not evaluate the next page after clicking
+- Maximum 8 steps total`
+            });
 
-        const myInfoAgentInstruction = `Check the current page title.
+            const myInfoAgentInstruction = `Fill any missing fields on the "My Information" page and click the navigation button.
 
 USER INFORMATION:
 - Full Name: ${workdayUserProfile.fullName}
@@ -2357,43 +2371,49 @@ USER INFORMATION:
 - Phone: ${workdayUserProfile.phone}
 - Location: ${workdayUserProfile.location}
 
-IF page title is still "My Information":
-1. Look for any unanswered questions or empty required fields
-2. Fill them with the information above
-3. Click the Continue/Next button again
+YOUR STEPS:
+1. Look for any empty fields or unanswered questions
+2. Fill them with the appropriate information above
+3. Click the "Save" or "Next" or "Save and Continue" button
+4. STOP immediately
 
-IF page title is "My Experience" or different:
-- STOP immediately - the page has changed successfully
+Do not evaluate the next page. Maximum 8 steps.`;
 
-Do not spend more than 5-8 steps total.`;
+            try {
+              const agentResult = await myInfoAgent.execute({
+                instruction: myInfoAgentInstruction,
+                maxSteps: 8,
+                highlightCursor: false
+              });
 
-        try {
-          const agentResult = await myInfoAgent.execute({
-            instruction: myInfoAgentInstruction,
-            maxSteps: 8,
-            highlightCursor: false
-          });
+              console.log('✅ Agent cleanup complete');
+              console.log(`   Steps taken: ${agentResult.actions ? agentResult.actions.length : 'N/A'}`);
 
-          console.log('✅ Agent check complete');
-          console.log(`   Steps taken: ${agentResult.actions ? agentResult.actions.length : 'N/A'}`);
+              // Track agent costs under Phase 2
+              if (agentResult.usage) {
+                const inputTokens = agentResult.usage.input_tokens || 0;
+                const outputTokens = agentResult.usage.output_tokens || 0;
+                phase2Tokens.input += inputTokens;
+                phase2Tokens.output += outputTokens;
+                const inputCost = (inputTokens / 1000000) * 1.25;
+                const outputCost = (outputTokens / 1000000) * 10;
+                phase2Cost += (inputCost + outputCost);
+                console.log(`   💰 Agent cost: $${(inputCost + outputCost).toFixed(4)}`);
+              }
+            } catch (agentError) {
+              console.error('⚠️  Agent cleanup error:', agentError.message);
+            }
 
-          // Track agent costs
-          if (agentResult.usage) {
-            const inputTokens = agentResult.usage.input_tokens || 0;
-            const outputTokens = agentResult.usage.output_tokens || 0;
-            phase2Tokens.input += inputTokens;
-            phase2Tokens.output += outputTokens;
-            const inputCost = (inputTokens / 1000000) * 1.25;
-            const outputCost = (outputTokens / 1000000) * 10;
-            phase2Cost += (inputCost + outputCost);
-            console.log(`   💰 Agent cost: $${(inputCost + outputCost).toFixed(4)}`);
+            // ===== FINAL VERIFICATION =====
+            console.log('\n🔍 FINAL VERIFICATION: Checking if page has changed...');
+            const finalTitle = await extractPageTitle(stagehand);
+            
+            if (finalTitle !== "My Information") {
+              console.log(`✅ VERIFIED! Page successfully changed to "${finalTitle}"`);
+            } else {
+              console.log(`⚠️  WARNING: Still on "My Information" page after all attempts`);
+            }
           }
-        } catch (agentError) {
-          console.error('⚠️  Agent check error:', agentError.message);
-          console.log('   Proceeding anyway...');
-        }
-        } catch (navError) {
-          console.error('❌ Error clicking navigation button:', navError.message);
         }
 
 
