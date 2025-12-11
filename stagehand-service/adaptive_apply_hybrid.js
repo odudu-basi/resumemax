@@ -2091,7 +2091,7 @@ async function isApplicationForm(pageState) {
   return indicatorCount >= 3;
 }
 
-async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res, jobUrl) {
+async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liveViewUrl, res, jobUrl) {
   console.log('🎯 Starting WORKDAY-ONLY application flow...\n');
 
   // Validate that this is a Workday job application
@@ -2271,7 +2271,7 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res
 
           // Fill the form fields
           console.log('✍️  Filling form fields...');
-          fillResults = await fillFormFields(stagehand, formActions, answersResult.answers);
+          fillResults = await fillFormFields(stagehand, myInfoFormActions, answersResult.answers);
           console.log(`   ✅ ${fillResults.filledCount} filled, ⏭️  ${fillResults.skippedCount} skipped, ❌ ${fillResults.errorCount} errors`);
         } else {
           console.log('⚠️  No form fields found in first pass');
@@ -2823,6 +2823,7 @@ Do not spend more than 5-8 steps total.`;
       platform: isWorkday ? 'workday' : 'generic',
       sessionId,
       sessionUrl,
+      liveViewUrl,
       sessionVideoUrl,
       filledFields,
       message: isWorkday 
@@ -2892,7 +2893,8 @@ Do not spend more than 5-8 steps total.`;
       success: false,
       error: error.message,
       sessionId,
-      sessionUrl
+      sessionUrl,
+      liveViewUrl
     });
   }
 }

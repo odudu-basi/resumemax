@@ -201,6 +201,19 @@ export async function POST(request: NextRequest) {
     console.log('📄 Resume file:', userProfile.resumeFile || 'NOT PROVIDED');
     console.log('📝 Cover letter:', coverLetter ? (coverLetter.fileName || 'string format') : 'NOT PROVIDED');
 
+    // Validate work email credentials exist
+    if (!userProfile.workEmail || !userProfile.workPassword) {
+      console.warn('⚠️ User has not set up work inbox');
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Work email not set up. Please create your work inbox first to apply for jobs.',
+          needsInboxSetup: true
+        },
+        { status: 400 }
+      );
+    }
+
     console.log('📡 Calling Stagehand API...');
     const response = await fetch(`${STAGEHAND_API_URL}/apply`, {
       method: 'POST',
@@ -250,6 +263,7 @@ export async function POST(request: NextRequest) {
       success: true,
       sessionId: result.sessionId,
       sessionUrl: result.sessionUrl,
+      liveViewUrl: result.liveViewUrl,
       message: result.message,
       creditsRemaining: updatedCredits?.[0]?.credits_remaining,
       creditsLimit: updatedCredits?.[0]?.credits_limit

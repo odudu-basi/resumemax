@@ -52,7 +52,9 @@ app.post('/apply', async (req, res) => {
     await stagehand.init();
     const sessionUrl = stagehand.browserbaseSessionURL || null;
     const sessionId = stagehand.browserbaseSessionID || null;
+    const liveViewUrl = sessionId ? `https://www.browserbase.com/sessions/${sessionId}?navbar=false` : null;
     console.log('✅ Stagehand initialized. Session URL:', sessionUrl);
+    console.log('📺 Live View URL:', liveViewUrl);
 
     // Get page using official Stagehand method
     const page = stagehand.context.pages()[0];
@@ -86,6 +88,7 @@ app.post('/apply', async (req, res) => {
         message: result.message || result.error,
         sessionId,
         sessionUrl,
+        liveViewUrl,
         iterations: result.iterations,
         finalUrl: result.finalUrl,
         totalCost: result.totalCost
@@ -93,15 +96,15 @@ app.post('/apply', async (req, res) => {
 
     } else if (selectedApproach === 'intelligent') {
       console.log('🧠 Using INTELLIGENT approach');
-      await intelligentFormFill(stagehand, userProfile, jobUrl, sessionId, sessionUrl, res);
+      await intelligentFormFill(stagehand, userProfile, jobUrl, sessionId, sessionUrl, liveViewUrl, res);
 
     } else if (selectedApproach === 'hybrid') {
       console.log('🔄 Using HYBRID approach');
-      await hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, res, jobUrl);
+      await hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liveViewUrl, res, jobUrl);
 
     } else {
       console.log('🤖 Using AGENT-ONLY approach');
-      await adaptiveFormFillAgent(stagehand, userProfile, sessionId, sessionUrl, res);
+      await adaptiveFormFillAgent(stagehand, userProfile, sessionId, sessionUrl, liveViewUrl, res);
     }
 
   } catch (error) {

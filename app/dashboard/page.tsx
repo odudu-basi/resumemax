@@ -397,6 +397,15 @@ function HomeSection() {
       return;
     }
 
+    // Validate work email is set up
+    if (!workEmail) {
+      toast.error('Work email not set up', {
+        description: 'Please create your work inbox first in the "Setup Your Work Inbox" section above',
+        duration: 7000,
+      });
+      return;
+    }
+
     const jobId = `home_${Date.now()}`;
     const currentJobUrl = jobLink.trim();
 
@@ -537,17 +546,26 @@ function HomeSection() {
           status: applyResponse.status,
           result: applyResult
         });
-        
+
+        // Check for inbox setup requirement
+        if (applyResult.needsInboxSetup) {
+          toast.error('Work inbox required', {
+            description: 'Please create your work inbox in the "Setup Your Work Inbox" section above before applying',
+            duration: 7000,
+          });
+          throw new Error('Work inbox not set up');
+        }
+
         let errorMessage = applyResult.error || 'Application failed';
-        
+
         // Add validation details if available
         if (applyResult.details && Array.isArray(applyResult.details)) {
-          const validationIssues = applyResult.details.map((issue: any) => 
+          const validationIssues = applyResult.details.map((issue: any) =>
             `${issue.path?.join('.') || 'field'}: ${issue.message}`
           ).join(', ');
           errorMessage += ` (${validationIssues})`;
         }
-        
+
         throw new Error(errorMessage);
       }
 
@@ -598,7 +616,7 @@ function HomeSection() {
           [jobId]: {
             type: 'success',
             message: `Application in progress for ${scrapedData.companyName || 'this job'}`,
-            liveUrl: applyResult.sessionUrl,
+            liveUrl: applyResult.liveViewUrl,
             description: `Smart application to ${scrapedData.companyName || 'company'} is in progress... Click "Watch Live" to view!`,
           }
         }));
@@ -1632,7 +1650,7 @@ function BrowseJobsSection({
             type: 'success',
             message: `Application in progress... Task ID: ${result.taskId}`,
             timestamp: new Date(),
-            liveUrl: result.sessionUrl
+            liveUrl: result.liveViewUrl
           }
         }));
 

@@ -91,6 +91,7 @@ export function JobCard({
   const [isRefilling, setIsRefilling] = useState(false);
   const [showMediaViewer, setShowMediaViewer] = useState(false);
   const [currentMedia, setCurrentMedia] = useState<{type: 'screenshot' | 'video', url: string} | null>(null);
+  const [showLiveViewModal, setShowLiveViewModal] = useState(false);
 
   // Fetch active sessions for this user
   const { sessions } = useAutoApplySessions(userId);
@@ -347,7 +348,7 @@ export function JobCard({
                 variant="outline"
                 onClick={(e) => {
                   e.stopPropagation();
-                  window.open(cloudNotification.liveUrl, '_blank');
+                  setShowLiveViewModal(true);
                 }}
                 className="border-green-600 text-green-600 hover:bg-green-50"
               >
@@ -737,6 +738,42 @@ export function JobCard({
                 </video>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Live View Modal */}
+      {showLiveViewModal && cloudNotification?.liveUrl && (
+        <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50">
+          {/* Header Bar */}
+          <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-4 bg-black bg-opacity-80 z-10">
+            <h3 className="text-lg font-semibold text-white">
+              Live Session View
+            </h3>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowLiveViewModal(false)}
+              className="text-white hover:bg-white/20"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          
+          {/* Iframe Container */}
+          <div className="w-full h-full pt-16">
+            <iframe
+              src={cloudNotification.liveUrl}
+              sandbox="allow-same-origin allow-scripts"
+              allow="clipboard-read; clipboard-write"
+              style={{ 
+                width: '100%', 
+                height: '100%', 
+                border: 'none',
+                pointerEvents: 'none'
+              }}
+              title="Live Session View"
+            />
           </div>
         </div>
       )}
