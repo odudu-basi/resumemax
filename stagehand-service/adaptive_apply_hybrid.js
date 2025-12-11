@@ -198,7 +198,7 @@ async function extractPageTitle(stagehand) {
       title: z.string().describe("Current application step heading (My Information, My Experience, etc.)")
     });
     const result = await stagehand.extract(
-      "You are on a multi-step job application form. Find the heading that tells you which step of the application you're currently on. This heading is displayed prominently in the center and matches one of the steps shown in the progress indicator. The job title (like 'Mechanical Engineer') is NOT what you're looking for.",
+      "Find the application section heading displayed in large, bold text in the center of the page. This indicates which part of the application form you're filling out (like 'My Information', 'My Experience', 'Application Questions', etc.). Do NOT extract the job title ('Mechanical Engineer') or text from the progress bar.",
       titleSchema
     );
 
