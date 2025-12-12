@@ -2178,9 +2178,10 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
       console.log('\n📧 Email verification detected, starting verification flow...');
       const companyName = jobDescription ? jobDescription.company : 'the company';
       
+      // Use ORIGINAL userProfile so Gmail login uses WORK EMAIL (not unique email)
       const verificationResult = await handleEmailVerification(
         stagehand, 
-        workdayUserProfile, 
+        userProfile, 
         companyName
       );
       
