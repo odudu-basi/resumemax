@@ -2137,8 +2137,9 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
     console.log('  PHASE 0: Agent-Based Account Creation');
     console.log('═══════════════════════════════════════');
 
-    // Use agent to navigate and create account
-    const accountResult = await agentAccountCreation(stagehand, workdayUserProfile);
+    // Use agent to navigate and create account with WORK EMAIL (not unique email)
+    // This ensures Gmail verification emails go directly to the work email inbox
+    const accountResult = await agentAccountCreation(stagehand, userProfile);
 
     // Calculate Phase 0 cost from agent usage
     if (accountResult.usage) {
