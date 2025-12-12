@@ -2350,8 +2350,9 @@ YOUR TASK:
 3. Fill any missing required fields
 4. Find "Have you previously worked for this company?" question
 5. Answer truthfully based on user's work experience
-6. If YES: STOP and return new questions as JSON
-7. If NO: Click no, then click Next/Continue
+6. If YES: Click yes, then capture new questions that appear
+7. If NO: Click no
+8. ALWAYS click Next/Continue/Save and Continue button
 
 Return: {"hasWorkedHere": true/false, "newQuestions": ["q1", "q2"]}
 Max 15 steps`
@@ -2372,8 +2373,9 @@ STEPS:
    - Phone: ${workdayUserProfile.phone}
 2. Find "worked here before?" question
 3. Answer based on if user worked at ${companyName}
-4. If YES: capture new questions, return JSON
-5. If NO: click no, then Next/Continue
+4. If YES: click yes, capture new questions
+5. If NO: click no
+6. ALWAYS click Next/Continue/Save and Continue button
 
 Return: {"hasWorkedHere": true/false, "newQuestions": [...]}`;
 
