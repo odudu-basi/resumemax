@@ -50,7 +50,8 @@ import {
   MessageCircle,
   TrendingUp,
   Rocket,
-  ExternalLink
+  ExternalLink,
+  Video
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/src/contexts/AuthContext";
@@ -132,7 +133,10 @@ function HomeJobCard({
   cloudApplyLoading?: boolean;
   cloudNotification?: any;
 }) {
+  const [showLiveViewModal, setShowLiveViewModal] = useState(false);
+
   return (
+    <>
     <Card className="hover:shadow-lg transition-all relative">
       <CardHeader className="pb-3">
         <div className="flex justify-between items-start gap-2">
@@ -206,10 +210,13 @@ function HomeJobCard({
               <Button
                 variant="outline"
                 size="sm"
-                className="mt-2 w-full"
-                onClick={() => window.open(cloudNotification.liveUrl, '_blank')}
+                className="mt-2 w-full border-green-600 text-green-600 hover:bg-green-50"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowLiveViewModal(true);
+                }}
               >
-                <ExternalLink className="h-4 w-4 mr-2" />
+                <Video className="h-4 w-4 mr-2" />
                 Watch Live
               </Button>
             )}
@@ -253,6 +260,37 @@ function HomeJobCard({
         </Button>
       </CardContent>
     </Card>
+
+    {/* Live View Modal */}
+    {showLiveViewModal && cloudNotification?.liveUrl && (
+      <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50" onClick={() => setShowLiveViewModal(false)}>
+        <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-4 bg-black bg-opacity-80 z-10">
+          <h3 className="text-lg font-semibold text-white">Live Session View</h3>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowLiveViewModal(false);
+            }}
+            className="text-white hover:bg-gray-700"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        
+        <div className="w-full h-full pt-16" onClick={(e) => e.stopPropagation()}>
+          <iframe
+            src={cloudNotification.liveUrl}
+            sandbox="allow-same-origin allow-scripts"
+            allow="clipboard-read; clipboard-write"
+            style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }}
+            title="Live Session View"
+          />
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 // Home Section Component
