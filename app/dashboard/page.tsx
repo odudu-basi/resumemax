@@ -248,6 +248,22 @@ function HomeJobCard({
           </Button>
         </div>
 
+        {/* Watch Live Button - Shows when liveUrl exists */}
+        {cloudNotification?.liveUrl && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full border-green-600 text-green-600 hover:bg-green-50"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowLiveViewModal(true);
+            }}
+          >
+            <Video className="h-4 w-4 mr-2" />
+            Watch Live
+          </Button>
+        )}
+
         {/* View Job Link */}
         <Button
           variant="outline"
