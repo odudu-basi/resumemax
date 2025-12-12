@@ -2353,6 +2353,7 @@ YOUR TASK:
 6. If YES: Click yes, then capture new questions that appear
 7. If NO: Click no
 8. ALWAYS click Next/Continue/Save and Continue button
+9. STOP IMMEDIATELY after clicking - do not interact with next page
 
 Return: {"hasWorkedHere": true/false, "newQuestions": ["q1", "q2"]}
 Max 15 steps`
@@ -2376,6 +2377,7 @@ STEPS:
 4. If YES: click yes, capture new questions
 5. If NO: click no
 6. ALWAYS click Next/Continue/Save and Continue button
+7. STOP immediately - do not interact with next page
 
 Return: {"hasWorkedHere": true/false, "newQuestions": [...]}`;
 
