@@ -529,7 +529,7 @@ async function observeWorkExperienceEntries(stagehand) {
 
   try {
     const existingEntries = await stagehand.observe(
-      "Find all existing work experience entries or form fields already visible in the Work Experience section"
+      "Find all existing work experience entries or form fields or buttons already visible in the Work Experience section"
     );
 
     // Filter to get only meaningful entries (exclude the Add button itself)
@@ -880,7 +880,7 @@ async function observeFormFields(stagehand) {
   try {
     // observe() returns Action[] with { description, method, arguments, selector }
     const actions = await stagehand.observe(
-      "Find all form questions and their filling methods (text input, dropdown, checkbox, etc.). Exclude file upload fields. For each question, provide a CONCISE description (max 10 words) of what is being asked."
+      "Find all form questions and their filling methods (text input, dropdown, checkbox, etc.). Find all the buttons on the page. Exclude file upload fields. For each question, provide a CONCISE description (max 10 words) of what is being asked."
     );
 
     console.log(`  ✅ Found ${actions.length} form fields`);
@@ -2198,6 +2198,7 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
     const MAX_PAGES = 10; // Safety limit to prevent infinite loops
     let allFilledFields = [];
     let applicationComplete = false;
+    let listOfQuestions = []; // Accumulated questions from agents across pages
 
     console.log('\n🔄 Starting multi-page application loop (max ' + MAX_PAGES + ' pages)...\n');
 
@@ -2247,174 +2248,191 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
       } else if (pageTitle === "My Information") {
         console.log('🎯 Detected "My Information" page - using specialized handler');
 
-        // ===== FIRST PASS: Observe and fill all form fields =====
-        console.log('\n📋 FIRST PASS: Observing all form fields...');
-        const myInfoFormActions = await observeFormFields(stagehand);
-        console.log(`   Found ${myInfoFormActions.length} form fields`);
+        // ===== OBSERVE: Get all questions and buttons on the page =====
+        console.log('\n📋 Observing page for questions and buttons...');
+        const pageElements = await observeFormFields(stagehand);
+        console.log(`   Found ${pageElements.length} elements on page`);
 
-        if (myInfoFormActions.length > 0) {
-          // Get intelligent answers from ChatGPT
-          console.log('🤖 Getting answers from ChatGPT...');
-          answersResult = await getIntelligentAnswers(myInfoFormActions, workdayUserProfile, jobDescription);
-          
-          // Calculate Phase 1 costs
-          const chatGPTInputCost = (answersResult.inputTokens / 1_000_000) * 0.150;
-          const chatGPTOutputCost = (answersResult.outputTokens / 1_000_000) * 0.600;
-          const chatGPTCost = chatGPTInputCost + chatGPTOutputCost;
-          const pageObserveTokens = 2000;
-          const pageActTokens = myInfoFormActions.length * 500;
-          const stagehandCost = 0.02;
-          phase1Tokens.input += answersResult.inputTokens + pageObserveTokens + pageActTokens;
-          phase1Tokens.output += answersResult.outputTokens;
-          phase1Cost += chatGPTCost + stagehandCost;
-          console.log(`   💰 First Pass ChatGPT cost: $${chatGPTCost.toFixed(4)} (Input: ${answersResult.inputTokens} tokens, Output: ${answersResult.outputTokens} tokens)`);
+        // ===== ACT SEQUENCE: Fill out known fields =====
+        console.log('\n✍️  Filling out known fields with act() calls...');
 
-          // Fill the form fields
-          console.log('✍️  Filling form fields...');
-          fillResults = await fillFormFields(stagehand, myInfoFormActions, answersResult.answers);
-          console.log(`   ✅ ${fillResults.filledCount} filled, ⏭️  ${fillResults.skippedCount} skipped, ❌ ${fillResults.errorCount} errors`);
-        } else {
-          console.log('⚠️  No form fields found in first pass');
-          fillResults = { filledCount: 0, skippedCount: 0, errorCount: 0 };
+        try {
+          // How did you hear about us
+          console.log('  1. Entering LinkedIn in "how did you hear about us" field...');
+          await stagehand.act("enter 'LinkedIn' in the 'how did you hear about us' field");
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          // First name
+          console.log('  2. Entering first name...');
+          const firstName = workdayUserProfile.fullName.split(' ')[0];
+          await stagehand.act(`enter "${firstName}" in the first name field`);
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          // Last name
+          console.log('  3. Entering last name...');
+          const lastName = workdayUserProfile.fullName.split(' ').slice(1).join(' ');
+          await stagehand.act(`enter "${lastName}" in the last name field`);
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          // Preferred name (conditional)
+          if (workdayUserProfile.preferredName) {
+            console.log('  4. Handling preferred name...');
+            await stagehand.act("check the preferred name checkbox");
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            await stagehand.act(`enter "${workdayUserProfile.preferredName}" in the first name field under preferred name`);
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            await stagehand.act(`enter "${lastName}" in the last name field under preferred name`);
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+
+          // Address
+          console.log('  5. Entering address...');
+          const address = workdayUserProfile.address || '';
+          await stagehand.act(`enter "${address}" in the street address field`);
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          // City
+          console.log('  6. Entering city...');
+          const city = workdayUserProfile.city || workdayUserProfile.location?.split(',')[0]?.trim() || '';
+          await stagehand.act(`enter "${city}" in the city field`);
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          // State
+          console.log('  7. Selecting state...');
+          const state = workdayUserProfile.state || workdayUserProfile.location?.split(',')[1]?.trim() || '';
+          await stagehand.act(`select "${state}" from the state dropdown`);
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          // Postal code
+          console.log('  8. Entering postal code...');
+          const zipcode = workdayUserProfile.zipcode || '';
+          await stagehand.act(`enter "${zipcode}" in the postal code field`);
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          // Phone type
+          console.log('  9. Selecting mobile phone type...');
+          await stagehand.act("select 'Mobile' from the phone device type dropdown");
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          // Country code
+          console.log('  10. Selecting country code...');
+          await stagehand.act("enter 'United States of America' in the country phone code field");
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          // Phone number
+          console.log('  11. Entering phone number...');
+          await stagehand.act(`enter "${workdayUserProfile.phone}" in the phone number field`);
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          console.log('✅ All act() calls completed');
+
+        } catch (actError) {
+          console.error('⚠️  Error during act() sequence:', actError.message);
+          console.log('   Continuing to agent verification...');
         }
 
-        // ===== PAGE TITLE CHECK #1 =====
-        console.log('\n🔍 PAGE TITLE CHECK #1: Verifying we are still on My Information...');
-        const titleAfterFirstPass = await extractPageTitle(stagehand);
-        
-        if (titleAfterFirstPass !== "My Information") {
-          console.log(`✅ Page has changed to "${titleAfterFirstPass}" - stopping My Information handler`);
-          // Don't continue - we've moved to the next page
-        } else {
-          console.log('   Still on "My Information" - continuing to second pass');
+        // ===== AGENT VERIFICATION =====
+        console.log('\n🤖 AGENT VERIFICATION: Checking form completeness...');
 
-          // ===== SECOND PASS: Observe questions and fill =====
-          console.log('\n📋 SECOND PASS: Looking for all questions...');
-          const secondPassFields = await observeFormFields(stagehand);
-          console.log(`   Found ${secondPassFields.length} questions/fields`);
-
-          if (secondPassFields.length > 0) {
-            // Get answers for ALL questions - don't skip any
-            console.log('🤖 Getting answers for all questions (no skipping)...');
-            const secondPassAnswers = await getIntelligentAnswers(secondPassFields, workdayUserProfile, jobDescription);
-            
-            // Update costs
-            const secondPassChatGPTCost = 
-              (secondPassAnswers.inputTokens / 1_000_000) * 0.150 +
-              (secondPassAnswers.outputTokens / 1_000_000) * 0.600;
-            phase1Cost += secondPassChatGPTCost;
-            phase1Tokens.input += secondPassAnswers.inputTokens;
-            phase1Tokens.output += secondPassAnswers.outputTokens;
-            console.log(`   💰 Second Pass ChatGPT cost: $${secondPassChatGPTCost.toFixed(4)}`);
-
-            // Fill all fields
-            console.log('✍️  Filling all fields...');
-            const secondPassFillResults = await fillFormFields(stagehand, secondPassFields, secondPassAnswers.answers);
-            console.log(`   ✅ ${secondPassFillResults.filledCount} filled, ⏭️  ${secondPassFillResults.skippedCount} skipped`);
-            
-            // Update totals
-            fillResults.filledCount += secondPassFillResults.filledCount;
-            fillResults.skippedCount += secondPassFillResults.skippedCount;
-            fillResults.errorCount += secondPassFillResults.errorCount;
-          } else {
-            console.log('   No additional fields found');
-          }
-
-          // ===== NAVIGATION: Click Save/Next/Continue button =====
-          console.log('\n🔘 NAVIGATION: Clicking Save/Next/Continue button...');
-          try {
-            await stagehand.act("click the Save or Next or Save and Continue button");
-            await new Promise(resolve => setTimeout(resolve, 3000));
-            console.log('✅ Navigation button clicked successfully');
-          } catch (navError) {
-            console.error('❌ Error clicking navigation button:', navError.message);
-          }
-
-          // ===== PAGE TITLE CHECK #2 =====
-          console.log('\n🔍 PAGE TITLE CHECK #2: Verifying page transition...');
-          const titleAfterNavigation = await extractPageTitle(stagehand);
-          
-          if (titleAfterNavigation !== "My Information") {
-            console.log(`✅ SUCCESS! Page has changed to "${titleAfterNavigation}"`);
-            // Success - we've moved on
-          } else {
-            console.log('   ⚠️  Still on "My Information" - using agent to complete');
-
-            // ===== AGENT CLEANUP: Fill missing fields and navigate =====
-            console.log('\n🤖 AGENT CLEANUP: Filling any missing fields...');
-            
-            const myInfoAgent = stagehand.agent({
-              cua: true,
-              model: {
-                modelName: "google/gemini-2.5-computer-use-preview-10-2025",
-                apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
-              },
-              systemPrompt: `You are a form completion assistant for job applications.
+        const verificationAgent = stagehand.agent({
+          cua: true,
+          model: {
+            modelName: "google/gemini-2.5-computer-use-preview-10-2025",
+            apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
+          },
+          systemPrompt: `You are a form verification assistant.
 
 YOUR TASK:
-1. Look for any empty fields or unanswered questions on the "My Information" page
-2. Fill them with appropriate information from the user context
-3. Click the "Save" or "Next" or "Save and Continue" button
-4. STOP immediately after clicking the button
+1. Review all information on this page
+2. Ensure ALL required fields are filled
+3. Fill any missing required fields
+4. Find "Have you previously worked for this company?" question
+5. Answer truthfully based on user's work experience
+6. If YES: STOP and return new questions as JSON
+7. If NO: Click no, then click Next/Continue
 
-CRITICAL:
-- Fill ALL missing fields before clicking the button
-- Do not evaluate the next page after clicking
-- Maximum 8 steps total`
-            });
+Return: {"hasWorkedHere": true/false, "newQuestions": ["q1", "q2"]}
+Max 15 steps`
+        });
 
-            const myInfoAgentInstruction = `Fill any missing fields on the "My Information" page and click the navigation button.
+        const companyName = jobDescription?.company || 'Unknown';
+        const workExp = workdayUserProfile.workExperience?.map(e => `${e.company} - ${e.position}`).join(', ') || 'None';
 
-USER INFORMATION:
-- Full Name: ${workdayUserProfile.fullName}
-- Email: ${workdayUserProfile.workEmail}
-- Phone: ${workdayUserProfile.phone}
-- Location: ${workdayUserProfile.location}
+        const verificationInstruction = `Check My Information page.
 
-YOUR STEPS:
-1. Look for any empty fields or unanswered questions
-2. Fill them with the appropriate information above
-3. Click the "Save" or "Next" or "Save and Continue" button
-4. STOP immediately
+WORK EXPERIENCE: ${workExp}
+COMPANY: ${companyName}
 
-Do not evaluate the next page. Maximum 8 steps.`;
+STEPS:
+1. Fill missing required fields:
+   - Name: ${workdayUserProfile.fullName}
+   - Email: ${workdayUserProfile.workEmail}
+   - Phone: ${workdayUserProfile.phone}
+2. Find "worked here before?" question
+3. Answer based on if user worked at ${companyName}
+4. If YES: capture new questions, return JSON
+5. If NO: click no, then Next/Continue
 
-            try {
-              const agentResult = await myInfoAgent.execute({
-                instruction: myInfoAgentInstruction,
-                maxSteps: 8,
-                highlightCursor: false
-              });
+Return: {"hasWorkedHere": true/false, "newQuestions": [...]}`;
 
-              console.log('✅ Agent cleanup complete');
-              console.log(`   Steps taken: ${agentResult.actions ? agentResult.actions.length : 'N/A'}`);
+        let hasWorkedHere = false;
+        let newQuestions = [];
 
-              // Track agent costs under Phase 2
-              if (agentResult.usage) {
-                const inputTokens = agentResult.usage.input_tokens || 0;
-                const outputTokens = agentResult.usage.output_tokens || 0;
-                phase2Tokens.input += inputTokens;
-                phase2Tokens.output += outputTokens;
-                const inputCost = (inputTokens / 1000000) * 1.25;
-                const outputCost = (outputTokens / 1000000) * 10;
-                phase2Cost += (inputCost + outputCost);
-                console.log(`   💰 Agent cost: $${(inputCost + outputCost).toFixed(4)}`);
-              }
-            } catch (agentError) {
-              console.error('⚠️  Agent cleanup error:', agentError.message);
-            }
+        try {
+          const agentResult = await verificationAgent.execute({
+            instruction: verificationInstruction,
+            maxSteps: 15,
+            highlightCursor: false
+          });
 
-            // ===== FINAL VERIFICATION =====
-            console.log('\n🔍 FINAL VERIFICATION: Checking if page has changed...');
-            const finalTitle = await extractPageTitle(stagehand);
+          console.log('✅ Agent verification complete');
+          console.log(`   Steps: ${agentResult.actions?.length || 'N/A'}`);
+
+          // Parse result
+          try {
+            const resultText = agentResult.result || agentResult.output || JSON.stringify(agentResult);
+            console.log('   Result:', resultText);
             
-            if (finalTitle !== "My Information") {
-              console.log(`✅ VERIFIED! Page successfully changed to "${finalTitle}"`);
-            } else {
-              console.log(`⚠️  WARNING: Still on "My Information" page after all attempts`);
+            const jsonMatch = resultText.match(/\{[^}]*"hasWorkedHere"[^}]*\}/);
+            if (jsonMatch) {
+              const parsed = JSON.parse(jsonMatch[0]);
+              hasWorkedHere = parsed.hasWorkedHere || false;
+              newQuestions = parsed.newQuestions || [];
             }
+          } catch (parseError) {
+            console.error('   Parse error:', parseError.message);
           }
+
+          console.log(`   Worked here: ${hasWorkedHere}`);
+          console.log(`   New questions: ${newQuestions.length}`);
+
+          // Track costs
+          if (agentResult.usage) {
+            const inputTokens = agentResult.usage.input_tokens || 0;
+            const outputTokens = agentResult.usage.output_tokens || 0;
+            phase2Tokens.input += inputTokens;
+            phase2Tokens.output += outputTokens;
+            const inputCost = (inputTokens / 1000000) * 1.25;
+            const outputCost = (outputTokens / 1000000) * 10;
+            phase2Cost += (inputCost + outputCost);
+            console.log(`   💰 Cost: $${(inputCost + outputCost).toFixed(4)}`);
+          }
+
+        } catch (agentError) {
+          console.error('⚠️  Agent error:', agentError.message);
         }
+
+        // Add questions to list
+        if (hasWorkedHere && newQuestions.length > 0) {
+          console.log(`\n📝 Adding ${newQuestions.length} questions to list...`);
+          listOfQuestions.push(...newQuestions);
+          console.log(`   Total questions: ${listOfQuestions.length}`);
+        }
+
+        console.log('\n✅ My Information complete');
+        fillResults = { filledCount: 1, skippedCount: 0, errorCount: 0 };
 
 
         // Observe form fields on current page

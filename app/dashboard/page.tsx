@@ -1309,10 +1309,10 @@ function BrowseJobsSection({
           email: profileData?.email || user.email || '',
           phone: profileData?.phone || '',
           location: {
-            address: '',
-            city: profileData?.location?.split(',')[0]?.trim() || '',
-            state: profileData?.location?.split(',')[1]?.trim() || '',
-            zipCode: '',
+            address: profileData?.address || '',
+            city: profileData?.city || profileData?.location?.split(',')[0]?.trim() || '',
+            state: profileData?.state || profileData?.location?.split(',')[1]?.trim() || '',
+            zipCode: profileData?.zipcode || '',
             country: 'United States'
           },
           linkedinUrl: profileData?.linkedin_url || '',
@@ -2871,6 +2871,10 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
     email: "",
     phone: "",
     location: "",
+    address: "",
+    city: "",
+    state: "",
+    zipcode: "",
     linkedin_url: "",
     portfolio_url: "",
     gpt_essay: "",
@@ -2882,6 +2886,9 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
     visa_sponsorship_required: "",
     veteran_status: "",
     disability_status: "",
+    security_clearance: "",
+    country_of_citizenship: "",
+    country_of_origin: "",
     open_to_relocation: "",
     work_arrangement: "",
     travel_willingness: "",
@@ -3001,6 +3008,10 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
         email: bi.email || user.email || "",
         phone: bi.phone || "",
         location: bi.location || "",
+        address: bi.address || "",
+        city: bi.city || "",
+        state: bi.state || "",
+        zipcode: bi.zipcode || "",
         linkedin_url: bi.linkedin_url || "",
         portfolio_url: bi.portfolio_url || "",
         gpt_essay: bi.gpt_essay || "",
@@ -3012,6 +3023,9 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
         visa_sponsorship_required: wa.visa_sponsorship_required === true ? 'yes' : wa.visa_sponsorship_required === false ? 'no' : '',
         veteran_status: wa.veteran_status || '',
         disability_status: wa.disability_status || '',
+        security_clearance: wa.security_clearance === true ? 'yes' : wa.security_clearance === false ? 'no' : '',
+        country_of_citizenship: wa.country_of_citizenship || '',
+        country_of_origin: wa.country_of_origin || '',
         open_to_relocation: wa.open_to_relocation || '',
         work_arrangement: wa.work_arrangement || '',
         travel_willingness: wa.travel_willingness || '',
@@ -3153,6 +3167,10 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
           email: basicInfo.email || null,
           phone: basicInfo.phone || null,
           location: basicInfo.location || null,
+          address: basicInfo.address || null,
+          city: basicInfo.city || null,
+          state: basicInfo.state || null,
+          zipcode: basicInfo.zipcode || null,
           linkedin_url: basicInfo.linkedin_url || null,
           portfolio_url: basicInfo.portfolio_url || null,
           gpt_essay: basicInfo.gpt_essay || null,
@@ -3189,6 +3207,10 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
           email: basicInfo.email || null,
           phone: basicInfo.phone || null,
           location: basicInfo.location || null,
+          address: basicInfo.address || null,
+          city: basicInfo.city || null,
+          state: basicInfo.state || null,
+          zipcode: basicInfo.zipcode || null,
           linkedin_url: basicInfo.linkedin_url || null,
           portfolio_url: basicInfo.portfolio_url || null,
         };
@@ -3253,22 +3275,36 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
     if (!user) return;
     setSavingSection('step3');
     try {
-      const { error } = await supabase.from('work_authorization').upsert({
+      console.log('💾 Saving work authorization...');
+      
+      const workAuthData = {
         user_id: user.id,
         work_authorized: workAuth.work_authorized === 'yes',
         visa_sponsorship_required: workAuth.visa_sponsorship_required === 'yes',
         veteran_status: workAuth.veteran_status || null,
         disability_status: workAuth.disability_status || null,
+        security_clearance: workAuth.security_clearance === 'yes',
+        country_of_citizenship: workAuth.country_of_citizenship || null,
+        country_of_origin: workAuth.country_of_origin || null,
         open_to_relocation: workAuth.open_to_relocation || null,
         work_arrangement: workAuth.work_arrangement || null,
         travel_willingness: workAuth.travel_willingness || null,
-      } as any);
+      };
       
-      if (error) throw error;
+      console.log('Work auth data to save:', workAuthData);
+      
+      const { error } = await supabase.from('work_authorization').upsert(workAuthData as any);
+      
+      if (error) {
+        console.error('Work authorization upsert error:', error);
+        throw error;
+      }
+      
+      console.log('✅ Work authorization saved successfully');
       showMessage('success', 'Work authorization saved successfully!');
-    } catch (e) {
+    } catch (e: any) {
       console.error('Save step 3 failed:', e);
-      showMessage('error', 'Failed to save work authorization. Please try again.');
+      showMessage('error', `Failed to save work authorization: ${e.message || 'Unknown error'}. Please try again.`);
     } finally {
       setSavingSection(null);
     }
@@ -3323,8 +3359,16 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
     if (!user) return;
     setSavingSection('step5Edu');
     try {
-      // Save education entries to database
-      await supabase.from('education_entries').delete().eq('user_id', user.id);
+      console.log('💾 Saving education entries...');
+      
+      // Delete existing entries first
+      const { error: deleteError } = await supabase.from('education_entries').delete().eq('user_id', user.id);
+      if (deleteError) {
+        console.error('Delete education error:', deleteError);
+        throw deleteError;
+      }
+      
+      // Prepare rows to insert
       const rows = educationEntries
         .filter(e => e.school || e.degree)
         .map(e => ({
@@ -3335,9 +3379,15 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
           end_date: e.end_date || null,
           current: e.current || false
         }));
+      
+      console.log('Education rows to save:', rows.length);
+      
       if (rows.length > 0) {
         const { error: insertErr } = await supabase.from('education_entries').insert(rows as any);
-        if (insertErr) throw insertErr;
+        if (insertErr) {
+          console.error('Insert education error:', insertErr);
+          throw insertErr;
+        }
       }
 
       // Also persist summary to experience_education
@@ -3346,12 +3396,16 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
         education_level: experienceEd.education_level || null,
         field_of_study: experienceEd.field_of_study || null,
       } as any);
-      if (error) throw error;
+      if (error) {
+        console.error('Upsert experience_education error:', error);
+        throw error;
+      }
 
+      console.log('✅ Education saved successfully');
       showMessage('success', 'Education saved successfully!');
-    } catch (e) {
+    } catch (e: any) {
       console.error('Save education failed:', e);
-      showMessage('error', 'Failed to save education. Please try again.');
+      showMessage('error', `Failed to save education: ${e.message || 'Unknown error'}. Please try again.`);
     } finally {
       setSavingSection(null);
     }
@@ -3361,8 +3415,16 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
     if (!user) return;
     setSavingSection('step5Exp');
     try {
-      // Save experience entries to database
-      await supabase.from('experience_entries').delete().eq('user_id', user.id);
+      console.log('💾 Saving experience entries...');
+      
+      // Delete existing entries first
+      const { error: deleteError } = await supabase.from('experience_entries').delete().eq('user_id', user.id);
+      if (deleteError) {
+        console.error('Delete experience error:', deleteError);
+        throw deleteError;
+      }
+      
+      // Prepare rows to insert
       const rows = experienceEntries
         .filter(x => x.company || x.position)
         .map(x => ({
@@ -3375,9 +3437,15 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
           current: x.current || false,
           description: x.description || null
         }));
+      
+      console.log('Experience rows to save:', rows.length);
+      
       if (rows.length > 0) {
         const { error: insertErr } = await supabase.from('experience_entries').insert(rows as any);
-        if (insertErr) throw insertErr;
+        if (insertErr) {
+          console.error('Insert experience error:', insertErr);
+          throw insertErr;
+        }
       }
 
       // Also persist summary to experience_education
@@ -3385,12 +3453,16 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
         user_id: user.id,
         employment_status: experienceEd.employment_status || null,
       } as any);
-      if (error) throw error;
+      if (error) {
+        console.error('Upsert experience_education error:', error);
+        throw error;
+      }
 
+      console.log('✅ Experience saved successfully');
       showMessage('success', 'Experience saved successfully!');
-    } catch (e) {
+    } catch (e: any) {
       console.error('Save experience failed:', e);
-      showMessage('error', 'Failed to save experience. Please try again.');
+      showMessage('error', `Failed to save experience: ${e.message || 'Unknown error'}. Please try again.`);
     } finally {
       setSavingSection(null);
     }
@@ -3400,6 +3472,9 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
     if (!user) return;
     setSavingSection('step6');
     try {
+      console.log('💾 Saving skills & certifications...');
+      
+      // Save skills and certifications
       const { error: skillsError } = await supabase.from('skills_certifications').upsert({
         user_id: user.id,
         technical_skills: skills.technical_skills,
@@ -3408,23 +3483,34 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
         key_strengths: skills.key_strengths,
       } as any);
 
-      if (skillsError) throw skillsError;
+      if (skillsError) {
+        console.error('Skills upsert error:', skillsError);
+        throw skillsError;
+      }
 
       // Replace languages set
-      const { error: deleteError } = await supabase.from('language_skills').delete().eq('user_id', user.id);
-      if (deleteError) throw deleteError;
-      
-      if (languages.length > 0) {
-        const { error: insertError } = await supabase.from('language_skills').insert(
-          languages.map(l => ({ user_id: user.id, language: l.language, proficiency_level: l.proficiency_level })) as any
-        );
-        if (insertError) throw insertError;
+      const { error: deleteError } = await supabase.from('languages').delete().eq('user_id', user.id);
+      if (deleteError) {
+        console.error('Languages delete error:', deleteError);
+        throw deleteError;
       }
       
+      if (languages.length > 0) {
+        console.log('Inserting languages:', languages.length);
+        const { error: insertError } = await supabase.from('languages').insert(
+          languages.map(l => ({ user_id: user.id, language: l.language, proficiency_level: l.proficiency_level })) as any
+        );
+        if (insertError) {
+          console.error('Languages insert error:', insertError);
+          throw insertError;
+        }
+      }
+      
+      console.log('✅ Skills & languages saved successfully');
       showMessage('success', 'Skills & certifications saved successfully!');
-    } catch (e) {
+    } catch (e: any) {
       console.error('Save step 6 failed:', e);
-      showMessage('error', 'Failed to save skills & certifications. Please try again.');
+      showMessage('error', `Failed to save skills & certifications: ${e.message || 'Unknown error'}. Please try again.`);
     } finally {
       setSavingSection(null);
     }
@@ -3584,6 +3670,22 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
                     <Label>Location</Label>
                     <Input value={basicInfo.location} onChange={e => setBasicInfo(v => ({ ...v, location: e.target.value }))} />
                   </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>Address</Label>
+                    <Input value={basicInfo.address} onChange={e => setBasicInfo(v => ({ ...v, address: e.target.value }))} placeholder="Street address" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>City</Label>
+                    <Input value={basicInfo.city} onChange={e => setBasicInfo(v => ({ ...v, city: e.target.value }))} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>State</Label>
+                    <Input value={basicInfo.state} onChange={e => setBasicInfo(v => ({ ...v, state: e.target.value }))} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Zipcode</Label>
+                    <Input value={basicInfo.zipcode} onChange={e => setBasicInfo(v => ({ ...v, zipcode: e.target.value }))} />
+                  </div>
                   <div className="space-y-2">
                     <Label>LinkedIn URL</Label>
                     <Input value={basicInfo.linkedin_url} onChange={e => setBasicInfo(v => ({ ...v, linkedin_url: e.target.value }))} />
@@ -3661,6 +3763,24 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
                         <SelectItem value="prefer-not-to-answer">Prefer not to answer</SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Security Clearance</Label>
+                    <Select value={workAuth.security_clearance} onValueChange={v => setWorkAuth(s => ({ ...s, security_clearance: v }))}>
+                      <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="yes">Yes</SelectItem>
+                        <SelectItem value="no">No</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Country of Citizenship</Label>
+                    <Input value={workAuth.country_of_citizenship} onChange={e => setWorkAuth(s => ({ ...s, country_of_citizenship: e.target.value }))} placeholder="e.g., United States" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Country of Origin</Label>
+                    <Input value={workAuth.country_of_origin} onChange={e => setWorkAuth(s => ({ ...s, country_of_origin: e.target.value }))} placeholder="e.g., United States" />
                   </div>
                   <div className="space-y-2">
                     <Label>Open to relocation</Label>
