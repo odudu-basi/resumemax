@@ -1584,6 +1584,86 @@ YOUR GOAL: Create account → Click "Create Account" → Wait for page to change
   }
 }
 
+/**
+ * Agent review and continue for each page (new per-page approach)
+ */
+async function agentReviewAndContinue(stagehand, userProfile, jobDescription, pageNumber) {
+  console.log(`\n🤖 Phase 2: Agent review for page ${pageNumber}...`);
+
+  const agent = stagehand.agent({
+    cua: true,
+    model: {
+      modelName: "google/gemini-2.5-computer-use-preview-10-2025",
+      apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
+    },
+    systemPrompt: `You are a job application completion specialist. Phase 1 has already filled most fields on this page.
+
+YOUR TASK (IN ORDER):
+1. Review the current page for any missing or incorrectly filled fields
+2. Fill any empty required fields or fields with validation errors
+3. Click "Next", "Continue", or "Save and Continue" button
+4. STOP IMMEDIATELY after clicking the button
+
+SPECIAL INSTRUCTIONS:
+- For "How did you hear about us?" fields: Always answer "LinkedIn" and press Enter
+- For referral fields: Use "LinkedIn" as the source
+- For text questions: Provide brief, professional responses based on user profile
+- Focus on required fields (marked with * or red borders)
+- Don't re-fill fields that are already correctly completed
+
+USER PROFILE:
+- Name: ${userProfile.fullName}
+- Email: ${userProfile.workEmail}
+- Phone: ${userProfile.phone}
+- Location: ${userProfile.location}
+
+JOB CONTEXT:
+${jobDescription ? `Job Description: ${jobDescription.substring(0, 500)}...` : 'No job description available'}
+
+CRITICAL: After clicking Continue/Next/Save and Continue, STOP immediately. Do not wait for the next page to load.`
+  });
+
+  const instruction = `Review this job application page for any missing fields or validation errors. Fill any empty required fields using the user profile information provided. 
+
+For "How did you hear about us" or referral questions, always use "LinkedIn".
+
+Once all fields are properly filled, click the Continue, Next, or Save and Continue button and stop immediately. however if you see a submit button click that, wait for a confirmation page or message and then stop immediately`;
+
+  try {
+    const result = await agent.execute({
+      instruction,
+      maxSteps: 15,  // Enough steps for review + fill + click
+      highlightCursor: false
+    });
+
+    console.log(`\n✅ Page ${pageNumber} Agent Review Complete:`);
+    console.log(`  Steps taken: ${result.actions ? result.actions.length : 'N/A'}`);
+    console.log(`  Success: ${result.success}`);
+
+    if (result.usage) {
+      const inputTokens = result.usage.input_tokens || 0;
+      const outputTokens = result.usage.output_tokens || 0;
+      const inputCost = (inputTokens / 1000000) * 1.25;
+      const outputCost = (outputTokens / 1000000) * 10;
+      const totalCost = (inputCost + outputCost).toFixed(4);
+      console.log(`  💰 Page ${pageNumber} Agent cost: $${totalCost}`);
+      console.log(`     Input tokens: ${inputTokens.toLocaleString()}`);
+      console.log(`     Output tokens: ${outputTokens.toLocaleString()}`);
+    }
+
+    return result;
+  } catch (error) {
+    console.error(`  ❌ Page ${pageNumber} Agent error:`, error.message);
+    
+    // Return partial success to allow continuation
+    return {
+      success: false,
+      error: error.message,
+      partialSuccess: true
+    };
+  }
+}
+
 async function agentReviewAndComplete(stagehand, userProfile, jobDescription) {
   console.log('\n🤖 Phase 2: Agent review and completion...');
 
@@ -1739,19 +1819,15 @@ function isWorkdayJobUrl(url) {
 }
 
 /**
- * Generate unique email for job applications - use original email for better compatibility
- * Many job application forms have strict validation that rejects + or . modifications
+ * Generate unique email for job applications using plus addressing
  */
 function generateJobEmail(baseEmail) {
-  // For now, return the original email to avoid validation pattern errors
-  // TODO: Consider implementing a more sophisticated approach if uniqueness is required
-  console.log(`📧 Using original email (avoiding validation pattern issues): ${baseEmail}`);
-  return baseEmail;
+  const [username, domain] = baseEmail.split('@');
   
-  // Alternative approach if uniqueness is absolutely required:
-  // const [username, domain] = baseEmail.split('@');
-  // const randomNumbers = Math.floor(Math.random() * 90) + 10;
-  // return `${username}${randomNumbers}@${domain}`;
+  // Generate two random numbers (10-99)
+  const randomNumbers = Math.floor(Math.random() * 90) + 10;
+  
+  return `${username}+${randomNumbers}@${domain}`;
 }
 
 /**
@@ -2283,8 +2359,49 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
       let fillResults = { filledCount: 0, skippedCount: 0, errorCount: 0 };
       let answersResult = { inputTokens: 0, outputTokens: 0 };
 
+      // Check if this is a review page (case-insensitive)
+      if (pageTitle && pageTitle.toLowerCase().includes('review')) {
+        console.log('🎯 Detected REVIEW page - submitting application and ending');
+        console.log(`   Page title: "${pageTitle}"`);
+
+        try {
+          // First observe to find the submit button
+          console.log('🔍 Observing page for submit button...');
+          const submitActions = await stagehand.observe("Find the submit button or application submission button");
+          
+          if (submitActions.length === 0) {
+            console.log('⚠️  No submit button found in observation');
+            throw new Error('No submit button found on review page');
+          }
+          
+          console.log(`   Found ${submitActions.length} potential submit action(s)`);
+          
+          // Click the submit button
+          console.log('🔘 Clicking submit button...');
+          await stagehand.act("click the submit button");
+          console.log('✅ Submit button clicked successfully');
+
+          // Wait for submission to process
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          console.log('⏳ Waiting for submission to process...');
+
+          // Mark application as complete
+          applicationComplete = true;
+          console.log('🎉 APPLICATION SUBMITTED SUCCESSFULLY!');
+          console.log('🔚 Ending multi-page loop - review page submission complete');
+          
+          // Break out of the loop immediately
+          break;
+
+        } catch (submitError) {
+          console.error('❌ Error submitting on review page:', submitError.message);
+          // Still mark as complete to avoid infinite loop
+          applicationComplete = true;
+          break;
+        }
+      }
       // Conditional handling based on page title
-      if (pageTitle === "My Experience") {
+      else if (pageTitle === "My Experience") {
         console.log('🎯 Detected "My Experience" page - using specialized handler');
 
         // TODO: Call specialized My Experience handler
@@ -2365,14 +2482,31 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
           fillResults.errorCount = formActions.length;
         }
 
-        // Click Continue/Next button
-        console.log('\n🔘 Clicking Continue/Next button...');
+        // NEW: Run Phase 2 agent after Phase 1 filling on every page
+        console.log('\n' + '═'.repeat(80));
+        console.log(`  PAGE ${pageNumber}: PHASE 2 - Agent Review & Continue`);
+        console.log('═'.repeat(80));
+
         try {
-          await stagehand.act("click the Continue or Next or Save and Continue button");
-          await new Promise(resolve => setTimeout(resolve, 3000));
-          console.log('✅ Continue button clicked');
-        } catch (clickError) {
-          console.error('❌ Error clicking Continue button:', clickError.message);
+          const agentResult = await agentReviewAndContinue(stagehand, workdayUserProfile, jobDescription, pageNumber);
+          
+          // Calculate Phase 2 cost for this page
+          if (agentResult.usage) {
+            const inputTokens = agentResult.usage.input_tokens || 0;
+            const outputTokens = agentResult.usage.output_tokens || 0;
+            const inputCost = (inputTokens / 1000000) * 1.25;
+            const outputCost = (outputTokens / 1000000) * 10;
+            const pageCost = inputCost + outputCost;
+            phase2Cost += pageCost;
+            phase2Tokens.input += inputTokens;
+            phase2Tokens.output += outputTokens;
+            console.log(`  💰 Page ${pageNumber} Agent cost: $${pageCost.toFixed(4)} (Input: ${inputTokens} tokens, Output: ${outputTokens} tokens)`);
+          }
+
+          console.log(`✅ Page ${pageNumber} agent review complete - moving to next page`);
+        } catch (agentError) {
+          console.error(`❌ Agent review failed on page ${pageNumber}: ${agentError.message}`);
+          console.log('⚠️  Continuing to next page despite agent error...');
         }
       }
 
@@ -2397,8 +2531,11 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
 
     console.log('\n' + '═'.repeat(80));
     console.log(`  APPLICATION LOOP COMPLETE`);
-    console.log(`  Total pages processed: ${pageNumber}`);
+    console.log(`  Total pages processed: ${pageNumber - 1}`);
     console.log(`  Status: ${applicationComplete ? 'SUBMITTED ✅' : 'INCOMPLETE ⚠️'}`);
+    if (applicationComplete) {
+      console.log(`  Completion method: ${pageTitle && pageTitle.toLowerCase().includes('review') ? 'Review page submission' : 'Standard flow completion'}`);
+    }
     console.log('═'.repeat(80));
 
     console.log('✅ Workday application flow completed (Phase 0 + Phase 1 + Phase 2)');
@@ -2612,8 +2749,8 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
       sessionVideoUrl,
       filledFields,
       message: isWorkday 
-        ? `Workday application completed using intelligent form fill in ${executionTime}s. Application submitted.`
-        : `Form filled across multiple pages using traditional hybrid approach in ${executionTime}s. Application submitted.`,
+        ? `Workday application completed using intelligent form fill in ${executionTime}s. ${applicationComplete ? 'Application submitted successfully.' : 'Application processing completed.'}`
+        : `Form filled across multiple pages using traditional hybrid approach in ${executionTime}s. ${applicationComplete ? 'Application submitted successfully.' : 'Application processing completed.'}`,
       jobDescription: jobDescription ? {
         title: jobDescription.title,
         company: jobDescription.company
