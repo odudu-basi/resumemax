@@ -1408,8 +1408,10 @@ async function handleEmailVerification(stagehand, userProfile, companyName) {
     console.log('\n🤖 Step 5: Using AI agent to find verification email...');
     const agent = stagehand.agent({
       cua: true,
-      provider: 'google',
-      model: 'gemini-2.0-flash-exp',
+      model: {
+        modelName: "google/gemini-2.5-computer-use-preview-10-2025",
+        apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
+      }
     });
     
     const agentResult = await agent.execute(
