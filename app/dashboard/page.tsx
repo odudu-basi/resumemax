@@ -139,9 +139,12 @@ function HomeJobCard({
   console.log('🔍 HomeJobCard Debug:', {
     jobId: job.id,
     jobTitle: job.title,
+    jobStatus: job.status,
     cloudNotification,
     hasLiveUrl: !!cloudNotification?.liveUrl,
-    liveUrl: cloudNotification?.liveUrl
+    liveUrl: cloudNotification?.liveUrl,
+    sessionUrl: job.sessionUrl, // For programmatic control only
+    sessionId: job.sessionId
   });
 
   return (
@@ -257,8 +260,8 @@ function HomeJobCard({
           </Button>
         </div>
 
-        {/* Watch Live Button - Shows when liveUrl exists OR when job is applying */}
-        {(cloudNotification?.liveUrl || (job.status === 'applying' && job.sessionUrl)) && (
+        {/* Watch Live Button - Shows only when liveUrl exists */}
+        {cloudNotification?.liveUrl && (
           <Button
             variant="outline"
             size="sm"
@@ -273,8 +276,8 @@ function HomeJobCard({
           </Button>
         )}
         
-        {/* Debug: Show when job is applying but no live URL */}
-        {job.status === 'applying' && !cloudNotification?.liveUrl && !job.sessionUrl && (
+        {/* Debug: Show when job is applying but no live URL yet */}
+        {job.status === 'applying' && !cloudNotification?.liveUrl && (
           <Button
             variant="outline"
             size="sm"
@@ -300,10 +303,10 @@ function HomeJobCard({
     </Card>
 
     {/* Live View Modal */}
-    {showLiveViewModal && (cloudNotification?.liveUrl || job.sessionUrl) && (
+    {showLiveViewModal && cloudNotification?.liveUrl && (
       <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50" onClick={() => setShowLiveViewModal(false)}>
         <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-4 bg-black bg-opacity-80 z-10">
-          <h3 className="text-lg font-semibold text-white">Live Session View</h3>
+          <h3 className="text-lg font-semibold text-white">Live Session View - Browserbase</h3>
           <Button
             variant="ghost"
             size="sm"
@@ -319,7 +322,7 @@ function HomeJobCard({
         
         <div className="w-full h-full pt-16" onClick={(e) => e.stopPropagation()}>
           <iframe
-            src={cloudNotification?.liveUrl || job.sessionUrl}
+            src={cloudNotification.liveUrl}
             sandbox="allow-same-origin allow-scripts"
             allow="clipboard-read; clipboard-write"
             style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }}
@@ -1714,9 +1717,12 @@ function BrowseJobsSection({
           duration: 5000,
         });
 
-        // Log the live URL
+        // Log the URLs for debugging
+        if (result.liveViewUrl) {
+          console.log('🔴 Live View URL (for watching):', result.liveViewUrl);
+        }
         if (result.sessionUrl) {
-          console.log('🔴 Live URL:', result.sessionUrl);
+          console.log('🔧 Session URL (for control):', result.sessionUrl);
         }
 
         // Set notification with live URL - this makes the Watch Live button appear
