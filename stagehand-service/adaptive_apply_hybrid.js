@@ -872,25 +872,56 @@ async function fillEducationFields(stagehand, fields, answers) {
 }
 
 /**
+ * Extract form questions with actual question text - returns structured data
+ */
+async function extractFormQuestions(stagehand) {
+  console.log('\n📝 Extracting form questions with actual text...');
+
+  try {
+    const questionsSchema = z.object({
+      questions: z.array(z.object({
+        questionText: z.string().describe("The actual question text displayed to the user"),
+        inputType: z.enum(['text', 'textarea', 'dropdown', 'checkbox', 'radio', 'date', 'number']).describe("Type of input field"),
+        isRequired: z.boolean().optional().describe("Whether this field is required"),
+        placeholder: z.string().optional().describe("Placeholder text if any")
+      }))
+    });
+
+    const result = await stagehand.extract(
+      "Extract all form questions on this page. Get the actual question text (e.g., 'What is your first name?' or 'Why do you want to work here?'), the input type, and whether it's required.",
+      questionsSchema
+    );
+
+    console.log(`  ✅ Extracted ${result.questions.length} questions`);
+
+    if (result.questions.length > 0) {
+      console.log('\n  📋 Sample questions:');
+      result.questions.slice(0, 3).forEach((q, i) => {
+        console.log(`    ${i + 1}. "${q.questionText}" (${q.inputType}${q.isRequired ? ', required' : ''})`);
+      });
+    }
+
+    return result.questions;
+
+  } catch (error) {
+    console.error('  ❌ Extract failed:', error.message);
+    return [];
+  }
+}
+
+/**
  * Observe form fields - returns Action[] with selectors
  */
 async function observeFormFields(stagehand) {
-  console.log('\n👀 Phase 1: Observing form fields...');
+  console.log('\n👀 Observing form fields for selectors...');
 
   try {
     // observe() returns Action[] with { description, method, arguments, selector }
     const actions = await stagehand.observe(
-      "Find all form questions and their filling methods (text input, dropdown, checkbox, etc.). Find all the buttons on the page. Exclude file upload fields. For each question, provide a CONCISE description (max 10 words) of what is being asked."
+      "Find all form input fields, textareas, dropdowns, and checkboxes. Exclude buttons and file upload fields."
     );
 
-    console.log(`  ✅ Found ${actions.length} form fields`);
-
-    if (actions.length > 0) {
-      console.log('\n  📋 Sample fields:');
-      actions.slice(0, 5).forEach(action => {
-        console.log(`    - ${action.description} (${action.method})`);
-      });
-    }
+    console.log(`  ✅ Found ${actions.length} actionable fields`);
 
     return actions;
 
@@ -898,6 +929,39 @@ async function observeFormFields(stagehand) {
     console.error('  ❌ Observe failed:', error.message);
     return [];
   }
+}
+
+/**
+ * Enhanced observe that combines extract + observe for better context
+ */
+async function observeFormFieldsEnhanced(stagehand) {
+  console.log('\n🔍 Enhanced field detection (extract + observe)...');
+
+  // Step 1: Extract actual question text
+  const questions = await extractFormQuestions(stagehand);
+
+  // Step 2: Observe to get actionable selectors
+  const actions = await observeFormFields(stagehand);
+
+  // Step 3: Combine - match questions to actions
+  const enhanced = actions.map((action, index) => {
+    // Try to find matching question
+    const matchingQuestion = questions[index] || null;
+
+    return {
+      description: matchingQuestion ? matchingQuestion.questionText : action.description,
+      method: action.method,
+      arguments: action.arguments,
+      selector: action.selector,
+      inputType: matchingQuestion?.inputType || 'unknown',
+      isRequired: matchingQuestion?.isRequired || false,
+      originalDescription: action.description
+    };
+  });
+
+  console.log(`  ✅ Enhanced ${enhanced.length} fields with question context`);
+
+  return enhanced;
 }
 
 /**
@@ -2226,8 +2290,8 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
         if (!myExpResult.success) {
           console.log('⚠️  Specialized handler failed, falling back to standard flow...');
 
-          // Standard flow: observe → get answers → fill
-          const formActions = await observeFormFields(stagehand);
+          // Standard flow: enhanced observe → get answers → fill
+          const formActions = await observeFormFieldsEnhanced(stagehand);
           answersResult = await getIntelligentAnswers(formActions, workdayUserProfile, jobDescription);
 
           // Calculate accurate Phase 1 cost
@@ -2247,202 +2311,12 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
           fillResults = myExpResult;
         }
 
-      } else if (pageTitle === "My Information") {
-        console.log('🎯 Detected "My Information" page - using specialized handler');
+      } else {
+        // Standard flow for all other pages (not "My Experience")
+        console.log('📝 Using standard flow for this page');
 
-        // ===== OBSERVE: Get all questions and buttons on the page =====
-        console.log('\n📋 Observing page for questions and buttons...');
-        const pageElements = await observeFormFields(stagehand);
-        console.log(`   Found ${pageElements.length} elements on page`);
-
-        // ===== ACT SEQUENCE: Fill out known fields =====
-        console.log('\n✍️  Filling out known fields with act() calls...');
-
-        try {
-          // How did you hear about us
-          console.log('  1. Entering LinkedIn in "how did you hear about us" field...');
-          await stagehand.act("enter 'LinkedIn' in the 'how did you hear about us' field");
-          await new Promise(resolve => setTimeout(resolve, 500));
-
-          // First name
-          console.log('  2. Entering first name...');
-          const firstName = workdayUserProfile.fullName.split(' ')[0];
-          await stagehand.act(`enter "${firstName}" in the first name field`);
-          await new Promise(resolve => setTimeout(resolve, 500));
-
-          // Last name
-          console.log('  3. Entering last name...');
-          const lastName = workdayUserProfile.fullName.split(' ').slice(1).join(' ');
-          await stagehand.act(`enter "${lastName}" in the last name field`);
-          await new Promise(resolve => setTimeout(resolve, 500));
-
-          // Preferred name (conditional)
-          if (workdayUserProfile.preferredName) {
-            console.log('  4. Handling preferred name...');
-            await stagehand.act("check the preferred name checkbox");
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            await stagehand.act(`enter "${workdayUserProfile.preferredName}" in the first name field under preferred name`);
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            await stagehand.act(`enter "${lastName}" in the last name field under preferred name`);
-            await new Promise(resolve => setTimeout(resolve, 500));
-          }
-
-          // Address
-          console.log('  5. Entering address...');
-          const address = workdayUserProfile.address || '';
-          await stagehand.act(`enter "${address}" in the street address field`);
-          await new Promise(resolve => setTimeout(resolve, 500));
-
-          // City
-          console.log('  6. Entering city...');
-          const city = workdayUserProfile.city || workdayUserProfile.location?.split(',')[0]?.trim() || '';
-          await stagehand.act(`enter "${city}" in the city field`);
-          await new Promise(resolve => setTimeout(resolve, 500));
-
-          // State
-          console.log('  7. Selecting state...');
-          const state = workdayUserProfile.state || workdayUserProfile.location?.split(',')[1]?.trim() || '';
-          await stagehand.act(`select "${state}" from the state dropdown`);
-          await new Promise(resolve => setTimeout(resolve, 500));
-
-          // Postal code
-          console.log('  8. Entering postal code...');
-          const zipcode = workdayUserProfile.zipcode || '';
-          await stagehand.act(`enter "${zipcode}" in the postal code field`);
-          await new Promise(resolve => setTimeout(resolve, 500));
-
-          // Phone type
-          console.log('  9. Selecting mobile phone type...');
-          await stagehand.act("select 'Mobile' from the phone device type dropdown");
-          await new Promise(resolve => setTimeout(resolve, 500));
-
-          // Country code
-          console.log('  10. Selecting country code...');
-          await stagehand.act("enter 'United States of America' in the country phone code field");
-          await new Promise(resolve => setTimeout(resolve, 500));
-
-          // Phone number
-          console.log('  11. Entering phone number...');
-          await stagehand.act(`enter "${workdayUserProfile.phone}" in the phone number field`);
-          await new Promise(resolve => setTimeout(resolve, 500));
-
-          console.log('✅ All act() calls completed');
-
-        } catch (actError) {
-          console.error('⚠️  Error during act() sequence:', actError.message);
-          console.log('   Continuing to agent verification...');
-        }
-
-        // ===== AGENT VERIFICATION =====
-        console.log('\n🤖 AGENT VERIFICATION: Checking form completeness...');
-
-        const verificationAgent = stagehand.agent({
-          cua: true,
-          model: {
-            modelName: "google/gemini-2.5-computer-use-preview-10-2025",
-            apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
-          },
-          systemPrompt: `You are a form verification assistant.
-
-YOUR TASK:
-1. Review all information on this page
-2. Ensure ALL required fields are filled
-3. Fill any missing required fields
-4. Find "Have you previously worked for this company?" question
-5. Answer truthfully based on user's work experience
-6. If YES: Click yes, then capture new questions that appear
-7. If NO: Click no
-8. ALWAYS click Next/Continue/Save and Continue button
-9. STOP IMMEDIATELY after clicking - do not interact with next page
-
-Return: {"hasWorkedHere": true/false, "newQuestions": ["q1", "q2"]}
-Max 15 steps`
-        });
-
-        const companyName = jobDescription?.company || 'Unknown';
-        const workExp = workdayUserProfile.workExperience?.map(e => `${e.company} - ${e.position}`).join(', ') || 'None';
-
-        const verificationInstruction = `Check My Information page.
-
-WORK EXPERIENCE: ${workExp}
-COMPANY: ${companyName}
-
-STEPS:
-1. Fill missing required fields:
-   - Name: ${workdayUserProfile.fullName}
-   - Email: ${workdayUserProfile.workEmail}
-   - Phone: ${workdayUserProfile.phone}
-2. Find "worked here before?" question
-3. Answer based on if user worked at ${companyName}
-4. If YES: click yes, capture new questions
-5. If NO: click no
-6. ALWAYS click Next/Continue/Save and Continue button
-7. STOP immediately - do not interact with next page
-
-Return: {"hasWorkedHere": true/false, "newQuestions": [...]}`;
-
-        let hasWorkedHere = false;
-        let newQuestions = [];
-
-        try {
-          const agentResult = await verificationAgent.execute({
-            instruction: verificationInstruction,
-            maxSteps: 15,
-            highlightCursor: false
-          });
-
-          console.log('✅ Agent verification complete');
-          console.log(`   Steps: ${agentResult.actions?.length || 'N/A'}`);
-
-          // Parse result
-          try {
-            const resultText = agentResult.result || agentResult.output || JSON.stringify(agentResult);
-            console.log('   Result:', resultText);
-            
-            const jsonMatch = resultText.match(/\{[^}]*"hasWorkedHere"[^}]*\}/);
-            if (jsonMatch) {
-              const parsed = JSON.parse(jsonMatch[0]);
-              hasWorkedHere = parsed.hasWorkedHere || false;
-              newQuestions = parsed.newQuestions || [];
-            }
-          } catch (parseError) {
-            console.error('   Parse error:', parseError.message);
-          }
-
-          console.log(`   Worked here: ${hasWorkedHere}`);
-          console.log(`   New questions: ${newQuestions.length}`);
-
-          // Track costs
-          if (agentResult.usage) {
-            const inputTokens = agentResult.usage.input_tokens || 0;
-            const outputTokens = agentResult.usage.output_tokens || 0;
-            phase2Tokens.input += inputTokens;
-            phase2Tokens.output += outputTokens;
-            const inputCost = (inputTokens / 1000000) * 1.25;
-            const outputCost = (outputTokens / 1000000) * 10;
-            phase2Cost += (inputCost + outputCost);
-            console.log(`   💰 Cost: $${(inputCost + outputCost).toFixed(4)}`);
-          }
-
-        } catch (agentError) {
-          console.error('⚠️  Agent error:', agentError.message);
-        }
-
-        // Add questions to list
-        if (hasWorkedHere && newQuestions.length > 0) {
-          console.log(`\n📝 Adding ${newQuestions.length} questions to list...`);
-          listOfQuestions.push(...newQuestions);
-          console.log(`   Total questions: ${listOfQuestions.length}`);
-        }
-
-        console.log('\n✅ My Information complete');
-        fillResults = { filledCount: 1, skippedCount: 0, errorCount: 0 };
-
-
-        // Observe form fields on current page
-        const formActions = await observeFormFields(stagehand);
+        // Enhanced observation: extract questions + observe fields
+        const formActions = await observeFormFieldsEnhanced(stagehand);
 
         if (formActions.length === 0) {
           console.log(`⚠️  No form fields found on page ${pageNumber}`);
@@ -2466,21 +2340,14 @@ Return: {"hasWorkedHere": true/false, "newQuestions": [...]}`;
         const answers = answersResult.answers;
 
         // Calculate accurate Phase 1 cost
-        // ChatGPT (gpt-4o-mini) pricing: $0.150/1M input, $0.600/1M output
         const chatGPTInputCost = (answersResult.inputTokens / 1_000_000) * 0.150;
         const chatGPTOutputCost = (answersResult.outputTokens / 1_000_000) * 0.600;
         const chatGPTCost = chatGPTInputCost + chatGPTOutputCost;
-
-        // Stagehand observe() and act() costs (estimates since Stagehand doesn't return usage)
-        const pageObserveTokens = 2000; // Estimated
-        const pageActTokens = formActions.length * 500; // Estimated
-        const stagehandCost = 0.02; // Small estimate for Stagehand operations
-
-        // Track tokens
+        const pageObserveTokens = 2000;
+        const pageActTokens = formActions.length * 500;
+        const stagehandCost = 0.02;
         phase1Tokens.input += answersResult.inputTokens + pageObserveTokens + pageActTokens;
         phase1Tokens.output += answersResult.outputTokens;
-
-        // Accumulate cost
         phase1Cost += chatGPTCost + stagehandCost;
 
         console.log(`  💰 Page ${pageNumber} ChatGPT cost: $${chatGPTCost.toFixed(4)} (Input: ${answersResult.inputTokens} tokens, Output: ${answersResult.outputTokens} tokens)`);
@@ -2488,153 +2355,22 @@ Return: {"hasWorkedHere": true/false, "newQuestions": [...]}`;
         // Fill form fields on current page
         try {
           fillResults = await fillFormFields(stagehand, formActions, answers);
-          console.log(`\n📊 Page ${pageNumber} Phase 1 Results: ✅ ${fillResults.filledCount} filled, ⏭️ ${fillResults.skippedCount} skipped, ❌ ${fillResults.errorCount} errors`);
-        } catch (phase1Error) {
-          console.error(`\n❌ Phase 1 failed on page ${pageNumber}: ${phase1Error.message}`);
-          console.log(`🔄 Continuing to Phase 2 to handle...`);
+          console.log(`\n📊 Page ${pageNumber} Results: ✅ ${fillResults.filledCount} filled, ⏭️ ${fillResults.skippedCount} skipped, ❌ ${fillResults.errorCount} errors`);
+        } catch (fillError) {
+          console.error(`\n❌ Fill failed on page ${pageNumber}: ${fillError.message}`);
           fillResults.errorCount = formActions.length;
         }
 
-        // ===== SECOND PASS: Click Continue and Handle Validation Errors =====
-        console.log('\n' + '─'.repeat(80));
-        console.log('🔄 SECOND PASS: Validation & Error Handling');
-        console.log('─'.repeat(80));
-
-        // Step 1: Click Continue/Next button
-        console.log('\n🔘 Step 1: Clicking Continue/Next button...');
+        // Click Continue/Next button
+        console.log('\n🔘 Clicking Continue/Next button...');
         try {
           await stagehand.act("click the Continue or Next or Save and Continue button");
-          await new Promise(resolve => setTimeout(resolve, 4000));
-          console.log('✅ Continue button clicked, waiting for page response...');
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          console.log('✅ Continue button clicked');
         } catch (clickError) {
           console.error('❌ Error clicking Continue button:', clickError.message);
-          console.log('⚠️ Proceeding to check for errors anyway...');
         }
-
-        // Step 2: Check for validation errors using extract
-        console.log('\n🔍 Step 2: Checking for validation errors...');
-        let hasValidationErrors = false;
-        let errorFieldsObserved = [];
-
-        try {
-          const errorCheck = await stagehand.extract(
-            "Check if there are any error messages, validation errors, or required field warnings on this page",
-            z.object({
-              hasErrors: z.boolean().describe("Whether there are any error messages or validation errors visible"),
-              errorMessages: z.array(z.string()).optional().describe("List of error messages if any")
-            })
-          );
-
-          hasValidationErrors = errorCheck.hasErrors;
-          
-          if (hasValidationErrors) {
-            console.log('⚠️ Validation errors detected:');
-            if (errorCheck.errorMessages && errorCheck.errorMessages.length > 0) {
-              errorCheck.errorMessages.forEach(msg => console.log(`   - ${msg}`));
-            }
-          } else {
-            console.log('✅ No validation errors found - page is clean!');
-          }
-
-        } catch (extractError) {
-          console.error('❌ Error checking for validation errors:', extractError.message);
-          console.log('⚠️ Assuming no errors and proceeding...');
-        }
-
-        // Step 3: If errors found, observe and fill them
-        if (hasValidationErrors) {
-          console.log('\n📝 Step 3: Observing and filling error fields...');
-          
-          try {
-            // Observe fields with errors
-            errorFieldsObserved = await stagehand.observe(
-              "Find all input fields, dropdowns, or checkboxes that have error messages or validation warnings next to them"
-            );
-
-            if (errorFieldsObserved.length > 0) {
-              console.log(`   Found ${errorFieldsObserved.length} fields with errors`);
-
-              // Get intelligent answers for error fields
-              const errorAnswersResult = await getIntelligentAnswers(
-                errorFieldsObserved,
-                workdayUserProfile,
-                jobDescription
-              );
-
-              // Update costs for error field answers
-              const errorChatGPTCost = 
-                (errorAnswersResult.inputTokens / 1_000_000) * 0.150 +
-                (errorAnswersResult.outputTokens / 1_000_000) * 0.600;
-              phase1Cost += errorChatGPTCost;
-              phase1Tokens.input += errorAnswersResult.inputTokens;
-              phase1Tokens.output += errorAnswersResult.outputTokens;
-
-              console.log(`   💰 Error fields ChatGPT cost: $${errorChatGPTCost.toFixed(4)}`);
-
-              // Fill error fields
-              const errorFillResults = await fillFormFields(
-                stagehand,
-                errorFieldsObserved,
-                errorAnswersResult.answers
-              );
-
-              console.log(`   ✅ ${errorFillResults.filledCount} error fields filled`);
-
-              // Click Continue/Next again
-              console.log('\n🔘 Clicking Continue/Next button again after fixing errors...');
-              await stagehand.act("click the Continue or Next or Save and Continue button");
-              await new Promise(resolve => setTimeout(resolve, 4000));
-              console.log('✅ Continue button clicked');
-
-              // Step 4: Check for errors AGAIN
-              console.log('\n🔍 Step 4: Checking if errors persist...');
-              const finalErrorCheck = await stagehand.extract(
-                "Check if there are any error messages, validation errors, or required field warnings on this page",
-                z.object({
-                  hasErrors: z.boolean().describe("Whether there are any error messages or validation errors visible"),
-                  errorMessages: z.array(z.string()).optional().describe("List of error messages if any")
-                })
-              );
-
-              if (finalErrorCheck.hasErrors) {
-                console.log('⚠️ Validation errors still persist after second attempt!');
-                console.log('🤖 Calling Phase 2 agent to resolve...');
-
-                // Call Phase 2 to handle persistent errors
-                const agentResult = await agentReviewAndComplete(stagehand, workdayUserProfile, jobDescription);
-
-                // Update Phase 2 costs
-                if (agentResult.usage) {
-                  const inputTokens = agentResult.usage.input_tokens || 0;
-                  const outputTokens = agentResult.usage.output_tokens || 0;
-                  phase2Tokens.input += inputTokens;
-                  phase2Tokens.output += outputTokens;
-                  const inputCost = (inputTokens / 1000000) * 1.25;
-                  const outputCost = (outputTokens / 1000000) * 10;
-                  phase2Cost += (inputCost + outputCost);
-                }
-
-                console.log('✅ Phase 2 completed, proceeding to next page...');
-              } else {
-                console.log('✅ All errors resolved! Proceeding to next page...');
-              }
-
-            } else {
-              console.log('⚠️ No error fields found despite error check, proceeding...');
-            }
-
-          } catch (errorHandlingError) {
-            console.error('❌ Error during error field handling:', errorHandlingError.message);
-            console.log('⚠️ Proceeding to next page despite error...');
-          }
-        }
-
-        console.log('\n' + '─'.repeat(80));
-        console.log('✅ Second Pass Complete');
-        console.log('─'.repeat(80));
       }
-
-
 
       // Track fields from this page
       allFilledFields.push({

@@ -3653,8 +3653,8 @@ function ProfileEditor({ resumeFileName = '' }: { resumeFileName?: string }) {
 
   // Load on mount (with caching)
   useEffect(() => {
-    // Only load data if not already loaded or if user changed
-    if (!profileDataLoaded || user?.id) {
+    // Only load data if not already loaded AND user exists
+    if (!profileDataLoaded && user?.id) {
       loadData();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
