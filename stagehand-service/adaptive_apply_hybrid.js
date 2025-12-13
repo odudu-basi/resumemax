@@ -1473,10 +1473,10 @@ async function handleEmailVerification(stagehand, userProfile, companyName) {
   }
 }
 /**
- * Phase 0a: Navigate to account creation page
+ * Phase 0a: Navigate and detect if account creation is needed
  */
 async function agentNavigateToAccountCreation(stagehand, userProfile) {
-  console.log('\n🔐 Phase 0a: Navigate to account creation page...');
+  console.log('\n🔐 Phase 0a: Navigate and detect account creation requirement...');
 
   const agent = stagehand.agent({
     cua: true,
@@ -1484,18 +1484,24 @@ async function agentNavigateToAccountCreation(stagehand, userProfile) {
       modelName: "google/gemini-2.5-computer-use-preview-10-2025",
       apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
     },
-    systemPrompt: `You are a navigation specialist for Workday job applications.
+    systemPrompt: `You are a navigation and detection specialist for Workday job applications.
 
-Your mission is to navigate to the account creation form and STOP there.
+Your mission is to navigate through the application flow and determine if account creation is required.
 
 CRITICAL RULES:
-1. Navigate to the account creation form but DO NOT fill it out
-2. Always choose "Create Account" or "Sign Up" over "Sign In" or "Login"
-3. STOP as soon as you see the account creation form fields
-4. Do NOT fill any fields - just navigate to the form`
+1. Navigate through the application process step by step
+2. Detect if you reach an account creation form OR go directly to the application form
+3. STOP as soon as you determine the path and provide clear assessment
+4. Do NOT fill any forms - just navigate and detect
+
+DETECTION CRITERIA:
+- ACCOUNT CREATION REQUIRED: Email/password fields, "Create Account" buttons, login/registration forms
+- DIRECT TO APPLICATION: Personal info fields, resume upload, work experience sections, application form fields
+
+You must provide a clear final assessment of what type of page you landed on.`
   });
 
-  const instruction = `Navigate to the account creation form. Follow these steps IN ORDER:
+  const instruction = `Navigate through the job application process and determine if account creation is required. Follow these steps:
 
 STEP 1: CLICK APPLY BUTTON
 - Look for and click the "Apply", "Apply Now", or similar button on the job listing page
@@ -1504,39 +1510,99 @@ STEP 2: CHOOSE APPLICATION METHOD
 - If asked "How would you like to apply?", click "Apply Manually" or the non-LinkedIn option
 - NEVER choose "Apply with LinkedIn" or "Apply with Indeed"
 
-STEP 3: NAVIGATE TO CREATE ACCOUNT
-- If you see BOTH "Sign In" and "Create Account" tabs/buttons, click "Create Account" or "Sign Up"
-- Navigate until you see the account creation form with fields like email, password, etc.
+STEP 3: ANALYZE THE FINAL PAGE
+After navigation, analyze what type of page you landed on:
 
-STEP 4: STOP AT FORM
-- STOP IMMEDIATELY when you see the account creation form
-- Do NOT fill any fields
-- Do NOT click any buttons on the form
-- Your job is complete once the form is visible
+SCENARIO A - ACCOUNT CREATION REQUIRED:
+Sub-scenario A1 - LOGIN PAGE:
+- You see a login page with "Sign In" and "Create Account" options
+- You see existing user login fields (email/password for existing users)
+- ACTION: Click "Create Account" or "Sign Up" to navigate to account creation form
+- Then proceed to Sub-scenario A2
 
-WHEN TO STOP:
-✅ STOP when you see account creation form fields (email, password, name fields)
-✅ Do NOT fill the form - Phase 0b will handle that
-✅ Just ensure the form is visible and ready to be filled`;
+Sub-scenario A2 - ACCOUNT CREATION PAGE:
+- You see account creation form (email, password, create account fields for NEW users)
+- You see registration form with fields like "Email", "Password", "Confirm Password"
+- ACTION: STOP HERE and say: "ACCOUNT CREATION REQUIRED - I see account creation form"
+
+SCENARIO B - DIRECT TO APPLICATION:
+- You go directly to the job application form
+- You see fields like "First Name", "Last Name", "Phone", "Resume Upload"
+- You see application sections like "Personal Information", "Work Experience"
+- Say: "DIRECT TO APPLICATION - I see job application form fields"
+
+IMPORTANT:
+- STOP as soon as you determine which scenario you're in
+- Do NOT fill any forms or fields
+- Provide a clear final statement about what you found
+- Be specific about what elements you see that led to your conclusion
+
+YOUR GOAL: Navigate, detect the page type, and provide clear assessment.`;
 
   try {
     const result = await agent.execute({
       instruction,
-      maxSteps: 15,  // Enough steps for navigation only
+      maxSteps: 20,  // Enough steps for navigation and detection
       highlightCursor: false
     });
 
-    console.log('\n✅ Phase 0a Complete (Navigation):');
+    console.log('\n✅ Phase 0a Complete (Navigation & Detection):');
     console.log(`  Steps taken: ${result.actions ? result.actions.length : 'N/A'}`);
     console.log(`  Success: ${result.success}`);
 
-    return result;
+    // Parse the agent's final assessment to determine page type
+    const finalMessage = result.messages && result.messages.length > 0 
+      ? result.messages[result.messages.length - 1] 
+      : '';
+    
+    const lastActions = result.actions && result.actions.length > 0
+      ? result.actions.slice(-3).join(' ').toLowerCase()
+      : '';
+
+    // Analyze agent's output to determine if account creation is needed
+    const agentOutput = (finalMessage + ' ' + lastActions).toLowerCase();
+    
+    let createAccount = true;  // Default to true
+    let pageType = 'unknown';
+    let reasoning = 'Agent completed navigation';
+
+    if (agentOutput.includes('direct to application') || 
+        agentOutput.includes('application form') ||
+        agentOutput.includes('personal information') ||
+        agentOutput.includes('resume upload') ||
+        agentOutput.includes('work experience')) {
+      createAccount = false;
+      pageType = 'application_form';
+      reasoning = 'Agent detected direct navigation to application form';
+    } else if (agentOutput.includes('account creation') ||
+               agentOutput.includes('create account') ||
+               agentOutput.includes('login') ||
+               agentOutput.includes('sign in') ||
+               agentOutput.includes('email') && agentOutput.includes('password')) {
+      createAccount = true;
+      pageType = 'account_creation';
+      reasoning = 'Agent detected account creation/login page';
+    }
+
+    console.log(`  🎯 Page Type Detected: ${pageType}`);
+    console.log(`  🔐 Account Creation Required: ${createAccount}`);
+    console.log(`  💭 Reasoning: ${reasoning}`);
+
+    return {
+      ...result,
+      createAccount: createAccount,
+      pageType: pageType,
+      reasoning: reasoning
+    };
   } catch (error) {
     console.error('  ❌ Phase 0a error:', error.message);
     return {
       success: false,
       error: error.message,
-      partialSuccess: true
+      partialSuccess: true,
+      createAccount: true,  // Default to true if detection fails
+      pageType: 'unknown',
+      reasoning: 'Navigation failed, defaulting to account creation required'
     };
   }
 }
@@ -1764,16 +1830,16 @@ async function fillAccountCreationForm(stagehand, formFields, answers) {
 }
 
 /**
- * Combined Phase 0: Structured account creation
+ * Combined Phase 0: Navigation and conditional account creation
  */
 async function agentAccountCreation(stagehand, userProfile) {
-  console.log('\n🔐 Phase 0: Structured account creation...');
+  console.log('\n🔐 Phase 0: Navigation and account creation detection...');
   
   let totalCost = 0;
   let totalTokens = { input: 0, output: 0 };
 
   try {
-    // Phase 0a: Navigate to account creation form
+    // Phase 0a: Navigate and detect if account creation is needed
     const navigationResult = await agentNavigateToAccountCreation(stagehand, userProfile);
     
     if (navigationResult.usage) {
@@ -1785,8 +1851,36 @@ async function agentAccountCreation(stagehand, userProfile) {
     }
 
     if (!navigationResult.success && !navigationResult.partialSuccess) {
-      throw new Error('Failed to navigate to account creation form');
+      throw new Error('Failed to navigate through application flow');
     }
+
+    // Check if account creation is required
+    if (!navigationResult.createAccount) {
+      console.log('\n🎯 DIRECT TO APPLICATION DETECTED!');
+      console.log('  ✅ No account creation required');
+      console.log(`  📋 Page Type: ${navigationResult.pageType}`);
+      console.log(`  💭 Reasoning: ${navigationResult.reasoning}`);
+      console.log('  🚀 Skipping to Phase 1 (Form Filling)');
+
+      return {
+        success: true,
+        createAccount: false,
+        pageType: navigationResult.pageType,
+        reasoning: navigationResult.reasoning,
+        actions: navigationResult.actions || [],
+        usage: {
+          input_tokens: totalTokens.input,
+          output_tokens: totalTokens.output
+        },
+        skipToPhase1: true,
+        message: 'Direct to application form - no account creation needed'
+      };
+    }
+
+    console.log('\n🔐 ACCOUNT CREATION REQUIRED');
+    console.log(`  📋 Page Type: ${navigationResult.pageType}`);
+    console.log(`  💭 Reasoning: ${navigationResult.reasoning}`);
+    console.log('  🔄 Proceeding with account creation flow...');
 
     // Phase 0b: Extract form fields
     const formFields = await extractAccountCreationFields(stagehand);
@@ -1807,7 +1901,7 @@ async function agentAccountCreation(stagehand, userProfile) {
     // Phase 0d: Fill form and submit
     const fillResult = await fillAccountCreationForm(stagehand, formFields, answersResult.answers);
 
-    console.log('\n✅ Phase 0 Complete (Structured Account Creation):');
+    console.log('\n✅ Phase 0 Complete (Account Creation):');
     console.log(`  Navigation steps: ${navigationResult.actions ? navigationResult.actions.length : 'N/A'}`);
     console.log(`  Fields found: ${formFields.length}`);
     console.log(`  Fields filled: ${fillResult.filledCount}`);
@@ -1817,6 +1911,9 @@ async function agentAccountCreation(stagehand, userProfile) {
 
     return {
       success: fillResult.success,
+      createAccount: true,
+      pageType: navigationResult.pageType,
+      reasoning: navigationResult.reasoning,
       actions: navigationResult.actions || [],
       usage: {
         input_tokens: totalTokens.input,
@@ -1834,6 +1931,7 @@ async function agentAccountCreation(stagehand, userProfile) {
       success: false,
       error: error.message,
       partialSuccess: true,
+      createAccount: true,  // Default to true if error occurs
       usage: {
         input_tokens: totalTokens.input,
         output_tokens: totalTokens.output
@@ -2539,7 +2637,8 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
     console.log('  PHASE 0: Agent-Based Account Creation');
     console.log('═══════════════════════════════════════');
 
-    // Use agent to navigate and create account with UNIQUE EMAIL (workdayUserProfile)
+    // Use agent to navigate and detect if account creation is needed
+    // If account creation is needed, use UNIQUE EMAIL (workdayUserProfile)
     // Verification emails sent to unique email will appear in work email inbox via Gmail + aliasing
     const accountResult = await agentAccountCreation(stagehand, workdayUserProfile);
 
@@ -2554,12 +2653,21 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
       phase0Cost = 0.02; // Fallback estimate
     }
 
-    if (accountResult.success) {
+    // Check if we should skip to Phase 1 (no account creation needed)
+    if (accountResult.skipToPhase1) {
+      console.log('🎯 SKIPPING TO PHASE 1 - Direct to application form');
+      console.log(`   ${accountResult.message}`);
+      console.log(`   Page Type: ${accountResult.pageType}`);
+      console.log(`   Navigation steps: ${accountResult.actions ? accountResult.actions.length : 'N/A'}`);
+    } else if (accountResult.success) {
       console.log('✅ Account creation completed successfully');
       console.log(`📊 Agent steps: ${accountResult.actions ? accountResult.actions.length : 'N/A'}`);
+      if (accountResult.fieldsFound) {
+        console.log(`📋 Fields found: ${accountResult.fieldsFound}, filled: ${accountResult.fieldsFilled}`);
+      }
     } else if (accountResult.partialSuccess) {
       console.log('⚠️  Account creation had errors but continuing...');
-      console.log(`   Error: ${accountResult.intermediateError}`);
+      console.log(`   Error: ${accountResult.intermediateError || accountResult.error}`);
     } else {
       console.log('❌ Account creation failed, but attempting to continue with form fill...');
     }
@@ -2573,28 +2681,32 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
     console.log('✅ Job description extracted');
 
     
-    // Check if email verification is required
-    const needsVerification = await detectVerificationPage(stagehand);
-    
-    if (needsVerification) {
-      console.log('\n📧 Email verification detected, starting verification flow...');
-      const companyName = jobDescription ? jobDescription.company : 'the company';
+    // Check if email verification is required (only if account was created)
+    if (!accountResult.skipToPhase1) {
+      const needsVerification = await detectVerificationPage(stagehand);
       
-      // Use ORIGINAL userProfile so Gmail login uses WORK EMAIL (not unique email)
-      const verificationResult = await handleEmailVerification(
-        stagehand, 
-        userProfile, 
-        companyName
-      );
-      
-      if (verificationResult.success) {
-        console.log('✅ Email verification completed successfully');
-      } else {
-        console.log('⚠️  Email verification encountered issues, continuing anyway...');
+      if (needsVerification) {
+        console.log('\n📧 Email verification detected, starting verification flow...');
+        const companyName = jobDescription ? jobDescription.company : 'the company';
+        
+        // Use ORIGINAL userProfile so Gmail login uses WORK EMAIL (not unique email)
+        const verificationResult = await handleEmailVerification(
+          stagehand, 
+          userProfile, 
+          companyName
+        );
+        
+        if (verificationResult.success) {
+          console.log('✅ Email verification completed successfully');
+        } else {
+          console.log('⚠️  Email verification encountered issues, continuing anyway...');
+        }
+        
+        // Small wait after verification
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
-      
-      // Small wait after verification
-      await new Promise(resolve => setTimeout(resolve, 2000));
+    } else {
+      console.log('\n📧 Skipping email verification check - no account was created');
     }
     
     // Multi-page application loop
