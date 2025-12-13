@@ -1618,7 +1618,7 @@ USER PROFILE:
 - Location: ${userProfile.location}
 
 JOB CONTEXT:
-${jobDescription ? `Job Description: ${jobDescription.substring(0, 500)}...` : 'No job description available'}
+${jobDescription ? `Job Description: ${jobDescription.title} at ${jobDescription.company}. ${jobDescription.summary && typeof jobDescription.summary === 'string' ? jobDescription.summary.substring(0, 300) + "..." : ""}...` : 'No job description available'}
 
 CRITICAL: After clicking Continue/Next/Save and Continue, STOP immediately. Do not wait for the next page to load.`
   });
