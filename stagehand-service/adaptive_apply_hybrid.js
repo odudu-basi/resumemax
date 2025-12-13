@@ -1739,15 +1739,19 @@ function isWorkdayJobUrl(url) {
 }
 
 /**
- * Generate unique email for job applications using plus addressing
+ * Generate unique email for job applications - use original email for better compatibility
+ * Many job application forms have strict validation that rejects + or . modifications
  */
 function generateJobEmail(baseEmail) {
-  const [username, domain] = baseEmail.split('@');
+  // For now, return the original email to avoid validation pattern errors
+  // TODO: Consider implementing a more sophisticated approach if uniqueness is required
+  console.log(`📧 Using original email (avoiding validation pattern issues): ${baseEmail}`);
+  return baseEmail;
   
-  // Generate two random numbers (10-99)
-  const randomNumbers = Math.floor(Math.random() * 90) + 10;
-  
-  return `${username}+${randomNumbers}@${domain}`;
+  // Alternative approach if uniqueness is absolutely required:
+  // const [username, domain] = baseEmail.split('@');
+  // const randomNumbers = Math.floor(Math.random() * 90) + 10;
+  // return `${username}${randomNumbers}@${domain}`;
 }
 
 /**
