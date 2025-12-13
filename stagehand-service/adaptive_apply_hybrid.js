@@ -1548,19 +1548,42 @@ async function extractAccountCreationFields(stagehand) {
   console.log('\n📋 Phase 0b: Extracting account creation form fields...');
 
   try {
-    // Use enhanced observation to get form fields
-    const formActions = await observeFormFieldsEnhanced(stagehand);
+    // Use pure extract to get form fields
+    const fieldsSchema = z.object({
+      fields: z.array(z.object({
+        label: z.string().describe("The field label or question text"),
+        fieldType: z.enum(['text', 'email', 'password', 'checkbox', 'dropdown', 'textarea', 'phone', 'name']).describe("Type of input field"),
+        isRequired: z.boolean().describe("Whether this field is required"),
+        placeholder: z.string().optional().describe("Placeholder text if any"),
+        description: z.string().describe("Full description of what this field is for")
+      }))
+    });
+
+    const result = await stagehand.extract(
+      "Extract all form fields on this account creation page. Get the field labels, input types, whether they're required, and what they're for. Include email, password, name, consent checkboxes, and any other form fields.",
+      fieldsSchema
+    );
+
+    const formFields = result.fields.map(field => ({
+      description: field.label,
+      method: field.fieldType === 'checkbox' ? 'check' : 
+              field.fieldType === 'dropdown' ? 'selectOption' : 'type',
+      inputType: field.fieldType,
+      isRequired: field.isRequired,
+      placeholder: field.placeholder,
+      originalDescription: field.description
+    }));
     
-    console.log(`  ✅ Found ${formActions.length} form fields`);
+    console.log(`  ✅ Found ${formFields.length} form fields`);
     
-    if (formActions.length > 0) {
+    if (formFields.length > 0) {
       console.log('\n  📋 Sample fields:');
-      formActions.slice(0, 3).forEach((field, i) => {
-        console.log(`    ${i + 1}. "${field.description}" (${field.inputType || field.method})`);
+      formFields.slice(0, 3).forEach((field, i) => {
+        console.log(`    ${i + 1}. "${field.description}" (${field.inputType}${field.isRequired ? ', required' : ''})`);
       });
     }
 
-    return formActions;
+    return formFields;
   } catch (error) {
     console.error('  ❌ Field extraction failed:', error.message);
     return [];
