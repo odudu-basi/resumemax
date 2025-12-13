@@ -1472,8 +1472,11 @@ async function handleEmailVerification(stagehand, userProfile, companyName) {
     return { success: false, error: error.message };
   }
 }
-async function agentAccountCreation(stagehand, userProfile) {
-  console.log('\n🔐 Phase 0: Agent-based account creation...');
+/**
+ * Phase 0a: Navigate to account creation page
+ */
+async function agentNavigateToAccountCreation(stagehand, userProfile) {
+  console.log('\n🔐 Phase 0a: Navigate to account creation page...');
 
   const agent = stagehand.agent({
     cua: true,
@@ -1481,107 +1484,337 @@ async function agentAccountCreation(stagehand, userProfile) {
       modelName: "google/gemini-2.5-computer-use-preview-10-2025",
       apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
     },
-    systemPrompt: `You are an account creation specialist for Workday job applications.
+    systemPrompt: `You are a navigation specialist for Workday job applications.
 
-Your mission is to navigate through the initial steps and create a NEW account so the user can apply for the job.
+Your mission is to navigate to the account creation form and STOP there.
 
 CRITICAL RULES:
-1. You are creating a NEW ACCOUNT, not logging into an existing one
+1. Navigate to the account creation form but DO NOT fill it out
 2. Always choose "Create Account" or "Sign Up" over "Sign In" or "Login"
-3. Navigate step-by-step until you reach the actual application form page
-4. Stop once you see the application form fields (like name, phone, experience fields)
-5. Accept ALL consent/terms checkboxes you encounter`
+3. STOP as soon as you see the account creation form fields
+4. Do NOT fill any fields - just navigate to the form`
   });
 
-  const instruction = `Navigate to the job application form by creating a new account. Follow these steps IN ORDER:
+  const instruction = `Navigate to the account creation form. Follow these steps IN ORDER:
 
 STEP 1: CLICK APPLY BUTTON
 - Look for and click the "Apply", "Apply Now", or similar button on the job listing page
-- This button is usually prominently displayed on the job description page
 
 STEP 2: CHOOSE APPLICATION METHOD
-- If asked "How would you like to apply?", look for options like:
-  - "Apply Manually"
-  - "Apply with Resume"
-  - "Continue with Application"
-- Click "Apply Manually" or the non-LinkedIn/non-social option
+- If asked "How would you like to apply?", click "Apply Manually" or the non-LinkedIn option
 - NEVER choose "Apply with LinkedIn" or "Apply with Indeed"
 
-STEP 3: CREATE NEW ACCOUNT
-You will see a signup/account creation form. Fill it with these details:
-
-EMAIL: ${userProfile.workEmail}
-PASSWORD: ${userProfile.workPassword}
-VERIFY PASSWORD: ${userProfile.workPassword}
-
-IMPORTANT FOR ACCOUNT CREATION:
+STEP 3: NAVIGATE TO CREATE ACCOUNT
 - If you see BOTH "Sign In" and "Create Account" tabs/buttons, click "Create Account" or "Sign Up"
-- Fill in the email field with: ${userProfile.workEmail}
-- Fill in the password field with: ${userProfile.workPassword}
-- If there's a "Verify Password" or "Confirm Password" field, also enter: ${userProfile.workPassword}
-- If there's a "First Name" field, enter: ${userProfile.fullName.split(' ')[0]}
-- If there's a "Last Name" field, enter: ${userProfile.fullName.split(' ').slice(1).join(' ')}
+- Navigate until you see the account creation form with fields like email, password, etc.
 
-STEP 4: ACCEPT ALL CONSENTS
-- Check ALL checkboxes for terms of service, privacy policy, consent forms, etc.
-- Look for phrases like "I agree to", "I accept", "Terms and Conditions"
-- Check every single consent box you find
-
-STEP 5: SUBMIT ACCOUNT CREATION
-- Click the "Create Account", "Sign Up", "Register", or "Continue" button
-- Wait 2-3 seconds for the page to change
-- Observe the new page content
-
-STEP 6: VERIFY PAGE CHANGED AND STOP
-After clicking "Create Account", check if the page has changed:
-- The page content is different from before (new headings, different layout)
-- You see a new page (application form, dashboard, next step, etc.)
-- The URL has changed
-- Loading indicators have disappeared
+STEP 4: STOP AT FORM
+- STOP IMMEDIATELY when you see the account creation form
+- Do NOT fill any fields
+- Do NOT click any buttons on the form
+- Your job is complete once the form is visible
 
 WHEN TO STOP:
-✅ STOP IMMEDIATELY when you confirm the page has changed after clicking "Create Account"
-✅ You do NOT need to see the application form - just confirm the page changed
-✅ Even if you land on an intermediate page, STOP - Phase 1 will handle the rest
-
-TROUBLESHOOTING:
-- If you see "Email already exists" error: Try "Sign In" instead with same credentials, then wait for page change
-- If stuck on same page after clicking: Look for error messages or try clicking the button again
-
-YOUR GOAL: Create account → Click "Create Account" → Wait for page to change → STOP and hand off to Phase 1.`;
+✅ STOP when you see account creation form fields (email, password, name fields)
+✅ Do NOT fill the form - Phase 0b will handle that
+✅ Just ensure the form is visible and ready to be filled`;
 
   try {
     const result = await agent.execute({
       instruction,
-      maxSteps: 20,  // Enough steps for navigation and account creation
+      maxSteps: 15,  // Enough steps for navigation only
       highlightCursor: false
     });
 
-    console.log('\n✅ Phase 0 Complete (Account Creation):');
+    console.log('\n✅ Phase 0a Complete (Navigation):');
     console.log(`  Steps taken: ${result.actions ? result.actions.length : 'N/A'}`);
     console.log(`  Success: ${result.success}`);
 
-    if (result.usage) {
-      const inputTokens = result.usage.input_tokens || 0;
-      const outputTokens = result.usage.output_tokens || 0;
-      const inputCost = (inputTokens / 1000000) * 1.25;  // Gemini pricing (same as Phase 2)
-      const outputCost = (outputTokens / 1000000) * 10;  // Gemini pricing (same as Phase 2)
-      const totalCost = (inputCost + outputCost).toFixed(4);
-      console.log(`  💰 Phase 0 cost: $${totalCost}`);
-      console.log(`     Input tokens: ${inputTokens.toLocaleString()}`);
-      console.log(`     Output tokens: ${outputTokens.toLocaleString()}`);
-    }
-
     return result;
   } catch (error) {
-    console.error('  ❌ Phase 0 error:', error.message);
+    console.error('  ❌ Phase 0a error:', error.message);
+    return {
+      success: false,
+      error: error.message,
+      partialSuccess: true
+    };
+  }
+}
 
-    // Return partial success to allow continuation
+/**
+ * Phase 0b: Extract account creation form fields
+ */
+async function extractAccountCreationFields(stagehand) {
+  console.log('\n📋 Phase 0b: Extracting account creation form fields...');
+
+  try {
+    // Use enhanced observation to get form fields
+    const formActions = await observeFormFieldsEnhanced(stagehand);
+    
+    console.log(`  ✅ Found ${formActions.length} form fields`);
+    
+    if (formActions.length > 0) {
+      console.log('\n  📋 Sample fields:');
+      formActions.slice(0, 3).forEach((field, i) => {
+        console.log(`    ${i + 1}. "${field.description}" (${field.inputType || field.method})`);
+      });
+    }
+
+    return formActions;
+  } catch (error) {
+    console.error('  ❌ Field extraction failed:', error.message);
+    return [];
+  }
+}
+
+/**
+ * Phase 0c: Get account creation answers from ChatGPT
+ */
+async function getAccountCreationAnswers(formFields, userProfile) {
+  console.log('\n🤖 Phase 0c: Getting account creation answers from ChatGPT...');
+
+  const prompt = `You are filling out an account creation form for a job application.
+
+USER INFORMATION:
+- Email: ${userProfile.workEmail}
+- Password: ${userProfile.workPassword}
+- Full Name: ${userProfile.fullName}
+- First Name: ${userProfile.fullName.split(' ')[0] || ''}
+- Last Name: ${userProfile.fullName.split(' ').slice(1).join(' ') || ''}
+- Phone: ${userProfile.phone || ''}
+- Location: ${userProfile.location || ''}
+
+FORM FIELDS TO FILL:
+${formFields.map((field, i) => `${i + 1}. Question: "${field.description}"
+   Input Type: ${field.inputType || field.method}
+   Required: ${field.isRequired ? 'Yes' : 'Unknown'}`).join('\n\n')}
+
+INSTRUCTIONS:
+Fill out this account creation form with the user information provided above.
+
+- For EMAIL fields: Use "${userProfile.workEmail}"
+- For PASSWORD fields: Use "${userProfile.workPassword}"
+- For CONFIRM/VERIFY PASSWORD fields: Use "${userProfile.workPassword}"
+- For FIRST NAME fields: Use "${userProfile.fullName.split(' ')[0] || ''}"
+- For LAST NAME fields: Use "${userProfile.fullName.split(' ').slice(1).join(' ') || ''}"
+- For PHONE fields: Use "${userProfile.phone || ''}"
+- For ADDRESS/LOCATION fields: Use "${userProfile.location || ''}"
+- For FULL NAME fields: Use "${userProfile.fullName}"
+
+- For TERMS/CONDITIONS/CONSENT checkboxes: Always answer "true" (accept everything)
+- For PRIVACY POLICY checkboxes: Always answer "true" (accept everything)
+- For MARKETING/NEWSLETTER checkboxes: Answer "true" (opt in)
+- For any "I agree" or "I accept" checkboxes: Always answer "true"
+
+- For DROPDOWN/SELECT fields: Choose the most appropriate option based on the field description
+- For any other fields: Provide the most relevant answer from the user information above
+
+- If you don't have specific information for a field, return "SKIP"
+
+IMPORTANT: 
+1. Accept ALL terms, conditions, privacy policies, and consents
+2. Return JSON where keys are EXACT field descriptions
+3. Use "true" for checkboxes that should be checked, "false" for unchecked
+
+Example format: { "Email Address": "${userProfile.workEmail}", "Password": "${userProfile.workPassword}", "I agree to Terms and Conditions": "true" }`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: 'You are a helpful assistant that fills out account creation forms accurately.' },
+        { role: 'user', content: prompt }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.3
+    });
+
+    const answers = JSON.parse(response.choices[0].message.content);
+    const inputTokens = response.usage.prompt_tokens;
+    const outputTokens = response.usage.completion_tokens;
+
+    console.log(`  ✅ Got answers for ${Object.keys(answers).length} fields`);
+    console.log(`  💰 ChatGPT tokens - Input: ${inputTokens}, Output: ${outputTokens}`);
+
+    return {
+      answers: answers,
+      inputTokens: inputTokens,
+      outputTokens: outputTokens
+    };
+
+  } catch (error) {
+    console.error(`  ❌ ChatGPT error:`, error.message);
+    return {
+      answers: {},
+      inputTokens: 0,
+      outputTokens: 0
+    };
+  }
+}
+
+/**
+ * Phase 0d: Fill account creation form and submit
+ */
+async function fillAccountCreationForm(stagehand, formFields, answers) {
+  console.log('\n✍️ Phase 0d: Filling account creation form...');
+
+  let filledCount = 0;
+  let skippedCount = 0;
+  let errorCount = 0;
+
+  for (const field of formFields) {
+    const description = field.description || '';
+    const answer = answers[description];
+
+    if (!answer || answer === 'SKIP') {
+      console.log(`  ⏭️ Skipping: ${description.substring(0, 50)}...`);
+      skippedCount++;
+      continue;
+    }
+
+    try {
+      const descLower = description.toLowerCase();
+
+      // Handle checkboxes
+      if (descLower.includes('checkbox') || descLower.includes('check box') || 
+          field.method === 'check' || field.inputType === 'checkbox') {
+        if (answer.toLowerCase() === 'true' || answer.toLowerCase() === 'yes') {
+          await stagehand.act(`check the ${description}`);
+          filledCount++;
+          console.log(`  ✅ Checked: ${description.substring(0, 40)}...`);
+        } else {
+          skippedCount++;
+        }
+        continue;
+      }
+
+      // Handle dropdowns/selects
+      if (descLower.includes('dropdown') || descLower.includes('select') || 
+          field.method === 'selectOption' || field.inputType === 'dropdown') {
+        await stagehand.act(`select "${answer}" from the ${description}`);
+        filledCount++;
+        console.log(`  ✅ Selected "${answer}" in: ${description.substring(0, 40)}...`);
+        continue;
+      }
+
+      // Handle text inputs (default)
+      await stagehand.act(`enter "${answer}" into the ${description}`, {});
+      filledCount++;
+      console.log(`  ✅ Filled: ${description.substring(0, 40)}... = "${String(answer).substring(0, 30)}..."`);
+
+    } catch (fillError) {
+      console.error(`  ❌ Error filling "${description}": ${fillError.message}`);
+      errorCount++;
+    }
+
+    // Small delay between fields
+    await new Promise(resolve => setTimeout(resolve, 300));
+  }
+
+  console.log(`\n📊 Form filling complete: ✅ ${filledCount} filled, ⏭️ ${skippedCount} skipped, ❌ ${errorCount} errors`);
+
+  // Now click the create account button
+  console.log('\n🔘 Clicking Create Account button...');
+  try {
+    await stagehand.act("click the Create Account button or Sign Up button or Register button");
+    console.log('  ✅ Create Account button clicked');
+    
+    // Wait for page to process
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    
+    return {
+      success: true,
+      filledCount: filledCount,
+      skippedCount: skippedCount,
+      errorCount: errorCount
+    };
+  } catch (submitError) {
+    console.error('  ❌ Error clicking Create Account button:', submitError.message);
+    return {
+      success: false,
+      filledCount: filledCount,
+      skippedCount: skippedCount,
+      errorCount: errorCount + 1,
+      error: submitError.message
+    };
+  }
+}
+
+/**
+ * Combined Phase 0: Structured account creation
+ */
+async function agentAccountCreation(stagehand, userProfile) {
+  console.log('\n🔐 Phase 0: Structured account creation...');
+  
+  let totalCost = 0;
+  let totalTokens = { input: 0, output: 0 };
+
+  try {
+    // Phase 0a: Navigate to account creation form
+    const navigationResult = await agentNavigateToAccountCreation(stagehand, userProfile);
+    
+    if (navigationResult.usage) {
+      const inputCost = (navigationResult.usage.input_tokens / 1000000) * 1.25;
+      const outputCost = (navigationResult.usage.output_tokens / 1000000) * 10;
+      totalCost += inputCost + outputCost;
+      totalTokens.input += navigationResult.usage.input_tokens;
+      totalTokens.output += navigationResult.usage.output_tokens;
+    }
+
+    if (!navigationResult.success && !navigationResult.partialSuccess) {
+      throw new Error('Failed to navigate to account creation form');
+    }
+
+    // Phase 0b: Extract form fields
+    const formFields = await extractAccountCreationFields(stagehand);
+    
+    if (formFields.length === 0) {
+      throw new Error('No form fields found on account creation page');
+    }
+
+    // Phase 0c: Get answers from ChatGPT
+    const answersResult = await getAccountCreationAnswers(formFields, userProfile);
+    
+    const chatGPTInputCost = (answersResult.inputTokens / 1_000_000) * 0.150;
+    const chatGPTOutputCost = (answersResult.outputTokens / 1_000_000) * 0.600;
+    totalCost += chatGPTInputCost + chatGPTOutputCost;
+    totalTokens.input += answersResult.inputTokens;
+    totalTokens.output += answersResult.outputTokens;
+
+    // Phase 0d: Fill form and submit
+    const fillResult = await fillAccountCreationForm(stagehand, formFields, answersResult.answers);
+
+    console.log('\n✅ Phase 0 Complete (Structured Account Creation):');
+    console.log(`  Navigation steps: ${navigationResult.actions ? navigationResult.actions.length : 'N/A'}`);
+    console.log(`  Fields found: ${formFields.length}`);
+    console.log(`  Fields filled: ${fillResult.filledCount}`);
+    console.log(`  💰 Phase 0 total cost: $${totalCost.toFixed(4)}`);
+    console.log(`     Input tokens: ${totalTokens.input.toLocaleString()}`);
+    console.log(`     Output tokens: ${totalTokens.output.toLocaleString()}`);
+
+    return {
+      success: fillResult.success,
+      actions: navigationResult.actions || [],
+      usage: {
+        input_tokens: totalTokens.input,
+        output_tokens: totalTokens.output
+      },
+      fieldsFound: formFields.length,
+      fieldsFilled: fillResult.filledCount,
+      fieldsSkipped: fillResult.skippedCount,
+      errors: fillResult.errorCount
+    };
+
+  } catch (error) {
+    console.error('  ❌ Phase 0 error:', error.message);
     return {
       success: false,
       error: error.message,
       partialSuccess: true,
-      intermediateError: error.message
+      usage: {
+        input_tokens: totalTokens.input,
+        output_tokens: totalTokens.output
+      }
     };
   }
 }
