@@ -361,9 +361,15 @@ CRITICAL RULES:
 1. Look at the INITIAL state of the Work Experience section
 2. Follow the appropriate scenario based on what you see FIRST
 3. Create each entry form AND fill its dates before moving to the next
-4. Format all dates as MM/YYYY (e.g., "2023-05-15" becomes "05/2023")
-5. Skip "To" date if the person currently works there
-6. STOP once all entry forms are created with dates filled`
+4. For date fields, type MONTH first, then type YEAR
+5. Do NOT use date pickers or slashes - just type the numbers directly
+6. Skip "To" date if the person currently works there
+7. STOP once all entry forms are created with dates filled
+
+DATE FILLING TECHNIQUE:
+- From Date: Type month (e.g., "05"), type year (e.g., "2023")
+- To Date: Type month (e.g., "08"), type year (e.g., "2024")
+- NO slashes, NO date pickers - just direct typing into month and year fields`
   });
 
   const clicksNeeded = totalEntriesNeeded - 1; // Always need 1 less "Add Another" click than total entries
@@ -374,9 +380,29 @@ CRITICAL RULES:
     const fromDate = exp.startDate || exp.start_date || 'N/A';
     const toDate = exp.current ? 'Skip - currently working' : (exp.endDate || exp.end_date || 'N/A');
     
+    // Parse dates to extract month and year
+    const parseDate = (dateStr) => {
+      if (!dateStr || dateStr === 'N/A') return { month: 'N/A', year: 'N/A' };
+      
+      // Handle different date formats
+      if (dateStr.includes('-')) {
+        // Format: "2023-05-15" or "2023-05"
+        const parts = dateStr.split('-');
+        return { month: parts[1] || 'N/A', year: parts[0] || 'N/A' };
+      } else if (dateStr.includes('/')) {
+        // Format: "05/2023"
+        const parts = dateStr.split('/');
+        return { month: parts[0] || 'N/A', year: parts[1] || 'N/A' };
+      }
+      return { month: 'N/A', year: 'N/A' };
+    };
+
+    const fromParsed = parseDate(fromDate);
+    const toParsed = toDate.includes('Skip') ? { month: 'Skip', year: 'Skip' } : parseDate(toDate);
+    
     return `ENTRY ${entryNum}:
-- From Date: ${fromDate} (format as MM/YYYY, e.g., "2023-05-15" → "05/2023")
-- To Date: ${toDate}${toDate.includes('Skip') ? '' : ' (format as MM/YYYY)'}`;
+- From Date: Month="${fromParsed.month}", Year="${fromParsed.year}" (type month first, then year)
+- To Date: ${toDate.includes('Skip') ? 'Skip - currently working' : `Month="${toParsed.month}", Year="${toParsed.year}" (type month first, then year)`}`;
   }).join('\n\n');
 
   const instruction = `Create exactly ${totalEntriesNeeded} work experience entry forms and fill their dates.
@@ -401,10 +427,17 @@ ${dateInstructions}
 CRITICAL INSTRUCTIONS:
 - Base your decision on what you see FIRST, before clicking anything
 - Wait 1-2 seconds between each click for the page to update
-- Fill dates immediately after each entry form appears
-- Format dates as MM/YYYY (convert "2023-05-15" to "05/2023")
+- Fill dates immediately after each entry form appears using the technique below
 - Skip "To" date if person currently works there
 - STOP immediately once you have ${totalEntriesNeeded} entry forms with dates filled
+
+DATE FILLING TECHNIQUE:
+1. Find the "From" date field (usually has month and year inputs)
+2. Click or focus on the MONTH field first
+3. Type the month number (e.g., "05" for May)
+4. Type the year (e.g., "2023")
+5. Repeat for "To" date field if not currently working
+6. Do NOT use date pickers, calendars, or slashes - just type numbers directly
 
 Mathematical precision: Need exactly ${clicksNeeded} "Add Another" clicks to reach ${totalEntriesNeeded} total forms.`;
 
