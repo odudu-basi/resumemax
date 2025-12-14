@@ -365,7 +365,7 @@ Your goal: Ensure there are exactly ${totalEntriesNeeded} work experience entry 
   try {
     const result = await agent.execute({
       instruction,
-      maxSteps: Math.max(5, totalEntriesNeeded + 2), // Dynamic step limit based on entries needed
+      maxSteps: 20, // Standard step limit for all agents
       highlightCursor: false
     });
 
@@ -452,12 +452,13 @@ async function handleWorkExperienceSection(stagehand, workExperiences, jobDescri
         
         // Convert extracted fields to the format expected by getAnswersForWorkExp
         const entryFields = extractResult.fields.map(field => ({
-          description: field.label,
+          label: field.label,
+          description: field.description,
           method: field.fieldType === 'checkbox' ? 'check' : 
                   field.fieldType === 'dropdown' ? 'selectOption' : 'type',
+          fieldType: field.fieldType,
           inputType: field.fieldType,
-          isRequired: field.isRequired,
-          originalDescription: field.description
+          isRequired: field.isRequired
         }));
         
         if (entryFields.length === 0) {
@@ -477,7 +478,7 @@ async function handleWorkExperienceSection(stagehand, workExperiences, jobDescri
 
         // Step 3c: Fill the fields
         console.log(`\n✍️  Filling fields for Work Experience ${sectionNumber} section...`);
-        const fillResult = await fillWorkExperienceFields(stagehand, entryFields, answersResult.answers);
+        const fillResult = await fillWorkExperienceFields(stagehand, entryFields, answersResult.answers, sectionNumber);
         
         console.log(`   ✅ ${fillResult.filledCount} filled, ⏭️  ${fillResult.skippedCount} skipped, ❌ ${fillResult.errorCount} errors`);
         
@@ -632,8 +633,9 @@ Summary: ${jobDescription.summary}
 ` : '';
 
   const fieldDescriptions = fields.map((field, i) =>
-    `${i + 1}. Question: "${field.description}"
-   Filling Method: ${field.method}`
+    `${i + 1}. Field: "${field.label}"
+   Type: ${field.fieldType || field.method}
+   Description: ${field.description || 'N/A'}`
   ).join('\n\n');
 
   const prompt = `You are filling out a work experience entry for a job application.
@@ -675,9 +677,9 @@ CRITICAL RULES:
 4. Copy field descriptions EXACTLY as shown
 5. FORMAT ALL DATES as MM/YYYY (e.g., "01/2022", "12/2023") - convert from MM/DD/YYYY if needed
 
-IMPORTANT: Return JSON where the keys are the EXACT field descriptions (copy them exactly, including all punctuation and wording).
+IMPORTANT: Return JSON where the keys are the EXACT field labels (copy them exactly, including all punctuation and wording).
 
-Example format: { "Input field for job title.": "${entryData.position || entryData.title || 'Software Engineer'}", "Input field for company name.": "${entryData.company || 'Google Inc.'}" }`;
+Example format: { "Job Title": "${entryData.position || entryData.title || 'Software Engineer'}", "Company": "${entryData.company || 'Google Inc.'}", "From": "01/2022", "To": "12/2023" }`;
 
   try {
     const response = await openai.chat.completions.create({
@@ -715,32 +717,53 @@ Example format: { "Input field for job title.": "${entryData.position || entryDa
 /**
  * Fill work experience fields using act() commands
  */
-async function fillWorkExperienceFields(stagehand, fields, answers) {
-  console.log(`   ✍️  Filling ${fields.length} fields...`);
+async function fillWorkExperienceFields(stagehand, fields, answers, sectionNumber) {
+  console.log(`   ✍️  Filling ${fields.length} fields for Work Experience ${sectionNumber}...`);
 
   let filledCount = 0;
   let skippedCount = 0;
   let errorCount = 0;
 
   for (const field of fields) {
-    const description = field.description || '';
-    const answer = answers[description];
+    const fieldLabel = field.label || '';
+    const answer = answers[fieldLabel];
 
     if (!answer || answer === 'SKIP') {
-      console.log(`      ⏭️  Skipping: ${description.substring(0, 50)}...`);
+      console.log(`      ⏭️  Skipping: ${fieldLabel.substring(0, 50)}...`);
       skippedCount++;
       continue;
     }
 
     try {
-      const descLower = description.toLowerCase();
+      const labelLower = fieldLabel.toLowerCase();
+      const fieldType = field.fieldType || field.method;
+
+      // Handle date group fields (From/To dates)
+      if (fieldType === 'group') {
+        if (labelLower.includes('from')) {
+          await stagehand.act(`set the from date to ${answer} under work experience ${sectionNumber}`);
+          filledCount++;
+          console.log(`      ✅ Set From Date: ${answer} (Work Exp ${sectionNumber})`);
+        } else if (labelLower.includes('to')) {
+          await stagehand.act(`set the to date to ${answer} under work experience ${sectionNumber}`);
+          filledCount++;
+          console.log(`      ✅ Set To Date: ${answer} (Work Exp ${sectionNumber})`);
+        } else {
+          // Generic group handling
+          await stagehand.act(`enter "${answer}" into the ${fieldLabel} field under work experience ${sectionNumber}`);
+          filledCount++;
+          console.log(`      ✅ Filled Group: ${fieldLabel.substring(0, 40)}... = "${String(answer).substring(0, 30)}..." (Work Exp ${sectionNumber})`);
+        }
+        continue;
+      }
 
       // Handle checkboxes
-      if (descLower.includes('checkbox') || descLower.includes('check box') || field.method === 'check') {
+      if (labelLower.includes('checkbox') || labelLower.includes('check box') || 
+          fieldType === 'checkbox' || field.method === 'check') {
         if (answer.toLowerCase() === 'true' || answer.toLowerCase() === 'yes') {
-          await stagehand.act(`check the ${description}`);
+          await stagehand.act(`check the ${fieldLabel} under work experience ${sectionNumber}`);
           filledCount++;
-          console.log(`      ✅ Checked: ${description.substring(0, 40)}...`);
+          console.log(`      ✅ Checked: ${fieldLabel.substring(0, 40)}... (Work Exp ${sectionNumber})`);
         } else {
           skippedCount++;
         }
@@ -748,20 +771,21 @@ async function fillWorkExperienceFields(stagehand, fields, answers) {
       }
 
       // Handle dropdowns/selects
-      if (descLower.includes('dropdown') || descLower.includes('select') || field.method === 'selectOption') {
-        await stagehand.act(`select "${answer}" from the ${description}`);
+      if (labelLower.includes('dropdown') || labelLower.includes('select') || 
+          fieldType === 'dropdown' || field.method === 'selectOption') {
+        await stagehand.act(`select "${answer}" from the ${fieldLabel} field under work experience ${sectionNumber}`);
         filledCount++;
-        console.log(`      ✅ Selected "${answer}" in: ${description.substring(0, 40)}...`);
+        console.log(`      ✅ Selected "${answer}" in: ${fieldLabel.substring(0, 40)}... (Work Exp ${sectionNumber})`);
         continue;
       }
 
       // Handle text inputs (default)
-      await stagehand.act(`enter "${answer}" into the ${description}`, {});
+      await stagehand.act(`enter "${answer}" into the ${fieldLabel} field under work experience ${sectionNumber}`, {});
       filledCount++;
-      console.log(`      ✅ Filled: ${description.substring(0, 40)}... = "${String(answer).substring(0, 30)}..."`);
+      console.log(`      ✅ Filled: ${fieldLabel.substring(0, 40)}... = "${String(answer).substring(0, 30)}..." (Work Exp ${sectionNumber})`);
 
     } catch (fillError) {
-      console.error(`      ❌ Error filling "${description}": ${fillError.message}`);
+      console.error(`      ❌ Error filling "${fieldLabel}" in Work Exp ${sectionNumber}: ${fillError.message}`);
       errorCount++;
     }
 
@@ -1354,7 +1378,7 @@ IMPORTANT:
 
     const result = await agent.execute({
       instruction,
-      maxSteps: 25,
+      maxSteps: 20,
       highlightCursor: false
     });
 
@@ -1493,7 +1517,7 @@ async function handleEmailVerification(stagehand, userProfile, companyName) {
     
     const agentResult = await agent.execute(
       `Go to inbox, find the most recent email from ${companyName}, open it, and click the verification link`,
-      { maxSteps: 15 }
+      { maxSteps: 20 }
     );
     
     console.log('✅ Agent completed email verification');
@@ -1619,7 +1643,7 @@ YOUR GOAL: Navigate, detect the page type, and provide clear assessment.`;
   try {
     const result = await agent.execute({
       instruction,
-      maxSteps: 20,  // Enough steps for navigation and detection
+      maxSteps: 20,  // Standard step limit for all agents
       highlightCursor: false
     });
 
@@ -1970,7 +1994,7 @@ Your final message must clearly state the scenario and verification status.`;
   try {
     const result = await agent.execute({
       instruction,
-      maxSteps: 10,  // Limited steps: review → fill missing → submit → stop
+      maxSteps: 20,  // Standard step limit for all agents
       highlightCursor: false
     });
 
@@ -2215,7 +2239,7 @@ Once all required fields have some value, click the Continue, Next, or Save and 
   try {
     const result = await agent.execute({
       instruction,
-      maxSteps: 15,  // Enough steps for review + fill + click
+      maxSteps: 20,  // Standard step limit for all agents
       highlightCursor: false
     });
 
@@ -2317,7 +2341,7 @@ Your job ends when you click the Continue/Next button.`;
   try {
     const result = await agent.execute({
       instruction,
-      maxSteps: 10,  // Limited steps: find errors → fill → click continue → stop
+      maxSteps: 20,  // Standard step limit for all agents
       highlightCursor: false
     });
 
