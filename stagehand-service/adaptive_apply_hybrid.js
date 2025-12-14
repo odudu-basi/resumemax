@@ -454,96 +454,119 @@ Mathematical precision: Need exactly ${clicksNeeded} "Add Another" clicks to rea
 }
 
 /**
- * Fill work experience dates using two-step act() approach
+ * Agent fills work experience dates using intelligent date control handling
  */
-async function fillWorkExperienceDates(stagehand, workExperiences) {
-  console.log(`\n📅 Filling dates for ${workExperiences.length} work experience entries...`);
-  
-  let filledCount = 0;
-  let errorCount = 0;
+async function agentFillWorkExperienceDates(stagehand, workExperiences) {
+  console.log(`\n📅 Agent filling dates for ${workExperiences.length} work experience entries...`);
 
-  for (let i = 0; i < workExperiences.length; i++) {
-    const sectionNumber = i + 1;
-    const entryData = workExperiences[i];
+  const agent = stagehand.agent({
+    cua: true,
+    model: {
+      modelName: "google/gemini-2.5-computer-use-preview-10-2025",
+      apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
+    },
+    systemPrompt: `You are a date filling specialist for work experience forms.
+
+Your mission is to fill From and To dates for all work experience entries using the appropriate date controls.
+
+CRITICAL RULES:
+1. Handle different types of date controls: text inputs, dropdowns, spinbuttons, date pickers
+2. For each work experience entry, fill both From and To dates (if applicable)
+3. Use the exact month and year provided in the instructions
+4. If currently working, skip the To date for that entry
+5. STOP once all dates are filled for all entries
+
+DATE CONTROL TYPES:
+- Text inputs: Type the date directly (MM/YYYY format)
+- Month/Year dropdowns: Select from dropdown options
+- Spinbuttons: Click to increment/decrement or type directly
+- Date pickers: Navigate to correct month/year and select
+- Segmented fields: Fill month field first, then year field
+
+INTERACTION STRATEGY:
+- Try typing the date first (most common)
+- If typing fails, look for dropdown selectors
+- If dropdowns, select the correct month and year options
+- If spinbuttons, click or type to set correct values
+- Be flexible and adapt to the specific UI controls present`
+  });
+
+  // Build date instructions for each work experience
+  const dateInstructions = workExperiences.map((exp, index) => {
+    const entryNum = index + 1;
+    const fromDate = exp.startDate || exp.start_date || '';
+    const toDate = exp.current ? 'Skip - currently working' : (exp.endDate || exp.end_date || '');
     
-    console.log(`\n--- Filling dates for Work Experience ${sectionNumber} ---`);
-    
-    try {
-      // Parse and format dates
-      const fromDate = entryData.startDate || entryData.start_date || '';
-      const toDate = entryData.current ? '' : (entryData.endDate || entryData.end_date || '');
+    // Parse date to get month and year
+    const parseDate = (dateStr) => {
+      if (!dateStr) return { month: '', year: '' };
       
-      // Parse date to get month and year
-      const parseDate = (dateStr) => {
-        if (!dateStr) return { month: '', year: '' };
-        
-        // Handle different date formats
-        if (dateStr.includes('-')) {
-          // Format: "2023-05-15" or "2023-05"
-          const parts = dateStr.split('-');
-          return { month: parts[1] || '', year: parts[0] || '' };
-        } else if (dateStr.includes('/')) {
-          // Format: "05/2023"
-          const parts = dateStr.split('/');
-          return { month: parts[0] || '', year: parts[1] || '' };
-        }
-        return { month: '', year: '' };
-      };
-
-      const fromParsed = parseDate(fromDate);
-      const toParsed = parseDate(toDate);
-
-      // Fill From Date (always required)
-      if (fromParsed.month && fromParsed.year) {
-        console.log(`  📅 Filling From Date: ${fromParsed.month}/${fromParsed.year}`);
-        
-        // Step 1: Enter month
-        await stagehand.act(`enter "${fromParsed.month}" into the from month field under work experience ${sectionNumber}`);
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        // Step 2: Enter year  
-        await stagehand.act(`enter "${fromParsed.year}" into the from year field under work experience ${sectionNumber}`);
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        console.log(`    ✅ From Date filled: ${fromParsed.month}/${fromParsed.year}`);
-        filledCount++;
-      } else {
-        console.log(`    ⚠️ Skipping From Date - invalid format: ${fromDate}`);
+      if (dateStr.includes('-')) {
+        const parts = dateStr.split('-');
+        return { month: parts[1] || '', year: parts[0] || '' };
+      } else if (dateStr.includes('/')) {
+        const parts = dateStr.split('/');
+        return { month: parts[0] || '', year: parts[1] || '' };
       }
+      return { month: '', year: '' };
+    };
 
-      // Fill To Date (only if not currently working)
-      if (!entryData.current && toParsed.month && toParsed.year) {
-        console.log(`  📅 Filling To Date: ${toParsed.month}/${toParsed.year}`);
-        
-        // Step 1: Enter month
-        await stagehand.act(`enter "${toParsed.month}" into the to month field under work experience ${sectionNumber}`);
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        // Step 2: Enter year
-        await stagehand.act(`enter "${toParsed.year}" into the to year field under work experience ${sectionNumber}`);
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        console.log(`    ✅ To Date filled: ${toParsed.month}/${toParsed.year}`);
-        filledCount++;
-      } else if (entryData.current) {
-        console.log(`    ⏭️ Skipping To Date - currently working here`);
-      } else {
-        console.log(`    ⚠️ Skipping To Date - invalid format: ${toDate}`);
-      }
+    const fromParsed = parseDate(fromDate);
+    const toParsed = toDate.includes('Skip') ? { month: 'Skip', year: 'Skip' } : parseDate(toDate);
+    
+    return `WORK EXPERIENCE ${entryNum}:
+- From Date: Month="${fromParsed.month}", Year="${fromParsed.year}"
+- To Date: ${toDate.includes('Skip') ? 'Skip - currently working' : `Month="${toParsed.month}", Year="${toParsed.year}"`}`;
+  }).join('\n\n');
 
-    } catch (error) {
-      console.error(`    ❌ Error filling dates for Work Experience ${sectionNumber}:`, error.message);
-      errorCount++;
+  const instruction = `Fill the From and To dates for all ${workExperiences.length} work experience entries.
+
+DATE INFORMATION:
+${dateInstructions}
+
+INSTRUCTIONS:
+1. Go through each work experience entry in order (1, 2, 3, etc.)
+2. For each entry, fill the From date using the month and year provided
+3. Fill the To date only if not marked as "Skip - currently working"
+4. Adapt to whatever date control type is present (text, dropdown, spinbutton, etc.)
+5. If a date control doesn't accept typing, try selecting from dropdowns or using spinbuttons
+6. Move systematically through all entries until all dates are filled
+
+STOP once you have filled all the dates for all work experience entries.`;
+
+  try {
+    const result = await agent.execute({
+      instruction,
+      maxSteps: 30, // More steps needed for date filling across multiple entries
+      highlightCursor: false
+    });
+
+    console.log(`\n✅ Agent date filling complete:`);
+    console.log(`  Steps taken: ${result.actions ? result.actions.length : 'N/A'}`);
+    console.log(`  Success: ${result.success}`);
+    
+    // Add cost tracking
+    if (result.usage) {
+      const inputCost = (result.usage.input_tokens / 1000000) * 1.25;
+      const outputCost = (result.usage.output_tokens / 1000000) * 10;
+      const totalCost = (inputCost + outputCost).toFixed(4);
+      console.log(`  💰 Agent date filling cost: $${totalCost}`);
+      console.log(`     Input tokens: ${result.usage.input_tokens.toLocaleString()}`);
+      console.log(`     Output tokens: ${result.usage.output_tokens.toLocaleString()}`);
     }
-  }
 
-  console.log(`\n📊 Date filling complete: ✅ ${filledCount} dates filled, ❌ ${errorCount} errors`);
-  
-  return {
-    success: filledCount > 0,
-    filledCount: filledCount,
-    errorCount: errorCount
-  };
+    return {
+      success: result.success,
+      usage: result.usage || { input_tokens: 0, output_tokens: 0 }
+    };
+  } catch (error) {
+    console.error(`  ❌ Agent date filling error:`, error.message);
+    return {
+      success: false,
+      error: error.message,
+      usage: { input_tokens: 0, output_tokens: 0 }
+    };
+  }
 }
 
 /**
@@ -564,14 +587,22 @@ Your mission is to create the exact number of education entry forms needed by cl
 
 CRITICAL RULES:
 1. Look at the INITIAL state of the Education section
-2. Follow the appropriate scenario based on what you see FIRST
-3. Create exactly the requested number of entry forms
-4. STOP once all entry forms are created`
+2. The "Add" and "Add Another" buttons are located UNDERNEATH the education entries
+3. Follow the appropriate scenario based on what you see FIRST
+4. Create exactly the requested number of entry forms
+5. STOP once all entry forms are created
+
+BUTTON LOCATION:
+- The "Add" and "Add Another" buttons are positioned BELOW the education entry forms
+- Look underneath the existing education entries to find these buttons
+- Do NOT look above the education section for these buttons`
   });
 
   const clicksNeeded = totalEntriesNeeded - 1; // Always need 1 less "Add Another" click than total entries
 
   const instruction = `Create exactly ${totalEntriesNeeded} education entry forms in the Education section.
+
+IMPORTANT: The "Add" and "Add Another" buttons are located UNDERNEATH the education entries, not above them.
 
 Look at the Education section and determine the INITIAL state:
 
@@ -587,6 +618,7 @@ SCENARIO B - If you INITIALLY see "Add Another" button:
 2. Result: 1 existing + ${clicksNeeded} new = ${totalEntriesNeeded} total entry forms
 
 CRITICAL INSTRUCTIONS:
+- Look UNDERNEATH the education entries to find the "Add" and "Add Another" buttons
 - Base your decision on what you see FIRST, before clicking anything
 - Wait 1-2 seconds between each click for the page to update
 - STOP immediately once you have created ${totalEntriesNeeded} entry forms
@@ -672,14 +704,23 @@ async function handleWorkExperienceSection(stagehand, workExperiences, jobDescri
       console.log(`✅ Agent successfully created ${workExperiences.length} work experience entry forms`);
     }
 
-    // Step 2.5: Fill dates for all work experience entries using two-step act() approach
-    console.log('\n📅 Step 2.5: Filling dates for all work experience entries...');
-    const dateResult = await fillWorkExperienceDates(stagehand, workExperiences);
+    // Step 2.5: Fill dates using agent approach for complex date controls
+    console.log('\n📅 Step 2.5: Agent filling dates for all work experience entries...');
+    const dateResult = await agentFillWorkExperienceDates(stagehand, workExperiences);
+    
+    // Add date filling agent costs to total
+    if (dateResult.usage) {
+      const inputCost = (dateResult.usage.input_tokens / 1000000) * 1.25;
+      const outputCost = (dateResult.usage.output_tokens / 1000000) * 10;
+      totalCost += inputCost + outputCost;
+      totalTokens.input += dateResult.usage.input_tokens;
+      totalTokens.output += dateResult.usage.output_tokens;
+    }
     
     if (dateResult.success) {
-      console.log(`✅ Successfully filled ${dateResult.filledCount} date fields`);
+      console.log(`✅ Agent successfully filled dates for ${workExperiences.length} work experience entries`);
     } else {
-      console.log(`⚠️  Date filling had ${dateResult.errorCount} errors`);
+      console.log(`⚠️  Agent date filling had issues, continuing with field extraction...`);
     }
 
     // Step 3: Process each work experience entry individually
