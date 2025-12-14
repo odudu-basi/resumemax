@@ -1888,10 +1888,10 @@ async function fillAccountCreationForm(stagehand, formFields, answers) {
 }
 
 /**
- * Phase 0e: Agent review and submit account creation form
+ * Phase 0e: Agent review and submit account creation form with verification detection
  */
 async function agentReviewAndSubmitAccountCreation(stagehand, userProfile) {
-  console.log('\n🤖 Phase 0e: Agent review and submit account creation...');
+  console.log('\n🤖 Phase 0e: Agent review, submit, and detect verification...');
 
   const agent = stagehand.agent({
     cua: true,
@@ -1899,33 +1899,46 @@ async function agentReviewAndSubmitAccountCreation(stagehand, userProfile) {
       modelName: "google/gemini-2.5-computer-use-preview-10-2025",
       apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
     },
-    systemPrompt: `You are an account creation completion specialist.
+    systemPrompt: `You are an account creation completion and verification detection specialist.
 
-Your mission is to review the account creation form and submit it.
+Your mission is to review the account creation form, submit it, and then detect what happens next.
 
-CRITICAL RULES:
+PHASE 1 - FORM REVIEW AND SUBMISSION:
 1. Review the form to ensure all required fields are filled
 2. Check for any validation errors or empty required fields
 3. ONLY fill fields that are completely EMPTY or have validation errors
 4. NEVER modify or change fields that already have values entered
 5. Click the Create Account/Sign Up/Register button to submit
-6. STOP immediately after clicking the submit button
+
+PHASE 2 - POST-SUBMISSION DETECTION:
+After clicking the submit button, observe what page appears next and determine:
+
+SCENARIO A - MY INFORMATION PAGE:
+- If you see a page with "My Information", "Personal Details", or job application fields
+- RETURN: verification = false (no email verification needed)
+
+SCENARIO B - SIGN IN PAGE WITH VERIFICATION MESSAGES:
+- If you see a sign-in page with messages about "verify your email", "check your inbox", "verification required"
+- If you see text like "Please verify your email before signing in"
+- RETURN: verification = true (email verification needed)
+
+SCENARIO C - SIGN IN PAGE WITHOUT VERIFICATION MESSAGES:
+- If you see a regular sign-in page with no verification messages
+- Fill in the email field with: ${userProfile.workEmail}
+- Fill in the password field with: ${userProfile.workPassword}
+- Click the "Sign In" button
+- RETURN: verification = false (signed in successfully)
 
 IMPORTANT FIELD HANDLING:
 - DO NOT touch fields that already have text, selections, or are already checked
 - ONLY fill completely empty required fields (marked with * or red borders)
 - ONLY check unchecked required consent/terms checkboxes
 - If a field already has a value (even if it looks wrong), leave it alone
-- Focus ONLY on missing required information needed for form submission
 
-SUBMISSION CRITERIA:
-- All required fields must have some value (not necessarily perfect)
-- All required consent checkboxes must be checked
-- No validation error messages should be visible
-- Once these criteria are met, submit the form immediately`
+YOUR FINAL RESPONSE MUST CLEARLY STATE THE SCENARIO AND VERIFICATION STATUS.`
   });
 
-  const instruction = `Review the account creation form and submit it. Follow these steps:
+  const instruction = `Complete the account creation process and detect what happens next:
 
 STEP 1: REVIEW THE FORM
 - Check all form fields to identify which ones are completely EMPTY
@@ -1943,11 +1956,16 @@ STEP 2: FILL ONLY EMPTY REQUIRED FIELDS (if any)
 - NEVER change fields that already have content
 
 STEP 3: SUBMIT THE FORM
-- Once all required fields have some value (not necessarily perfect)
 - Click the "Create Account", "Sign Up", "Register", or "Submit" button
-- STOP immediately after clicking the button
 
-CRITICAL: Leave existing field values untouched. Only fill what's missing.`;
+STEP 4: ANALYZE NEXT PAGE
+After submission, determine what page appears:
+
+A) MY INFORMATION PAGE → Say "SCENARIO A: verification = false"
+B) SIGN IN WITH VERIFICATION MESSAGES → Say "SCENARIO B: verification = true" 
+C) REGULAR SIGN IN PAGE → Fill email/password, click Sign In, then say "SCENARIO C: verification = false"
+
+Your final message must clearly state the scenario and verification status.`;
 
   try {
     const result = await agent.execute({
@@ -1960,11 +1978,42 @@ CRITICAL: Leave existing field values untouched. Only fill what's missing.`;
     console.log(`  Steps taken: ${result.actions ? result.actions.length : 'N/A'}`);
     console.log(`  Success: ${result.success}`);
 
+    // Parse the agent's final assessment to determine verification status
+    const finalMessage = result.messages && result.messages.length > 0 
+      ? result.messages[result.messages.length - 1] 
+      : '';
+    
+    const lastActions = result.actions && result.actions.length > 0
+      ? result.actions.slice(-3).join(' ').toLowerCase()
+      : '';
+
+    // Analyze agent's output to determine verification requirement
+    const agentOutput = (finalMessage + ' ' + lastActions).toLowerCase();
+    
+    let verification = false;  // Default to false
+    let scenario = 'unknown';
+    
+    if (agentOutput.includes('scenario a') || agentOutput.includes('verification = false')) {
+      verification = false;
+      scenario = 'my_information_page';
+    } else if (agentOutput.includes('scenario b') || agentOutput.includes('verification = true')) {
+      verification = true;
+      scenario = 'sign_in_with_verification';
+    } else if (agentOutput.includes('scenario c')) {
+      verification = false;
+      scenario = 'signed_in_successfully';
+    }
+
+    console.log(`  🎯 Scenario Detected: ${scenario}`);
+    console.log(`  📧 Verification Required: ${verification}`);
+
     // Wait for page to process after submission
     await new Promise(resolve => setTimeout(resolve, 3000));
 
     return {
       success: result.success,
+      verification: verification,
+      scenario: scenario,
       actions: result.actions || [],
       usage: result.usage || { input_tokens: 0, output_tokens: 0 }
     };
@@ -2079,6 +2128,8 @@ async function agentAccountCreation(stagehand, userProfile) {
     return {
       success: submitResult.success,
       createAccount: true,
+      verification: submitResult.verification,
+      scenario: submitResult.scenario,
       pageType: navigationResult.pageType,
       reasoning: navigationResult.reasoning,
       actions: navigationResult.actions || [],
@@ -2859,27 +2910,32 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
     
     // Check if email verification is required (only if account was created)
     if (!accountResult.skipToPhase1) {
-    const needsVerification = await detectVerificationPage(stagehand);
-    
-    if (needsVerification) {
-      console.log('\n📧 Email verification detected, starting verification flow...');
-      const companyName = jobDescription ? jobDescription.company : 'the company';
+      // Use verification result from Phase 0e agent instead of extracting
+      const needsVerification = accountResult.verification || false;
       
-      // Use ORIGINAL userProfile so Gmail login uses WORK EMAIL (not unique email)
-      const verificationResult = await handleEmailVerification(
-        stagehand, 
-        userProfile, 
-        companyName
-      );
-      
-      if (verificationResult.success) {
-        console.log('✅ Email verification completed successfully');
+      if (needsVerification) {
+        console.log('\n📧 Email verification required (detected by Phase 0e agent)');
+        console.log(`   Scenario: ${accountResult.scenario}`);
+        const companyName = jobDescription ? jobDescription.company : 'the company';
+        
+        // Use ORIGINAL userProfile so Gmail login uses WORK EMAIL (not unique email)
+        const verificationResult = await handleEmailVerification(
+          stagehand, 
+          userProfile, 
+          companyName
+        );
+        
+        if (verificationResult.success) {
+          console.log('✅ Email verification completed successfully');
+        } else {
+          console.log('⚠️  Email verification encountered issues, continuing anyway...');
+        }
+        
+        // Small wait after verification
+        await new Promise(resolve => setTimeout(resolve, 2000));
       } else {
-        console.log('⚠️  Email verification encountered issues, continuing anyway...');
-      }
-      
-      // Small wait after verification
-      await new Promise(resolve => setTimeout(resolve, 2000));
+        console.log('  ℹ️  No email verification required (Phase 0e agent confirmed)');
+        console.log(`   Scenario: ${accountResult.scenario}`);
       }
     } else {
       console.log('\n📧 Skipping email verification check - no account was created');

@@ -120,7 +120,7 @@ app.post('/scrape-job-details', async (req, res) => {
   let stagehand = null;
 
   try {
-    const { jobUrl } = req.body;
+    const { jobUrl, continueWithApplication = false, userProfile = null, approach = 'hybrid' } = req.body;
 
     if (!jobUrl) {
       return res.status(400).json({ success: false, error: 'Missing jobUrl' });
@@ -135,18 +135,44 @@ app.post('/scrape-job-details', async (req, res) => {
       env: 'BROWSERBASE',
       verbose: 1,
       enableCaching: true,
-      headless: true,
+      headless: !continueWithApplication, // Use headless for scraping only, visible for application
     });
 
     await stagehand.init();
+    const sessionUrl = stagehand.browserbaseSessionURL || null;
+    const sessionId = stagehand.browserbaseSessionID || null;
+    const liveViewUrl = sessionId ? `https://www.browserbase.com/sessions/${sessionId}?navbar=false` : null;
     console.log('✅ Stagehand initialized for scraping');
 
     const jobDetails = await scrapeJobDetails(stagehand, jobUrl);
 
-    await stagehand.close();
-    console.log('✅ Job scraping completed');
-
-    res.json(jobDetails);
+    // If continuing with application, don't close the session
+    if (continueWithApplication && userProfile) {
+      console.log('🚀 Continuing with job application in same session...');
+      
+      // Route to selected approach using existing session
+      const selectedApproach = approach || 'hybrid';
+      
+      if (selectedApproach === 'hybrid') {
+        console.log('🔄 Using HYBRID approach');
+        await hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liveViewUrl, res, jobUrl);
+        return; // hybridFormFill handles the response
+      } else {
+        // Add other approaches here if needed
+        throw new Error(`Approach ${selectedApproach} not supported in single session mode yet`);
+      }
+    } else {
+      // Just scraping, close session and return job details
+      await stagehand.close();
+      console.log('✅ Job scraping completed');
+      
+      res.json({
+        ...jobDetails,
+        sessionId,
+        sessionUrl,
+        liveViewUrl
+      });
+    }
 
   } catch (error) {
     console.error('❌ Error scraping job:', error);
