@@ -1906,38 +1906,48 @@ Your mission is to review the account creation form and submit it.
 CRITICAL RULES:
 1. Review the form to ensure all required fields are filled
 2. Check for any validation errors or empty required fields
-3. Fill any missing required fields if needed
-4. Click the Create Account/Sign Up/Register button to submit
-5. STOP immediately after clicking the submit button
+3. ONLY fill fields that are completely EMPTY or have validation errors
+4. NEVER modify or change fields that already have values entered
+5. Click the Create Account/Sign Up/Register button to submit
+6. STOP immediately after clicking the submit button
 
-IMPORTANT:
-- Only fill fields that are empty or have validation errors
-- Do not modify fields that are already correctly filled
-- Focus on required fields (marked with * or red borders)
-- Submit the form once everything looks good`
+IMPORTANT FIELD HANDLING:
+- DO NOT touch fields that already have text, selections, or are already checked
+- ONLY fill completely empty required fields (marked with * or red borders)
+- ONLY check unchecked required consent/terms checkboxes
+- If a field already has a value (even if it looks wrong), leave it alone
+- Focus ONLY on missing required information needed for form submission
+
+SUBMISSION CRITERIA:
+- All required fields must have some value (not necessarily perfect)
+- All required consent checkboxes must be checked
+- No validation error messages should be visible
+- Once these criteria are met, submit the form immediately`
   });
 
   const instruction = `Review the account creation form and submit it. Follow these steps:
 
 STEP 1: REVIEW THE FORM
-- Check all form fields to ensure they are properly filled
-- Look for any empty required fields (marked with * or red borders)
+- Check all form fields to identify which ones are completely EMPTY
+- Look for empty required fields (marked with * or red borders)
 - Check for validation error messages
+- DO NOT modify fields that already have values
 
-STEP 2: FILL MISSING FIELDS (if any)
-- If you find empty required fields, fill them with appropriate information:
-  - Email: ${userProfile.workEmail}
-  - Password: ${userProfile.workPassword}
-  - First Name: ${userProfile.fullName.split(' ')[0] || ''}
-  - Last Name: ${userProfile.fullName.split(' ').slice(1).join(' ') || ''}
-- Check any required consent/terms checkboxes
+STEP 2: FILL ONLY EMPTY REQUIRED FIELDS (if any)
+- ONLY fill fields that are completely empty and required:
+  - Empty Email field: ${userProfile.workEmail}
+  - Empty Password field: ${userProfile.workPassword}
+  - Empty First Name field: ${userProfile.fullName.split(' ')[0] || ''}
+  - Empty Last Name field: ${userProfile.fullName.split(' ').slice(1).join(' ') || ''}
+- ONLY check unchecked required consent/terms checkboxes
+- NEVER change fields that already have content
 
 STEP 3: SUBMIT THE FORM
-- Once all required fields are filled and no errors are present
+- Once all required fields have some value (not necessarily perfect)
 - Click the "Create Account", "Sign Up", "Register", or "Submit" button
 - STOP immediately after clicking the button
 
-YOUR GOAL: Ensure form is complete and submit it successfully.`;
+CRITICAL: Leave existing field values untouched. Only fill what's missing.`;
 
   try {
     const result = await agent.execute({
