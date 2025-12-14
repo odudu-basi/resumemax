@@ -40,24 +40,34 @@ async function handleDatePickerField(stagehand, fieldLabel, targetDate, sectionN
     // 1. Open the picker
     await stagehand.act(`click the calendar picker icon in the ${fieldLabel} field under work experience ${sectionNumber}`);
     
-    // 2. Get current year shown
-    const currentYear = await stagehand.extract('extract the visible year number shown on the opened calendar picker');
-    const currentYearNum = parseInt(currentYear);
+    // Wait for calendar to fully open
+    await stagehand.page.waitForTimeout(500);
     
-    console.log(`  Current calendar year: ${currentYearNum}`);
+    // 2. Use known current year (2025) - no extract needed
+    const currentYear = 2025;
+    const leftClicksNeeded = currentYear - targetYear;
     
-    // 3. Calculate navigation
-    const leftClicksNeeded = currentYearNum - targetYear;
+    console.log(`  Current year: ${currentYear}, Target year: ${targetYear}`);
     console.log(`  Need ${leftClicksNeeded} left clicks`);
     
-    // 4. Navigate to target year
+    // 3. Navigate to target year with individual clicks and waits
     if (leftClicksNeeded > 0) {
-      await stagehand.act(`click the left arrow ${leftClicksNeeded} times on the calendar picker to navigate to ${targetYear}`);
+      for (let i = 0; i < leftClicksNeeded; i++) {
+        await stagehand.act(`click the left arrow on the calendar picker`);
+        await stagehand.page.waitForTimeout(300); // Let UI update between clicks
+      }
     } else if (leftClicksNeeded < 0) {
-      await stagehand.act(`click the right arrow ${Math.abs(leftClicksNeeded)} times on the calendar picker to navigate to ${targetYear}`);
+      const rightClicksNeeded = Math.abs(leftClicksNeeded);
+      for (let i = 0; i < rightClicksNeeded; i++) {
+        await stagehand.act(`click the right arrow on the calendar picker`);
+        await stagehand.page.waitForTimeout(300); // Let UI update between clicks
+      }
     }
     
-    // 5. Select target month
+    // Wait before selecting month
+    await stagehand.page.waitForTimeout(300);
+    
+    // 4. Select target month
     await stagehand.act(`click ${targetMonthName} on the calendar picker to select the month`);
     
     console.log(`  ✅ Selected ${targetMonthName} ${targetYear}`);
