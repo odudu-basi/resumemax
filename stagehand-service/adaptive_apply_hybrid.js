@@ -2124,16 +2124,22 @@ async function agentReviewAndContinue(stagehand, userProfile, jobDescription, pa
 
 YOUR TASK (IN ORDER):
 1. Review the current page for any missing or incorrectly filled fields
-2. Fill any empty required fields or fields with validation errors
+2. Fill ONLY empty required fields or fields with validation errors
 3. Click "Next", "Continue", or "Save and Continue" button
 4. STOP IMMEDIATELY after clicking the button
 
+CRITICAL FIELD HANDLING RULES:
+- NEVER modify or change fields that already have values entered
+- ONLY fill completely empty required fields (marked with * or red borders)
+- ONLY fix fields that show validation error messages
+- If a field already has content (even if it looks wrong), leave it alone
+- Preserve all existing form data from Phase 1
+
 SPECIAL INSTRUCTIONS:
-- For "How did you hear about us?" fields: Always answer "LinkedIn" and press Enter
-- For referral fields: Use "LinkedIn" as the source
-- For text questions: Provide brief, professional responses based on user profile
-- Focus on required fields (marked with * or red borders)
-- Don't re-fill fields that are already correctly completed
+- For empty "How did you hear about us?" fields: Answer "LinkedIn" and press Enter
+- For empty referral fields: Use "LinkedIn" as the source
+- For empty text questions: Provide brief, professional responses based on user profile
+- Focus ONLY on missing required information needed for form submission
 
 USER PROFILE:
 - Name: ${userProfile.fullName}
@@ -2147,11 +2153,13 @@ ${jobDescription ? `Job Description: ${jobDescription.title} at ${jobDescription
 CRITICAL: After clicking Continue/Next/Save and Continue, STOP immediately. Do not wait for the next page to load.`
   });
 
-  const instruction = `Review this job application page for any missing fields or validation errors. Fill any empty required fields using the user profile information provided. 
+  const instruction = `Review this job application page for any missing fields or validation errors. ONLY fill completely empty required fields or fields showing validation errors - DO NOT modify fields that already have values.
 
-For "How did you hear about us" or referral questions, always use "LinkedIn".
+CRITICAL: Leave existing field values untouched. Only fill what's missing.
 
-Once all fields are properly filled, click the Continue, Next, or Save and Continue button and stop immediately. however if you see a submit button click that, wait for a confirmation page or message and then stop immediately`;
+For empty "How did you hear about us" or referral questions, use "LinkedIn".
+
+Once all required fields have some value, click the Continue, Next, or Save and Continue button and stop immediately. If you see a submit button click that, wait for a confirmation page or message and then stop immediately.`;
 
   try {
     const result = await agent.execute({
