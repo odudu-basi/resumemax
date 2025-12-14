@@ -476,6 +476,10 @@ CRITICAL RULES:
 4. If currently working, skip the To date for that entry
 5. STOP once all dates are filled for all entries
 
+DATE ADJUSTMENT RULE:
+- Years before 2015 have been automatically adjusted to 2021 for better compatibility
+- Use the adjusted years provided in the instructions (not the original years)
+
 DATE PICKER USAGE:
 - Look for calendar icons, date input fields, or clickable date areas
 - Click to open the date picker interface
@@ -509,18 +513,30 @@ INTERACTION STRATEGY (IN ORDER OF PREFERENCE):
     console.log(`     Raw fromDate: "${fromDate}"`);
     console.log(`     Raw toDate: "${toDate}"`);
     
-    // Parse date to get month and year
+    // Parse date to get month and year with year adjustment
     const parseDate = (dateStr) => {
       if (!dateStr) return { month: '', year: '' };
       
+      let month = '';
+      let year = '';
+      
       if (dateStr.includes('-')) {
         const parts = dateStr.split('-');
-        return { month: parts[1] || '', year: parts[0] || '' };
+        month = parts[1] || '';
+        year = parts[0] || '';
       } else if (dateStr.includes('/')) {
         const parts = dateStr.split('/');
-        return { month: parts[0] || '', year: parts[1] || '' };
+        month = parts[0] || '';
+        year = parts[1] || '';
       }
-      return { month: '', year: '' };
+      
+      // Adjust years before 2015 to 2021
+      if (year && parseInt(year) < 2015) {
+        console.log(`    📅 Adjusting year ${year} to 2021 (was before 2015)`);
+        year = '2021';
+      }
+      
+      return { month, year };
     };
 
     const fromParsed = parseDate(fromDate);
