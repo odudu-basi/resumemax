@@ -317,8 +317,87 @@ async function handleMyExperiencePage(stagehand, userProfile, jobDescription) {
 }
 
 /**
+ * Agent creates all work experience entry forms by clicking Add/Add Another buttons
+ */
+async function agentCreateWorkExperienceEntries(stagehand, totalEntriesNeeded) {
+  console.log(`\n🤖 Agent creating ${totalEntriesNeeded} work experience entry forms...`);
+
+  const agent = stagehand.agent({
+    cua: true,
+    model: {
+      modelName: "google/gemini-2.5-computer-use-preview-10-2025",
+      apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
+    },
+    systemPrompt: `You are a work experience form creation specialist.
+
+Your mission is to create the exact number of work experience entry forms needed by clicking the appropriate buttons.
+
+CRITICAL RULES:
+1. Look at the INITIAL state of the Work Experience section
+2. Follow the appropriate scenario based on what you see FIRST
+3. Create exactly the requested number of entry forms
+4. STOP once all entry forms are created`
+  });
+
+  const clicksNeeded = totalEntriesNeeded - 1; // Always need 1 less "Add Another" click than total entries
+
+  const instruction = `Create exactly ${totalEntriesNeeded} work experience entry forms in the Work Experience section.
+
+Look at the Work Experience section and determine the INITIAL state:
+
+SCENARIO A - If you INITIALLY see "Add" button:
+1. Click the "Add" button once (this creates the first entry form)
+2. Then click "Add Another" button ${clicksNeeded} times (this creates the remaining ${clicksNeeded} entry forms)
+3. Result: ${totalEntriesNeeded} total entry forms
+
+SCENARIO B - If you INITIALLY see "Add Another" button:
+1. Click "Add Another" button ${clicksNeeded} times (this creates ${clicksNeeded} additional entry forms)
+2. Result: 1 existing + ${clicksNeeded} new = ${totalEntriesNeeded} total entry forms
+
+IMPORTANT:
+- Base your decision on what you see FIRST, before clicking anything
+- Wait 1-2 seconds between each click for the page to update
+- STOP immediately once you have created ${totalEntriesNeeded} entry forms
+- Do NOT fill any fields - just create the entry forms
+
+Your goal: Ensure there are exactly ${totalEntriesNeeded} work experience entry forms on the page.`;
+
+  try {
+    const result = await agent.execute({
+      instruction,
+      maxSteps: Math.max(5, totalEntriesNeeded + 2), // Dynamic step limit based on entries needed
+      highlightCursor: false
+    });
+
+    console.log(`\n✅ Agent work experience entry creation complete:`);
+    console.log(`  Steps taken: ${result.actions ? result.actions.length : 'N/A'}`);
+    console.log(`  Success: ${result.success}`);
+    console.log(`  Target: ${totalEntriesNeeded} entry forms`);
+
+    // Wait for page to stabilize after all button clicks
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    return {
+      success: result.success,
+      actions: result.actions || [],
+      usage: result.usage || { input_tokens: 0, output_tokens: 0 },
+      entriesCreated: totalEntriesNeeded
+    };
+  } catch (error) {
+    console.error(`  ❌ Agent entry creation error:`, error.message);
+    return {
+      success: false,
+      error: error.message,
+      actions: [],
+      usage: { input_tokens: 0, output_tokens: 0 },
+      entriesCreated: 0
+    };
+  }
+}
+
+/**
  * Handle Work Experience Section
- * Detects existing entries, fills them, and adds new ones as needed
+ * Uses agent to create entries, then fills them individually
  */
 async function handleWorkExperienceSection(stagehand, workExperiences, jobDescription) {
   console.log(`\n📋 Processing ${workExperiences.length} work experience entries...`);
@@ -327,60 +406,77 @@ async function handleWorkExperienceSection(stagehand, workExperiences, jobDescri
   let errors = 0;
 
   try {
-    // Step 1: Observe existing work experience entries
-    console.log('\n🔍 Step 1: Detecting existing work experience entries...');
-    const existingEntries = await observeWorkExperienceEntries(stagehand);
-    const existingCount = existingEntries.length;
-    
-    console.log(`   Found ${existingCount} existing work experience entry/entries`);
-    console.log(`   User has ${workExperiences.length} total work experience(s) in profile`);
-    console.log(`   Will process all ${workExperiences.length} entries`);
+    // Step 1 & 2: Agent creates all work experience entries
+    console.log('\n🤖 Step 1 & 2: Agent creating work experience entries...');
+    console.log(`   User has ${workExperiences.length} work experience(s) in profile`);
+    console.log(`   Agent will create all ${workExperiences.length} entry forms`);
 
-    // Step 2: Process each work experience entry
+    const buttonResult = await agentCreateWorkExperienceEntries(stagehand, workExperiences.length);
+    
+    if (!buttonResult.success) {
+      console.log('⚠️  Agent button creation had issues, but continuing with form filling...');
+    } else {
+      console.log(`✅ Agent successfully created ${workExperiences.length} work experience entry forms`);
+    }
+
+    // Step 3: Process each work experience entry individually
     for (let i = 0; i < workExperiences.length; i++) {
-      const entryNumber = i + 1;
-      const entryData = workExperiences[i];
+      const sectionNumber = i + 1; // 1, 2, 3 (matches UI section names)
+      const entryData = workExperiences[i]; // 0, 1, 2 (database index)
       
-      console.log(`\n--- Processing Work Experience Entry #${entryNumber}/${workExperiences.length} ---`);
-      console.log(`   Position: ${entryData.position || 'N/A'}`);
+      console.log(`\n--- Processing Work Experience ${sectionNumber} Section ---`);
+      console.log(`   Database Entry Index: ${i}`);
+      console.log(`   Position: ${entryData.position || entryData.title || 'N/A'}`);
       console.log(`   Company: ${entryData.company || 'N/A'}`);
+      console.log(`   Start Date: ${entryData.startDate || entryData.start_date || 'N/A'}`);
+      console.log(`   End Date: ${entryData.endDate || entryData.end_date || (entryData.current ? 'Present' : 'N/A')}`);
+      console.log(`   Description: ${entryData.description ? entryData.description.substring(0, 100) + '...' : 'N/A'}`);
 
       try {
-        // If this is not the first entry, we need to click "Add" or "Add Another"
-        if (i >= existingCount) {
-          console.log(`\n🔘 Clicking Add button to create entry #${entryNumber}...`);
-          await stagehand.act("click the Add button under Work Experience section");
-          
-          // Wait for fields to appear
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          console.log('✅ Add button clicked, fields should now be visible');
-        } else {
-          console.log(`\n📋 Entry #${entryNumber} already exists, will fill existing fields`);
-        }
+        // Step 3a: Extract fields for this specific section
+        console.log(`\n📋 Extracting fields for Work Experience ${sectionNumber} section...`);
+        
+        const entryFieldsSchema = z.object({
+          fields: z.array(z.object({
+            label: z.string().describe("Field label or question text"),
+            fieldType: z.enum(['text', 'date', 'textarea', 'checkbox', 'dropdown', 'email']).describe("Type of input field"),
+            isRequired: z.boolean().describe("Whether this field is required"),
+            description: z.string().describe("Full description of what this field is for")
+          }))
+        });
 
-        // Step 3: Observe fields for this entry
-        console.log(`\n👀 Observing fields for entry #${entryNumber}...`);
-        const entryFields = await stagehand.observe(
-          `Find all form fields in work experience entry #${entryNumber} (job title, company, dates, description)`
+        const extractResult = await stagehand.extract(
+          `Extract all form fields in Work Experience ${sectionNumber} section. Get all fields like Job Title, Company, Location, date fields (From/To), checkboxes, and any other input fields that belong to this specific work experience section.`,
+          entryFieldsSchema
         );
         
+        // Convert extracted fields to the format expected by getAnswersForWorkExp
+        const entryFields = extractResult.fields.map(field => ({
+          description: field.label,
+          method: field.fieldType === 'checkbox' ? 'check' : 
+                  field.fieldType === 'dropdown' ? 'selectOption' : 'type',
+          inputType: field.fieldType,
+          isRequired: field.isRequired,
+          originalDescription: field.description
+        }));
+        
         if (entryFields.length === 0) {
-          console.log(`⚠️  No fields found for entry #${entryNumber}, skipping`);
+          console.log(`⚠️  No fields found for Work Experience ${sectionNumber} section, skipping`);
           errors++;
           continue;
         }
         
         console.log(`   Found ${entryFields.length} fields to fill`);
 
-        // Step 4: Get intelligent answers for this specific entry
-        console.log(`\n🤖 Getting answers from ChatGPT for entry #${entryNumber}...`);
+        // Step 3b: Get intelligent answers for this specific entry
+        console.log(`\n🤖 Getting ChatGPT answers for Work Experience ${sectionNumber} section...`);
         const answersResult = await getAnswersForWorkExp(entryFields, entryData, jobDescription);
         
         console.log(`   ✅ Received ${Object.keys(answersResult.answers).length} answers`);
         console.log(`   💰 Tokens - Input: ${answersResult.inputTokens}, Output: ${answersResult.outputTokens}`);
 
-        // Step 5: Fill the fields
-        console.log(`\n✍️  Filling fields for entry #${entryNumber}...`);
+        // Step 3c: Fill the fields
+        console.log(`\n✍️  Filling fields for Work Experience ${sectionNumber} section...`);
         const fillResult = await fillWorkExperienceFields(stagehand, entryFields, answersResult.answers);
         
         console.log(`   ✅ ${fillResult.filledCount} filled, ⏭️  ${fillResult.skippedCount} skipped, ❌ ${fillResult.errorCount} errors`);
@@ -393,7 +489,7 @@ async function handleWorkExperienceSection(stagehand, workExperiences, jobDescri
         }
 
       } catch (entryError) {
-        console.error(`❌ Error processing entry #${entryNumber}:`, entryError.message);
+        console.error(`❌ Error processing Work Experience ${sectionNumber} section:`, entryError.message);
         errors++;
       }
     }
@@ -520,34 +616,6 @@ async function handleEducationSection(stagehand, educationEntries, jobDescriptio
   }
 }
 
-/**
- * Observe existing work experience entries on the page
- * Returns array of existing entry elements
- */
-async function observeWorkExperienceEntries(stagehand) {
-  console.log('   🔍 Looking for existing work experience entries...');
-
-  try {
-    const existingEntries = await stagehand.observe(
-      "Find all existing work experience entries or form fields or buttons already visible in the Work Experience section"
-    );
-
-    // Filter to get only meaningful entries (exclude the Add button itself)
-    const actualEntries = existingEntries.filter(entry => {
-      const desc = entry.description.toLowerCase();
-      return !desc.includes('add button') &&
-             !desc.includes('add another button') &&
-             (desc.includes('input') || desc.includes('field') || desc.includes('text') || desc.includes('company') || desc.includes('title') || desc.includes('date'));
-    });
-
-    console.log(`   Found ${actualEntries.length} existing entry fields`);
-    return actualEntries;
-
-  } catch (error) {
-    console.error('   ⚠️  Error observing existing entries:', error.message);
-    return [];
-  }
-}
 
 /**
  * Get intelligent answers from ChatGPT for a specific work experience entry
@@ -570,7 +638,9 @@ Summary: ${jobDescription.summary}
 
   const prompt = `You are filling out a work experience entry for a job application.
 
-WORK EXPERIENCE ENTRY DATA:
+CRITICAL: Use ONLY the specific work experience data provided below. Do NOT use data from other entries or make up information.
+
+WORK EXPERIENCE ENTRY DATA (from user's database):
 Position/Title: ${entryData.position || entryData.title || 'N/A'}
 Company: ${entryData.company || 'N/A'}
 Location: ${entryData.location || 'N/A'}
@@ -586,21 +656,28 @@ FORM FIELDS TO FILL:
 ${fieldDescriptions}
 
 INSTRUCTIONS:
-For each field, provide the most appropriate answer based on the work experience data above.
+Fill each field using ONLY the work experience data above. Be precise and accurate.
 
-- For job title/position fields: Use the Position/Title
-- For company name fields: Use the Company
-- For location fields: Use the Location
-- For start date fields: Use the Start Date (format as shown or MM/YYYY if needed)
-- For end date fields: Use the End Date, or "Present" if currently working
-- For description/responsibilities fields: Use the Description
-- For "currently working here" checkboxes: Answer based on Currently Working status
-- For any other fields: Provide the most relevant answer from the data above
+- For job title/position fields: Use EXACTLY "${entryData.position || entryData.title || 'N/A'}"
+- For company name fields: Use EXACTLY "${entryData.company || 'N/A'}"
+- For location fields: Use EXACTLY "${entryData.location || 'N/A'}"
+- For start date fields: Use "${entryData.startDate || entryData.start_date || 'N/A'}" formatted as MM/YYYY (e.g., "01/2022")
+- For end date fields: Use "${entryData.endDate || entryData.end_date || (entryData.current ? 'Present' : 'N/A')}" formatted as MM/YYYY (e.g., "12/2023") or "Present" if currently working
+- For description/responsibilities fields: Use "${entryData.description || 'N/A'}"
+- For "currently working here" checkboxes: Answer "${entryData.current || false}"
+- For any other fields: Use the most relevant data from THIS SPECIFIC entry above
 - If you don't have the information for a field, return "SKIP"
+
+CRITICAL RULES:
+1. Use ONLY the data provided above for THIS specific work experience entry
+2. Do NOT mix data from different work experiences
+3. Do NOT make up or infer information not provided
+4. Copy field descriptions EXACTLY as shown
+5. FORMAT ALL DATES as MM/YYYY (e.g., "01/2022", "12/2023") - convert from MM/DD/YYYY if needed
 
 IMPORTANT: Return JSON where the keys are the EXACT field descriptions (copy them exactly, including all punctuation and wording).
 
-Example format: { "Input field for job title.": "Software Engineer", "Input field for company name.": "Google Inc." }`;
+Example format: { "Input field for job title.": "${entryData.position || entryData.title || 'Software Engineer'}", "Input field for company name.": "${entryData.company || 'Google Inc.'}" }`;
 
   try {
     const response = await openai.chat.completions.create({
@@ -1802,29 +1879,92 @@ async function fillAccountCreationForm(stagehand, formFields, answers) {
 
   console.log(`\n📊 Form filling complete: ✅ ${filledCount} filled, ⏭️ ${skippedCount} skipped, ❌ ${errorCount} errors`);
 
-  // Now click the create account button
-  console.log('\n🔘 Clicking Create Account button...');
+  return {
+    success: true,
+    filledCount: filledCount,
+    skippedCount: skippedCount,
+    errorCount: errorCount
+  };
+}
+
+/**
+ * Phase 0e: Agent review and submit account creation form
+ */
+async function agentReviewAndSubmitAccountCreation(stagehand, userProfile) {
+  console.log('\n🤖 Phase 0e: Agent review and submit account creation...');
+
+  const agent = stagehand.agent({
+    cua: true,
+    model: {
+      modelName: "google/gemini-2.5-computer-use-preview-10-2025",
+      apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
+    },
+    systemPrompt: `You are an account creation completion specialist.
+
+Your mission is to review the account creation form and submit it.
+
+CRITICAL RULES:
+1. Review the form to ensure all required fields are filled
+2. Check for any validation errors or empty required fields
+3. Fill any missing required fields if needed
+4. Click the Create Account/Sign Up/Register button to submit
+5. STOP immediately after clicking the submit button
+
+IMPORTANT:
+- Only fill fields that are empty or have validation errors
+- Do not modify fields that are already correctly filled
+- Focus on required fields (marked with * or red borders)
+- Submit the form once everything looks good`
+  });
+
+  const instruction = `Review the account creation form and submit it. Follow these steps:
+
+STEP 1: REVIEW THE FORM
+- Check all form fields to ensure they are properly filled
+- Look for any empty required fields (marked with * or red borders)
+- Check for validation error messages
+
+STEP 2: FILL MISSING FIELDS (if any)
+- If you find empty required fields, fill them with appropriate information:
+  - Email: ${userProfile.workEmail}
+  - Password: ${userProfile.workPassword}
+  - First Name: ${userProfile.fullName.split(' ')[0] || ''}
+  - Last Name: ${userProfile.fullName.split(' ').slice(1).join(' ') || ''}
+- Check any required consent/terms checkboxes
+
+STEP 3: SUBMIT THE FORM
+- Once all required fields are filled and no errors are present
+- Click the "Create Account", "Sign Up", "Register", or "Submit" button
+- STOP immediately after clicking the button
+
+YOUR GOAL: Ensure form is complete and submit it successfully.`;
+
   try {
-    await stagehand.act("click the Create Account button or Sign Up button or Register button");
-    console.log('  ✅ Create Account button clicked');
-    
-    // Wait for page to process
+    const result = await agent.execute({
+      instruction,
+      maxSteps: 10,  // Limited steps: review → fill missing → submit → stop
+      highlightCursor: false
+    });
+
+    console.log('\n✅ Phase 0e Complete (Review & Submit):');
+    console.log(`  Steps taken: ${result.actions ? result.actions.length : 'N/A'}`);
+    console.log(`  Success: ${result.success}`);
+
+    // Wait for page to process after submission
     await new Promise(resolve => setTimeout(resolve, 3000));
-    
+
     return {
-      success: true,
-      filledCount: filledCount,
-      skippedCount: skippedCount,
-      errorCount: errorCount
+      success: result.success,
+      actions: result.actions || [],
+      usage: result.usage || { input_tokens: 0, output_tokens: 0 }
     };
-  } catch (submitError) {
-    console.error('  ❌ Error clicking Create Account button:', submitError.message);
+  } catch (error) {
+    console.error('  ❌ Phase 0e error:', error.message);
     return {
       success: false,
-      filledCount: filledCount,
-      skippedCount: skippedCount,
-      errorCount: errorCount + 1,
-      error: submitError.message
+      error: error.message,
+      actions: [],
+      usage: { input_tokens: 0, output_tokens: 0 }
     };
   }
 }
@@ -1898,19 +2038,36 @@ async function agentAccountCreation(stagehand, userProfile) {
     totalTokens.input += answersResult.inputTokens;
     totalTokens.output += answersResult.outputTokens;
 
-    // Phase 0d: Fill form and submit
+    // Phase 0d: Fill form fields (without submitting)
     const fillResult = await fillAccountCreationForm(stagehand, formFields, answersResult.answers);
+
+    if (!fillResult.success) {
+      throw new Error('Form filling failed in Phase 0d');
+    }
+
+    // Phase 0e: Agent review and submit form
+    const submitResult = await agentReviewAndSubmitAccountCreation(stagehand, userProfile);
+    
+    // Add Phase 0e cost to total
+    if (submitResult.usage) {
+      const inputCost = (submitResult.usage.input_tokens / 1000000) * 1.25;
+      const outputCost = (submitResult.usage.output_tokens / 1000000) * 10;
+      totalCost += inputCost + outputCost;
+      totalTokens.input += submitResult.usage.input_tokens;
+      totalTokens.output += submitResult.usage.output_tokens;
+    }
 
     console.log('\n✅ Phase 0 Complete (Account Creation):');
     console.log(`  Navigation steps: ${navigationResult.actions ? navigationResult.actions.length : 'N/A'}`);
     console.log(`  Fields found: ${formFields.length}`);
     console.log(`  Fields filled: ${fillResult.filledCount}`);
+    console.log(`  Review & submit steps: ${submitResult.actions ? submitResult.actions.length : 'N/A'}`);
     console.log(`  💰 Phase 0 total cost: $${totalCost.toFixed(4)}`);
     console.log(`     Input tokens: ${totalTokens.input.toLocaleString()}`);
     console.log(`     Output tokens: ${totalTokens.output.toLocaleString()}`);
 
     return {
-      success: fillResult.success,
+      success: submitResult.success,
       createAccount: true,
       pageType: navigationResult.pageType,
       reasoning: navigationResult.reasoning,
@@ -1922,7 +2079,8 @@ async function agentAccountCreation(stagehand, userProfile) {
       fieldsFound: formFields.length,
       fieldsFilled: fillResult.filledCount,
       fieldsSkipped: fillResult.skippedCount,
-      errors: fillResult.errorCount
+      errors: fillResult.errorCount,
+      submitSuccess: submitResult.success
     };
 
   } catch (error) {
@@ -2683,27 +2841,27 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
     
     // Check if email verification is required (only if account was created)
     if (!accountResult.skipToPhase1) {
-      const needsVerification = await detectVerificationPage(stagehand);
+    const needsVerification = await detectVerificationPage(stagehand);
+    
+    if (needsVerification) {
+      console.log('\n📧 Email verification detected, starting verification flow...');
+      const companyName = jobDescription ? jobDescription.company : 'the company';
       
-      if (needsVerification) {
-        console.log('\n📧 Email verification detected, starting verification flow...');
-        const companyName = jobDescription ? jobDescription.company : 'the company';
-        
-        // Use ORIGINAL userProfile so Gmail login uses WORK EMAIL (not unique email)
-        const verificationResult = await handleEmailVerification(
-          stagehand, 
-          userProfile, 
-          companyName
-        );
-        
-        if (verificationResult.success) {
-          console.log('✅ Email verification completed successfully');
-        } else {
-          console.log('⚠️  Email verification encountered issues, continuing anyway...');
-        }
-        
-        // Small wait after verification
-        await new Promise(resolve => setTimeout(resolve, 2000));
+      // Use ORIGINAL userProfile so Gmail login uses WORK EMAIL (not unique email)
+      const verificationResult = await handleEmailVerification(
+        stagehand, 
+        userProfile, 
+        companyName
+      );
+      
+      if (verificationResult.success) {
+        console.log('✅ Email verification completed successfully');
+      } else {
+        console.log('⚠️  Email verification encountered issues, continuing anyway...');
+      }
+      
+      // Small wait after verification
+      await new Promise(resolve => setTimeout(resolve, 2000));
       }
     } else {
       console.log('\n📧 Skipping email verification check - no account was created');
