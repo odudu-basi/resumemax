@@ -7,6 +7,67 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
+// Helper function to convert month number to month name for date picker
+function getMonthName(monthNumber) {
+  const months = {
+    '01': 'January', '02': 'February', '03': 'March',
+    '04': 'April',   '05': 'May',      '06': 'June',
+    '07': 'July',    '08': 'August',   '09': 'September',
+    '10': 'October', '11': 'November', '12': 'December'
+  };
+  return months[monthNumber] || monthNumber;
+}
+
+// Handle date picker fields with direct calendar navigation
+async function handleDatePickerField(stagehand, fieldLabel, targetDate, sectionNumber) {
+  console.log(`📅 Handling date picker for ${fieldLabel}: ${targetDate}`);
+  
+  // Parse MM/DD/YYYY format
+  const [month, day, year] = targetDate.split('/');
+  let targetYear = parseInt(year);
+  
+  // Apply year adjustment for dates before 2015
+  if (targetYear < 2015) {
+    console.log(`  📅 Adjusting year ${targetYear} to 2021 (was before 2015)`);
+    targetYear = 2021;
+  }
+  
+  const targetMonthName = getMonthName(month);
+  
+  console.log(`  Target: ${targetMonthName} ${targetYear}`);
+  
+  try {
+    // 1. Open the picker
+    await stagehand.act(`click the calendar picker icon in the ${fieldLabel} field under work experience ${sectionNumber}`);
+    
+    // 2. Get current year shown
+    const currentYear = await stagehand.extract('extract the visible year number shown on the opened calendar picker');
+    const currentYearNum = parseInt(currentYear);
+    
+    console.log(`  Current calendar year: ${currentYearNum}`);
+    
+    // 3. Calculate navigation
+    const leftClicksNeeded = currentYearNum - targetYear;
+    console.log(`  Need ${leftClicksNeeded} left clicks`);
+    
+    // 4. Navigate to target year
+    if (leftClicksNeeded > 0) {
+      await stagehand.act(`click the left arrow ${leftClicksNeeded} times on the calendar picker to navigate to ${targetYear}`);
+    } else if (leftClicksNeeded < 0) {
+      await stagehand.act(`click the right arrow ${Math.abs(leftClicksNeeded)} times on the calendar picker to navigate to ${targetYear}`);
+    }
+    
+    // 5. Select target month
+    await stagehand.act(`click ${targetMonthName} on the calendar picker to select the month`);
+    
+    console.log(`  ✅ Selected ${targetMonthName} ${targetYear}`);
+    return true;
+  } catch (error) {
+    console.error(`  ❌ Date picker failed for ${fieldLabel}:`, error.message);
+    return false;
+  }
+}
+
 // Stagehand documentation for login commands
 const STAGEHAND_DOCS = `
 # STAGEHAND DOCUMENTATION
@@ -828,7 +889,7 @@ async function handleWorkExperienceSection(stagehand, workExperiences, jobDescri
 
         // Step 3c: Fill the fields
         console.log(`\n✍️  Filling fields for Work Experience ${sectionNumber} section...`);
-        const fillResult = await fillWorkExperienceFields(stagehand, entryFields, answersResult.answers, sectionNumber);
+        const fillResult = await fillWorkExperienceFields(stagehand, entryFields, answersResult.answers, sectionNumber, entryData);
         
         console.log(`   ✅ ${fillResult.filledCount} filled, ⏭️  ${fillResult.skippedCount} skipped, ❌ ${fillResult.errorCount} errors`);
         
@@ -1120,7 +1181,7 @@ Example format: { "Job Title": "${entryData.position || entryData.title || 'Soft
 /**
  * Fill work experience fields using act() commands
  */
-async function fillWorkExperienceFields(stagehand, fields, answers, sectionNumber) {
+async function fillWorkExperienceFields(stagehand, fields, answers, sectionNumber, entryData) {
   console.log(`   ✍️  Filling ${fields.length} fields for Work Experience ${sectionNumber}...`);
 
   let filledCount = 0;
@@ -1141,7 +1202,43 @@ async function fillWorkExperienceFields(stagehand, fields, answers, sectionNumbe
       const labelLower = fieldLabel.toLowerCase();
       const fieldType = field.fieldType || field.method;
 
-      // Handle date group fields (From/To dates)
+      // Handle date picker fields (From/To dates) with direct calendar navigation
+      if ((fieldLabel === 'From' || fieldLabel === 'To') && entryData) {
+        const targetDate = fieldLabel === 'From' 
+          ? (entryData.startDate || entryData.start_date)
+          : (entryData.endDate || entryData.end_date);
+        
+        // Only handle To field if not currently working
+        if (fieldLabel === 'To' && (entryData.current || entryData.currently_working)) {
+          console.log(`      ⏭️  Skipping To date - currently working (Work Exp ${sectionNumber})`);
+          skippedCount++;
+          continue;
+        }
+        
+        if (targetDate) {
+          console.log(`      🎯 Attempting date picker for ${fieldLabel}: ${targetDate}`);
+          const datePickerSuccess = await handleDatePickerField(stagehand, fieldLabel, targetDate, sectionNumber);
+          
+          if (datePickerSuccess) {
+            filledCount++;
+            console.log(`      ✅ Date Picker Success: ${fieldLabel} = ${targetDate} (Work Exp ${sectionNumber})`);
+          } else {
+            // Fallback to regular act() if date picker fails
+            console.log(`      ⚠️  Date picker failed, falling back to regular input...`);
+            await stagehand.act(`enter "${answer}" into the ${fieldLabel} field under work experience ${sectionNumber}`);
+            filledCount++;
+            console.log(`      ✅ Fallback Fill: ${fieldLabel} = ${answer} (Work Exp ${sectionNumber})`);
+          }
+        } else {
+          // No date data available, use ChatGPT answer
+          await stagehand.act(`enter "${answer}" into the ${fieldLabel} field under work experience ${sectionNumber}`);
+          filledCount++;
+          console.log(`      ✅ Regular Fill: ${fieldLabel} = ${answer} (Work Exp ${sectionNumber})`);
+        }
+        continue;
+      }
+
+      // Handle date group fields (From/To dates) - legacy handling
       if (fieldType === 'group') {
         if (labelLower.includes('from')) {
           await stagehand.act(`set the from date to ${answer} under work experience ${sectionNumber}`);
