@@ -39,4 +39,37 @@ async function downloadAndUploadResume(page, resumeUrl, inputSelector) {
   }
 }
 
-module.exports = { downloadAndUploadResume };
+async function uploadResumeFromBase64(page, base64Content, fileName, inputSelector) {
+  try {
+    console.log('📄 Uploading resume from base64 content...');
+    
+    // Remove data URL prefix if present (e.g., "data:application/pdf;base64,")
+    const base64Data = base64Content.includes(',') 
+      ? base64Content.split(',')[1] 
+      : base64Content;
+    
+    // Convert base64 to buffer
+    const buffer = Buffer.from(base64Data, 'base64');
+    
+    // Use provided filename or default
+    const resumeFileName = fileName || 'resume.pdf';
+    
+    console.log(`  ✅ Prepared: ${resumeFileName} (${buffer.length} bytes)`);
+    
+    // Upload using Playwright's setInputFiles with buffer
+    await page.locator(inputSelector).setInputFiles({
+      name: resumeFileName,
+      mimeType: 'application/pdf',
+      buffer: buffer
+    });
+    
+    console.log('  ✅ Resume uploaded successfully from base64');
+    return true;
+    
+  } catch (error) {
+    console.error('  ❌ Base64 resume upload failed:', error.message);
+    return false;
+  }
+}
+
+module.exports = { downloadAndUploadResume, uploadResumeFromBase64 };

@@ -2,7 +2,7 @@ const OpenAI = require('openai');
 const { z } = require('zod');
 
 const { detectLoginPage, handleLogin } = require('./login_handler');
-const { downloadAndUploadResume } = require('./resume_uploader');
+const { downloadAndUploadResume, uploadResumeFromBase64 } = require('./resume_uploader');
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
@@ -243,8 +243,19 @@ async function handleMyExperiencePage(stagehand, userProfile, jobDescription) {
           console.log('⚠️  Resume upload returned false');
           }
         } else if (userProfile.resumeFile.contentBase64) {
-          // Handle base64 content (need to implement this or convert to URL)
-          console.log('⚠️  Base64 resume upload not yet implemented, skipping');
+          // Use base64-based upload
+          const resumeUploaded = await uploadResumeFromBase64(
+            page, 
+            userProfile.resumeFile.contentBase64, 
+            userProfile.resumeFile.fileName || 'resume.pdf',
+            'input[type="file"]'
+          );
+          if (resumeUploaded) {
+            console.log('✅ Resume uploaded successfully from base64');
+            totalFilled++;
+          } else {
+            console.log('⚠️  Base64 resume upload returned false');
+          }
         }
       } catch (resumeError) {
         console.error('❌ Resume upload error:', resumeError.message);
@@ -345,7 +356,7 @@ async function handleMyExperiencePage(stagehand, userProfile, jobDescription) {
  * Agent creates all work experience entry forms by clicking Add/Add Another buttons
  */
 async function agentCreateWorkExperienceEntries(stagehand, totalEntriesNeeded, workExperiences) {
-  console.log(`\n🤖 Agent creating ${totalEntriesNeeded} work experience entry forms and filling dates...`);
+  console.log(`\n🤖 Agent creating ${totalEntriesNeeded} work experience entry forms...`);
 
   const agent = stagehand.agent({
     cua: true,
@@ -353,105 +364,56 @@ async function agentCreateWorkExperienceEntries(stagehand, totalEntriesNeeded, w
       modelName: "google/gemini-2.5-computer-use-preview-10-2025",
       apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
     },
-    systemPrompt: `You are a work experience form creation and date filling specialist.
+    systemPrompt: `You are a work experience form creation specialist.
 
-Your mission is to create the exact number of work experience entry forms needed and fill their From/To dates immediately.
+Your mission is to create the exact number of work experience entry forms needed by clicking Add/Add Another buttons.
 
 CRITICAL RULES:
 1. Look at the INITIAL state of the Work Experience section
 2. Follow the appropriate scenario based on what you see FIRST
-3. Create each entry form AND fill its dates before moving to the next
-4. For date fields, type MONTH first, then type YEAR
-5. Do NOT use date pickers or slashes - just type the numbers directly
-6. Skip "To" date if the person currently works there
-7. STOP once all entry forms are created with dates filled
-
-DATE FILLING TECHNIQUE:
-- From Date: Type month (e.g., "05"), type year (e.g., "2023")
-- To Date: Type month (e.g., "08"), type year (e.g., "2024")
-- NO slashes, NO date pickers - just direct typing into month and year fields`
+3. Create each entry form by clicking the appropriate buttons
+4. DO NOT fill any fields - only create the form structures
+5. STOP once all entry forms are created (you should see ${totalEntriesNeeded} work experience sections)`
   });
 
   const clicksNeeded = totalEntriesNeeded - 1; // Always need 1 less "Add Another" click than total entries
 
-  // Build date filling instructions for each work experience
-  const dateInstructions = workExperiences.map((exp, index) => {
-    const entryNum = index + 1;
-    const fromDate = exp.startDate || exp.start_date || 'N/A';
-    const toDate = exp.current ? 'Skip - currently working' : (exp.endDate || exp.end_date || 'N/A');
-    
-    // Parse dates to extract month and year
-    const parseDate = (dateStr) => {
-      if (!dateStr || dateStr === 'N/A') return { month: 'N/A', year: 'N/A' };
-      
-      // Handle different date formats
-      if (dateStr.includes('-')) {
-        // Format: "2023-05-15" or "2023-05"
-        const parts = dateStr.split('-');
-        return { month: parts[1] || 'N/A', year: parts[0] || 'N/A' };
-      } else if (dateStr.includes('/')) {
-        // Format: "05/2023"
-        const parts = dateStr.split('/');
-        return { month: parts[0] || 'N/A', year: parts[1] || 'N/A' };
-      }
-      return { month: 'N/A', year: 'N/A' };
-    };
-
-    const fromParsed = parseDate(fromDate);
-    const toParsed = toDate.includes('Skip') ? { month: 'Skip', year: 'Skip' } : parseDate(toDate);
-    
-    return `ENTRY ${entryNum}:
-- From Date: Month="${fromParsed.month}", Year="${fromParsed.year}" (type month first, then year)
-- To Date: ${toDate.includes('Skip') ? 'Skip - currently working' : `Month="${toParsed.month}", Year="${toParsed.year}" (type month first, then year)`}`;
-  }).join('\n\n');
-
-  const instruction = `Create exactly ${totalEntriesNeeded} work experience entry forms and fill their dates.
+  const instruction = `Create exactly ${totalEntriesNeeded} work experience entry forms by clicking Add/Add Another buttons.
 
 Look at the Work Experience section and determine the INITIAL state:
 
 SCENARIO A - If you INITIALLY see "Add" button:
-1. Click the "Add" button once → Fill dates for Entry 1
-2. Then click "Add Another" button ${clicksNeeded} times, filling dates after each click:
-   ${workExperiences.slice(1).map((_, index) => `   - Click "Add Another" → Fill dates for Entry ${index + 2}`).join('\n')}
-3. Result: ${totalEntriesNeeded} total entry forms with dates filled
+1. Click the "Add" button once → Work Experience 1 form appears
+2. Then click "Add Another" button ${clicksNeeded} times:
+   ${workExperiences.slice(1).map((_, index) => `   - Click "Add Another" → Work Experience ${index + 2} form appears`).join('\n')}
+3. Result: ${totalEntriesNeeded} total entry forms created
 
 SCENARIO B - If you INITIALLY see "Add Another" button:
-1. Fill dates for existing Entry 1 first
-2. Then click "Add Another" button ${clicksNeeded} times, filling dates after each click:
-   ${workExperiences.slice(1).map((_, index) => `   - Click "Add Another" → Fill dates for Entry ${index + 2}`).join('\n')}
-3. Result: 1 existing + ${clicksNeeded} new = ${totalEntriesNeeded} total entry forms with dates filled
+1. Work Experience 1 form already exists
+2. Click "Add Another" button ${clicksNeeded} times:
+   ${workExperiences.slice(1).map((_, index) => `   - Click "Add Another" → Work Experience ${index + 2} form appears`).join('\n')}
+3. Result: ${totalEntriesNeeded} total entry forms created
 
-DATE FILLING FOR EACH ENTRY:
-${dateInstructions}
 
 CRITICAL INSTRUCTIONS:
 - Base your decision on what you see FIRST, before clicking anything
 - Wait 1-2 seconds between each click for the page to update
-- Fill dates immediately after each entry form appears using the technique below
-- Skip "To" date if person currently works there
-- STOP immediately once you have ${totalEntriesNeeded} entry forms with dates filled
-
-DATE FILLING TECHNIQUE:
-1. Find the "From" date field (usually has month and year inputs)
-2. Click or focus on the MONTH field first
-3. Type the month number (e.g., "05" for May)
-4. Type the year (e.g., "2023")
-5. Repeat for "To" date field if not currently working
-6. Do NOT use date pickers, calendars, or slashes - just type numbers directly
+- DO NOT fill any fields - only create the form structures
+- STOP immediately once you have ${totalEntriesNeeded} work experience entry forms visible
 
 Mathematical precision: Need exactly ${clicksNeeded} "Add Another" clicks to reach ${totalEntriesNeeded} total forms.`;
 
   try {
     const result = await agent.execute({
       instruction,
-      maxSteps: 30, // Increased for entry creation + date filling
+      maxSteps: 20, // Standard step limit for form creation only
       highlightCursor: false
     });
 
-    console.log(`\n✅ Agent work experience entry creation and date filling complete:`);
+    console.log(`\n✅ Agent work experience entry creation complete:`);
     console.log(`  Steps taken: ${result.actions ? result.actions.length : 'N/A'}`);
     console.log(`  Success: ${result.success}`);
-    console.log(`  Target: ${totalEntriesNeeded} entry forms with dates filled`);
+    console.log(`  Target: ${totalEntriesNeeded} entry forms created`);
     
     // Add cost tracking
     if (result.usage) {
@@ -482,6 +444,99 @@ Mathematical precision: Need exactly ${clicksNeeded} "Add Another" clicks to rea
       entriesCreated: 0
     };
   }
+}
+
+/**
+ * Fill work experience dates using two-step act() approach
+ */
+async function fillWorkExperienceDates(stagehand, workExperiences) {
+  console.log(`\n📅 Filling dates for ${workExperiences.length} work experience entries...`);
+  
+  let filledCount = 0;
+  let errorCount = 0;
+
+  for (let i = 0; i < workExperiences.length; i++) {
+    const sectionNumber = i + 1;
+    const entryData = workExperiences[i];
+    
+    console.log(`\n--- Filling dates for Work Experience ${sectionNumber} ---`);
+    
+    try {
+      // Parse and format dates
+      const fromDate = entryData.startDate || entryData.start_date || '';
+      const toDate = entryData.current ? '' : (entryData.endDate || entryData.end_date || '');
+      
+      // Parse date to get month and year
+      const parseDate = (dateStr) => {
+        if (!dateStr) return { month: '', year: '' };
+        
+        // Handle different date formats
+        if (dateStr.includes('-')) {
+          // Format: "2023-05-15" or "2023-05"
+          const parts = dateStr.split('-');
+          return { month: parts[1] || '', year: parts[0] || '' };
+        } else if (dateStr.includes('/')) {
+          // Format: "05/2023"
+          const parts = dateStr.split('/');
+          return { month: parts[0] || '', year: parts[1] || '' };
+        }
+        return { month: '', year: '' };
+      };
+
+      const fromParsed = parseDate(fromDate);
+      const toParsed = parseDate(toDate);
+
+      // Fill From Date (always required)
+      if (fromParsed.month && fromParsed.year) {
+        console.log(`  📅 Filling From Date: ${fromParsed.month}/${fromParsed.year}`);
+        
+        // Step 1: Enter month
+        await stagehand.act(`enter "${fromParsed.month}" into the from month field under work experience ${sectionNumber}`);
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Step 2: Enter year  
+        await stagehand.act(`enter "${fromParsed.year}" into the from year field under work experience ${sectionNumber}`);
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        console.log(`    ✅ From Date filled: ${fromParsed.month}/${fromParsed.year}`);
+        filledCount++;
+      } else {
+        console.log(`    ⚠️ Skipping From Date - invalid format: ${fromDate}`);
+      }
+
+      // Fill To Date (only if not currently working)
+      if (!entryData.current && toParsed.month && toParsed.year) {
+        console.log(`  📅 Filling To Date: ${toParsed.month}/${toParsed.year}`);
+        
+        // Step 1: Enter month
+        await stagehand.act(`enter "${toParsed.month}" into the to month field under work experience ${sectionNumber}`);
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Step 2: Enter year
+        await stagehand.act(`enter "${toParsed.year}" into the to year field under work experience ${sectionNumber}`);
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        console.log(`    ✅ To Date filled: ${toParsed.month}/${toParsed.year}`);
+        filledCount++;
+      } else if (entryData.current) {
+        console.log(`    ⏭️ Skipping To Date - currently working here`);
+      } else {
+        console.log(`    ⚠️ Skipping To Date - invalid format: ${toDate}`);
+      }
+
+    } catch (error) {
+      console.error(`    ❌ Error filling dates for Work Experience ${sectionNumber}:`, error.message);
+      errorCount++;
+    }
+  }
+
+  console.log(`\n📊 Date filling complete: ✅ ${filledCount} dates filled, ❌ ${errorCount} errors`);
+  
+  return {
+    success: filledCount > 0,
+    filledCount: filledCount,
+    errorCount: errorCount
+  };
 }
 
 /**
@@ -608,6 +663,16 @@ async function handleWorkExperienceSection(stagehand, workExperiences, jobDescri
       console.log('⚠️  Agent button creation had issues, but continuing with form filling...');
     } else {
       console.log(`✅ Agent successfully created ${workExperiences.length} work experience entry forms`);
+    }
+
+    // Step 2.5: Fill dates for all work experience entries using two-step act() approach
+    console.log('\n📅 Step 2.5: Filling dates for all work experience entries...');
+    const dateResult = await fillWorkExperienceDates(stagehand, workExperiences);
+    
+    if (dateResult.success) {
+      console.log(`✅ Successfully filled ${dateResult.filledCount} date fields`);
+    } else {
+      console.log(`⚠️  Date filling had ${dateResult.errorCount} errors`);
     }
 
     // Step 3: Process each work experience entry individually
@@ -2212,11 +2277,15 @@ SCENARIO C - SIGN IN PAGE WITHOUT VERIFICATION MESSAGES:
 - Click the "Sign In" button
 - RETURN: verification = false (signed in successfully)
 
-IMPORTANT FIELD HANDLING:
-- DO NOT touch fields that already have text, selections, or are already checked
-- ONLY fill completely empty required fields (marked with * or red borders)
+CRITICAL FIELD HANDLING RULES:
+- DO NOT touch fields that show ANY content whatsoever
+- Password fields showing dots (••••) or asterisks (****) already have passwords - DO NOT fill them
+- Text fields with any visible text or placeholders already have content - DO NOT fill them
+- Dropdown fields with selections already made - DO NOT change them
+- Checkboxes already checked - DO NOT uncheck them
+- ONLY fill fields that are completely blank/empty AND required (marked with * or red borders)
 - ONLY check unchecked required consent/terms checkboxes
-- If a field already has a value (even if it looks wrong), leave it alone
+- When in doubt, DO NOT touch the field
 
 YOUR FINAL RESPONSE MUST CLEARLY STATE THE SCENARIO AND VERIFICATION STATUS.`
   });
@@ -2224,19 +2293,21 @@ YOUR FINAL RESPONSE MUST CLEARLY STATE THE SCENARIO AND VERIFICATION STATUS.`
   const instruction = `Complete the account creation process and detect what happens next:
 
 STEP 1: REVIEW THE FORM
-- Check all form fields to identify which ones are completely EMPTY
+- Check all form fields to identify which ones are completely BLANK/EMPTY
 - Look for empty required fields (marked with * or red borders)
 - Check for validation error messages
-- DO NOT modify fields that already have values
+- CRITICAL: Fields showing dots (••••), asterisks (****), or any text are NOT empty - DO NOT touch them
+- ONLY consider fields with no visible content as "empty"
 
-STEP 2: FILL ONLY EMPTY REQUIRED FIELDS (if any)
-- ONLY fill fields that are completely empty and required:
-  - Empty Email field: ${userProfile.workEmail}
-  - Empty Password field: ${userProfile.workPassword}
-  - Empty First Name field: ${userProfile.fullName.split(' ')[0] || ''}
-  - Empty Last Name field: ${userProfile.fullName.split(' ').slice(1).join(' ') || ''}
+STEP 2: FILL ONLY COMPLETELY EMPTY REQUIRED FIELDS (if any)
+- ONLY fill fields that are completely blank/empty and required:
+  - If Email field is completely blank: ${userProfile.workEmail}
+  - If Password field is completely blank: ${userProfile.workPassword}
+  - If First Name field is completely blank: ${userProfile.fullName.split(' ')[0] || ''}
+  - If Last Name field is completely blank: ${userProfile.fullName.split(' ').slice(1).join(' ') || ''}
 - ONLY check unchecked required consent/terms checkboxes
-- NEVER change fields that already have content
+- CRITICAL: If a field shows ANY content (text, dots, asterisks, placeholders), DO NOT touch it
+- Password fields showing dots/asterisks mean they already have passwords - DO NOT fill them
 
 STEP 3: SUBMIT THE FORM
 - Click the "Create Account", "Sign Up", "Register", or "Submit" button
