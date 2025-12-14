@@ -467,28 +467,35 @@ async function agentFillWorkExperienceDates(stagehand, workExperiences) {
     },
     systemPrompt: `You are a date filling specialist for work experience forms.
 
-Your mission is to fill From and To dates for all work experience entries using the appropriate date controls.
+Your mission is to fill From and To dates for all work experience entries using date picker controls.
 
 CRITICAL RULES:
-1. Handle different types of date controls: text inputs, dropdowns, spinbuttons, date pickers
+1. PRIORITIZE date picker controls over other methods (most reliable)
 2. For each work experience entry, fill both From and To dates (if applicable)
 3. Use the exact month and year provided in the instructions
 4. If currently working, skip the To date for that entry
 5. STOP once all dates are filled for all entries
 
+DATE PICKER USAGE:
+- Look for calendar icons, date input fields, or clickable date areas
+- Click to open the date picker interface
+- Navigate to the correct year first, then select the correct month
+- Select any day within that month (day doesn't matter, only month/year)
+- Close the picker and move to the next date field
+
 DATE CONTROL TYPES:
-- Text inputs: Type the date directly (MM/YYYY format)
+- Date pickers: Navigate to correct month/year and select (PREFERRED METHOD)
 - Month/Year dropdowns: Select from dropdown options
-- Spinbuttons: Click to increment/decrement or type directly
-- Date pickers: Navigate to correct month/year and select
+- Spinbuttons: Click to increment/decrement to set values
+- Text inputs: Type the date directly (MM/YYYY format)
 - Segmented fields: Fill month field first, then year field
 
-INTERACTION STRATEGY:
-- Try typing the date first (most common)
-- If typing fails, look for dropdown selectors
-- If dropdowns, select the correct month and year options
-- If spinbuttons, click or type to set correct values
-- Be flexible and adapt to the specific UI controls present`
+INTERACTION STRATEGY (IN ORDER OF PREFERENCE):
+1. FIRST: Look for and use date picker controls (calendar icons, date input fields)
+2. If no date picker, look for month/year dropdown selectors
+3. If no dropdowns, use spinbutton controls to increment/decrement
+4. As last resort, try typing the date directly
+5. Be systematic and use the most reliable method available`
   });
 
   // Build date instructions for each work experience
@@ -496,6 +503,11 @@ INTERACTION STRATEGY:
     const entryNum = index + 1;
     const fromDate = exp.startDate || exp.start_date || '';
     const toDate = exp.current ? 'Skip - currently working' : (exp.endDate || exp.end_date || '');
+    
+    // Debug logging to see what dates we're getting
+    console.log(`  📅 Work Experience ${entryNum} raw dates:`);
+    console.log(`     Raw fromDate: "${fromDate}"`);
+    console.log(`     Raw toDate: "${toDate}"`);
     
     // Parse date to get month and year
     const parseDate = (dateStr) => {
@@ -514,6 +526,10 @@ INTERACTION STRATEGY:
     const fromParsed = parseDate(fromDate);
     const toParsed = toDate.includes('Skip') ? { month: 'Skip', year: 'Skip' } : parseDate(toDate);
     
+    // Debug logging to see parsed results
+    console.log(`     Parsed fromDate: Month="${fromParsed.month}", Year="${fromParsed.year}"`);
+    console.log(`     Parsed toDate: Month="${toParsed.month}", Year="${toParsed.year}"`);
+    
     return `WORK EXPERIENCE ${entryNum}:
 - From Date: Month="${fromParsed.month}", Year="${fromParsed.year}"
 - To Date: ${toDate.includes('Skip') ? 'Skip - currently working' : `Month="${toParsed.month}", Year="${toParsed.year}"`}`;
@@ -528,11 +544,18 @@ INSTRUCTIONS:
 1. Go through each work experience entry in order (1, 2, 3, etc.)
 2. For each entry, fill the From date using the month and year provided
 3. Fill the To date only if not marked as "Skip - currently working"
-4. Adapt to whatever date control type is present (text, dropdown, spinbutton, etc.)
-5. If a date control doesn't accept typing, try selecting from dropdowns or using spinbuttons
-6. Move systematically through all entries until all dates are filled
+4. PREFERRED METHOD: Use date picker controls (click calendar icons or date fields to open picker)
+5. Navigate the date picker to the correct month and year, then select the date
+6. If no date picker available, fall back to dropdowns or spinbutton controls
+7. Move systematically through all entries until all dates are filled
 
 STOP once you have filled all the dates for all work experience entries.`;
+
+  // Debug logging to see what instructions are being sent to the agent
+  console.log(`\n📋 Agent Date Instructions:`);
+  console.log(dateInstructions);
+  console.log(`\n🎯 Full Agent Instruction:`);
+  console.log(instruction);
 
   try {
     const result = await agent.execute({
@@ -1200,9 +1223,9 @@ async function getAnswersForEducation(fields, entryData, jobDescription) {
   
   const jobContext = jobDescription ? `
 JOB CONTEXT:
-Title: \${jobDescription.title}
-Company: \${jobDescription.company}
-Summary: \${jobDescription.summary}
+Title: ${jobDescription.title}
+Company: ${jobDescription.company}
+Summary: ${jobDescription.summary}
 ` : '';
 
   const fieldDescriptions = fields.map((field, i) =>
@@ -1214,35 +1237,41 @@ Summary: \${jobDescription.summary}
   const prompt = `You are filling out an education entry for a job application.
 
 EDUCATION ENTRY DATA:
-School/Institution: \${entryData.school || entryData.institution || 'N/A'}
-Degree: \${entryData.degree || 'N/A'}
-Field of Study/Major: \${entryData.field || entryData.major || entryData.field_of_study || 'N/A'}
-Start Date: \${entryData.startDate || entryData.start_date || 'N/A'}
-End Date: \${entryData.endDate || entryData.end_date || entryData.current ? 'Present' : 'N/A'}
-Currently Enrolled: \${entryData.current || false}
-Graduation Year: \${entryData.graduation_year || entryData.year || 'N/A'}
-GPA: \${entryData.gpa || 'N/A'}
-Activities: \${entryData.activities || 'N/A'}
+School/Institution: ${entryData.school || entryData.institution || 'N/A'}
+Degree: ${entryData.degree || 'N/A'}
+Field of Study/Major: ${entryData.field || entryData.major || entryData.field_of_study || 'N/A'}
+Start Date: ${entryData.startDate || entryData.start_date || 'N/A'}
+End Date: ${entryData.endDate || entryData.end_date || entryData.current ? 'Present' : 'N/A'}
+Currently Enrolled: ${entryData.current || false}
+Graduation Year: ${entryData.graduation_year || entryData.year || 'N/A'}
+GPA: ${entryData.gpa || 'N/A'}
+Activities: ${entryData.activities || 'N/A'}
 
-\${jobContext}
+${jobContext}
 
 FORM FIELDS TO FILL:
-\${fieldDescriptions}
+${fieldDescriptions}
 
 INSTRUCTIONS:
 For each field, provide the most appropriate answer based on the education data above.
 
-- For school/institution fields: Use the School/Institution
-- For degree fields: Use the Degree
-- For field of study/major fields: Use the Field of Study/Major
-- For start/end date fields: Use the Start/End Date
-- For graduation year fields: Use the Graduation Year
+- For school/institution fields: Use the School/Institution name
+- For degree fields: Use ONLY the degree level (Bachelor, Master, PhD, Associate, etc.) - NOT the full degree name
+- For field of study/major fields: Use the specific major/field (e.g., "Mechanical Engineering", "Computer Science", "Business Administration")
+- For start/end date fields: Use the Start/End Date in MM/YYYY format
+- For graduation year fields: Use the Graduation Year (YYYY format)
 - For GPA fields: Use the GPA if available or return "N/A" if not available
 - If you don't have the information for a field, return "SKIP"
 
+DEGREE FORMATTING EXAMPLES:
+- "Bachelor of Science in Computer Science" → Degree: "Bachelor", Major: "Computer Science"
+- "Master of Business Administration" → Degree: "Master", Major: "Business Administration"
+- "PhD in Mechanical Engineering" → Degree: "PhD", Major: "Mechanical Engineering"
+- "Associate of Arts" → Degree: "Associate", Major: "Arts"
+
 IMPORTANT: Return JSON where the keys are the EXACT field labels (copy them exactly, including all punctuation and wording).
 
-Example: { "School Name": "MIT", "Degree": "Bachelor of Science", "Field of Study": "Computer Science", "Start Date": "08/2020", "End Date": "05/2024" }`;
+Example: { "School Name": "MIT", "Degree": "Bachelor", "Field of Study": "Computer Science", "Major": "Mechanical Engineering", "Start Date": "08/2020", "End Date": "05/2024" }`;
 
   try {
     const response = await openai.chat.completions.create({
