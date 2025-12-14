@@ -369,17 +369,23 @@ async function agentCreateWorkExperienceEntries(stagehand, totalEntriesNeeded, w
 Your mission is to create the exact number of work experience entry forms needed by clicking Add/Add Another buttons.
 
 CRITICAL RULES:
-1. Look at the INITIAL state of the Work Experience section
-2. Follow the appropriate scenario based on what you see FIRST
-3. Create each entry form by clicking the appropriate buttons
-4. DO NOT fill any fields - only create the form structures
-5. STOP once all entry forms are created (you should see ${totalEntriesNeeded} work experience sections)`
+1. FIRST: Scroll all the way to the top of the page to ensure you can see the Work Experience section
+2. Look at the INITIAL state of the Work Experience section
+3. Follow the appropriate scenario based on what you see FIRST
+4. Create each entry form by clicking the appropriate buttons
+5. DO NOT fill any fields - only create the form structures
+6. STOP once all entry forms are created (you should see ${totalEntriesNeeded} work experience sections)`
   });
 
   const clicksNeeded = totalEntriesNeeded - 1; // Always need 1 less "Add Another" click than total entries
 
   const instruction = `Create exactly ${totalEntriesNeeded} work experience entry forms by clicking Add/Add Another buttons.
 
+STEP 1: SCROLL TO TOP
+- First, scroll all the way to the top of the page to ensure you can see the Work Experience section clearly
+- This ensures you have the full view of the section before making decisions
+
+STEP 2: ANALYZE WORK EXPERIENCE SECTION
 Look at the Work Experience section and determine the INITIAL state:
 
 SCENARIO A - If you INITIALLY see "Add" button:
@@ -396,6 +402,7 @@ SCENARIO B - If you INITIALLY see "Add Another" button:
 
 
 CRITICAL INSTRUCTIONS:
+- FIRST: Scroll to the top of the page to see the Work Experience section clearly
 - Base your decision on what you see FIRST, before clicking anything
 - Wait 1-2 seconds between each click for the page to update
 - DO NOT fill any fields - only create the form structures
@@ -2534,17 +2541,25 @@ YOUR TASK (IN ORDER):
 4. STOP IMMEDIATELY after clicking the button
 
 CRITICAL FIELD HANDLING RULES:
-- NEVER modify or change fields that already have values entered
+- NEVER modify text fields that already have values entered
 - ONLY fill completely empty required fields (marked with * or red borders)
 - ONLY fix fields that show validation error messages
-- If a field already has content (even if it looks wrong), leave it alone
-- Preserve all existing form data from Phase 1
+- You CAN change dropdown selections if they appear incorrect or inappropriate
+- If a text field already has content (even if it looks wrong), leave it alone
+- Preserve all existing form data from Phase 1, except for incorrect dropdown selections
 
 SPECIAL INSTRUCTIONS:
 - For empty "How did you hear about us?" fields: Answer "LinkedIn" and press Enter
 - For empty referral fields: Use "LinkedIn" as the source
 - For empty text questions: Provide brief, professional responses based on user profile
-- Focus ONLY on missing required information needed for form submission
+- Focus on missing required information AND incorrect dropdown selections
+
+DROPDOWN CORRECTION EXAMPLES:
+- Experience level dropdowns: Ensure it matches the user's actual experience
+- Education level: Verify it matches the user's degree/education background
+- Skills/expertise dropdowns: Select options that align with user's work experience
+- Location preferences: Ensure they make sense for the user's location
+- Work authorization: Must match the user's actual authorization status
 
 USER PROFILE:
 - Name: ${userProfile.fullName}
@@ -2558,13 +2573,23 @@ ${jobDescription ? `Job Description: ${jobDescription.title} at ${jobDescription
 CRITICAL: After clicking Continue/Next/Save and Continue, STOP immediately. Do not wait for the next page to load.`
   });
 
-  const instruction = `Review this job application page for any missing fields or validation errors. ONLY fill completely empty required fields or fields showing validation errors - DO NOT modify fields that already have values.
+  const instruction = `Review this job application page for any missing fields or validation errors. Fill empty required fields and fix incorrect dropdown selections.
 
-CRITICAL: Leave existing field values untouched. Only fill what's missing.
+FIELD HANDLING RULES:
+- Fill completely empty required fields (marked with * or red borders)
+- Fix fields showing validation error messages
+- You CAN change dropdown selections if they appear incorrect or inappropriate for the job/user
+- DO NOT modify text fields that already have content
+- Leave existing text field values untouched
+
+DROPDOWN CORRECTIONS:
+- Review dropdown selections to ensure they make sense for the user profile and job
+- Change dropdowns if the current selection is clearly wrong or inappropriate
+- For example: Wrong experience level, incorrect degree type, inappropriate skills, etc.
 
 For empty "How did you hear about us" or referral questions, use "LinkedIn".
 
-Once all required fields have some value, click the Continue, Next, or Save and Continue button and stop immediately. If you see a submit button click that, wait for a confirmation page or message and then stop immediately.`;
+Once all required fields have appropriate values, click the Continue, Next, or Save and Continue button and stop immediately. If you see a submit button click that, wait for a confirmation page or message and then stop immediately.`;
 
   try {
     const result = await agent.execute({
