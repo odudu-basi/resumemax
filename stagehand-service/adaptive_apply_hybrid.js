@@ -2,6 +2,7 @@ const OpenAI = require('openai');
 const { z } = require('zod');
 
 const { detectLoginPage, handleLogin } = require('./login_handler');
+const { downloadAndUploadResume } = require('./resume_uploader');
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
@@ -221,19 +222,29 @@ async function handleMyExperiencePage(stagehand, userProfile, jobDescription) {
 
   let totalFilled = 0;
   let totalErrors = 0;
+  let totalCost = 0;
+  let totalTokens = { input: 0, output: 0 };
 
   try {
     // SECTION 1: Upload Resume
     console.log('\n📄 === RESUME SECTION ===');
-    if (userProfile.resumeFile && userProfile.resumeFile.contentBase64) {
+    if (userProfile.resumeFile && (userProfile.resumeFile.url || userProfile.resumeFile.contentBase64)) {
       try {
         const page = stagehand.context.pages()[0];
-        const resumeUploaded = await uploadResumeToForm(page, userProfile.resumeFile, 'resume');
+        
+        // Check if we have a URL or base64 content
+        if (userProfile.resumeFile.url) {
+          // Use URL-based upload
+          const resumeUploaded = await downloadAndUploadResume(page, userProfile.resumeFile.url, 'input[type="file"]');
         if (resumeUploaded) {
           console.log('✅ Resume uploaded successfully');
           totalFilled++;
         } else {
           console.log('⚠️  Resume upload returned false');
+          }
+        } else if (userProfile.resumeFile.contentBase64) {
+          // Handle base64 content (need to implement this or convert to URL)
+          console.log('⚠️  Base64 resume upload not yet implemented, skipping');
         }
       } catch (resumeError) {
         console.error('❌ Resume upload error:', resumeError.message);
@@ -254,6 +265,9 @@ async function handleMyExperiencePage(stagehand, userProfile, jobDescription) {
         );
         totalFilled += workExpResult.entriesFilled || 0;
         totalErrors += workExpResult.errors || 0;
+        totalCost += workExpResult.totalCost || 0;
+        totalTokens.input += workExpResult.totalInputTokens || 0;
+        totalTokens.output += workExpResult.totalOutputTokens || 0;
 
         console.log(`✅ Work Experience section complete: ${workExpResult.entriesFilled} entries filled`);
       } catch (workExpError) {
@@ -276,6 +290,9 @@ async function handleMyExperiencePage(stagehand, userProfile, jobDescription) {
         );
         totalFilled += educationResult.entriesFilled || 0;
         totalErrors += educationResult.errors || 0;
+        totalCost += educationResult.totalCost || 0;
+        totalTokens.input += educationResult.totalInputTokens || 0;
+        totalTokens.output += educationResult.totalOutputTokens || 0;
 
         console.log(`✅ Education section complete: ${educationResult.entriesFilled} entries filled`);
       } catch (educationError) {
@@ -292,6 +309,8 @@ async function handleMyExperiencePage(stagehand, userProfile, jobDescription) {
     console.log('\n' + '═'.repeat(80));
     console.log('✅ My Experience page handling complete');
     console.log(`   Sections filled: ${totalFilled}`);
+    console.log(`   💰 My Experience total cost: $${totalCost.toFixed(4)}`);
+    console.log(`   🔢 My Experience total tokens: ${(totalTokens.input + totalTokens.output).toLocaleString()}`);
     await stagehand.act("click the Save and Continue or Next button");
     await new Promise(resolve => setTimeout(resolve, 3000));
     console.log('✅ Navigation button clicked');
@@ -301,7 +320,10 @@ async function handleMyExperiencePage(stagehand, userProfile, jobDescription) {
       message: 'My Experience page filled successfully',
       filledCount: totalFilled,
       skippedCount: 0,
-      errorCount: totalErrors
+      errorCount: totalErrors,
+      totalCost: totalCost,
+      totalInputTokens: totalTokens.input,
+      totalOutputTokens: totalTokens.output
     };
 
   } catch (error) {
@@ -311,7 +333,10 @@ async function handleMyExperiencePage(stagehand, userProfile, jobDescription) {
       message: error.message,
       filledCount: totalFilled,
       skippedCount: 0,
-      errorCount: totalErrors + 1
+      errorCount: totalErrors + 1,
+      totalCost: totalCost,
+      totalInputTokens: totalTokens.input,
+      totalOutputTokens: totalTokens.output
     };
   }
 }
@@ -319,8 +344,8 @@ async function handleMyExperiencePage(stagehand, userProfile, jobDescription) {
 /**
  * Agent creates all work experience entry forms by clicking Add/Add Another buttons
  */
-async function agentCreateWorkExperienceEntries(stagehand, totalEntriesNeeded) {
-  console.log(`\n🤖 Agent creating ${totalEntriesNeeded} work experience entry forms...`);
+async function agentCreateWorkExperienceEntries(stagehand, totalEntriesNeeded, workExperiences) {
+  console.log(`\n🤖 Agent creating ${totalEntriesNeeded} work experience entry forms and filling dates...`);
 
   const agent = stagehand.agent({
     cua: true,
@@ -328,51 +353,82 @@ async function agentCreateWorkExperienceEntries(stagehand, totalEntriesNeeded) {
       modelName: "google/gemini-2.5-computer-use-preview-10-2025",
       apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
     },
-    systemPrompt: `You are a work experience form creation specialist.
+    systemPrompt: `You are a work experience form creation and date filling specialist.
 
-Your mission is to create the exact number of work experience entry forms needed by clicking the appropriate buttons.
+Your mission is to create the exact number of work experience entry forms needed and fill their From/To dates immediately.
 
 CRITICAL RULES:
 1. Look at the INITIAL state of the Work Experience section
 2. Follow the appropriate scenario based on what you see FIRST
-3. Create exactly the requested number of entry forms
-4. STOP once all entry forms are created`
+3. Create each entry form AND fill its dates before moving to the next
+4. Format all dates as MM/YYYY (e.g., "2023-05-15" becomes "05/2023")
+5. Skip "To" date if the person currently works there
+6. STOP once all entry forms are created with dates filled`
   });
 
   const clicksNeeded = totalEntriesNeeded - 1; // Always need 1 less "Add Another" click than total entries
 
-  const instruction = `Create exactly ${totalEntriesNeeded} work experience entry forms in the Work Experience section.
+  // Build date filling instructions for each work experience
+  const dateInstructions = workExperiences.map((exp, index) => {
+    const entryNum = index + 1;
+    const fromDate = exp.startDate || exp.start_date || 'N/A';
+    const toDate = exp.current ? 'Skip - currently working' : (exp.endDate || exp.end_date || 'N/A');
+    
+    return `ENTRY ${entryNum}:
+- From Date: ${fromDate} (format as MM/YYYY, e.g., "2023-05-15" → "05/2023")
+- To Date: ${toDate}${toDate.includes('Skip') ? '' : ' (format as MM/YYYY)'}`;
+  }).join('\n\n');
+
+  const instruction = `Create exactly ${totalEntriesNeeded} work experience entry forms and fill their dates.
 
 Look at the Work Experience section and determine the INITIAL state:
 
 SCENARIO A - If you INITIALLY see "Add" button:
-1. Click the "Add" button once (this creates the first entry form)
-2. Then click "Add Another" button ${clicksNeeded} times (this creates the remaining ${clicksNeeded} entry forms)
-3. Result: ${totalEntriesNeeded} total entry forms
+1. Click the "Add" button once → Fill dates for Entry 1
+2. Then click "Add Another" button ${clicksNeeded} times, filling dates after each click:
+   ${workExperiences.slice(1).map((_, index) => `   - Click "Add Another" → Fill dates for Entry ${index + 2}`).join('\n')}
+3. Result: ${totalEntriesNeeded} total entry forms with dates filled
 
 SCENARIO B - If you INITIALLY see "Add Another" button:
-1. Click "Add Another" button ${clicksNeeded} times (this creates ${clicksNeeded} additional entry forms)
-2. Result: 1 existing + ${clicksNeeded} new = ${totalEntriesNeeded} total entry forms
+1. Fill dates for existing Entry 1 first
+2. Then click "Add Another" button ${clicksNeeded} times, filling dates after each click:
+   ${workExperiences.slice(1).map((_, index) => `   - Click "Add Another" → Fill dates for Entry ${index + 2}`).join('\n')}
+3. Result: 1 existing + ${clicksNeeded} new = ${totalEntriesNeeded} total entry forms with dates filled
 
-IMPORTANT:
+DATE FILLING FOR EACH ENTRY:
+${dateInstructions}
+
+CRITICAL INSTRUCTIONS:
 - Base your decision on what you see FIRST, before clicking anything
 - Wait 1-2 seconds between each click for the page to update
-- STOP immediately once you have created ${totalEntriesNeeded} entry forms
-- Do NOT fill any fields - just create the entry forms
+- Fill dates immediately after each entry form appears
+- Format dates as MM/YYYY (convert "2023-05-15" to "05/2023")
+- Skip "To" date if person currently works there
+- STOP immediately once you have ${totalEntriesNeeded} entry forms with dates filled
 
-Your goal: Ensure there are exactly ${totalEntriesNeeded} work experience entry forms on the page.`;
+Mathematical precision: Need exactly ${clicksNeeded} "Add Another" clicks to reach ${totalEntriesNeeded} total forms.`;
 
   try {
     const result = await agent.execute({
       instruction,
-      maxSteps: 20, // Standard step limit for all agents
+      maxSteps: 30, // Increased for entry creation + date filling
       highlightCursor: false
     });
 
-    console.log(`\n✅ Agent work experience entry creation complete:`);
+    console.log(`\n✅ Agent work experience entry creation and date filling complete:`);
     console.log(`  Steps taken: ${result.actions ? result.actions.length : 'N/A'}`);
     console.log(`  Success: ${result.success}`);
-    console.log(`  Target: ${totalEntriesNeeded} entry forms`);
+    console.log(`  Target: ${totalEntriesNeeded} entry forms with dates filled`);
+    
+    // Add cost tracking
+    if (result.usage) {
+      const inputCost = (result.usage.input_tokens / 1000000) * 1.25;
+      const outputCost = (result.usage.output_tokens / 1000000) * 10;
+      const totalCost = (inputCost + outputCost).toFixed(4);
+      console.log(`  💰 Agent cost: $${totalCost}`);
+      console.log(`     Input tokens: ${result.usage.input_tokens.toLocaleString()}`);
+      console.log(`     Output tokens: ${result.usage.output_tokens.toLocaleString()}`);
+    }
 
     // Wait for page to stabilize after all button clicks
     await new Promise(resolve => setTimeout(resolve, 2000));
@@ -396,6 +452,97 @@ Your goal: Ensure there are exactly ${totalEntriesNeeded} work experience entry 
 }
 
 /**
+ * Agent creates all education entry forms by clicking Add/Add Another buttons
+ */
+async function agentCreateEducationEntries(stagehand, totalEntriesNeeded, educationEntries) {
+  console.log(`\n🤖 Agent creating ${totalEntriesNeeded} education entry forms...`);
+
+  const agent = stagehand.agent({
+    cua: true,
+    model: {
+      modelName: "google/gemini-2.5-computer-use-preview-10-2025",
+      apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
+    },
+    systemPrompt: `You are an education form creation specialist.
+
+Your mission is to create the exact number of education entry forms needed by clicking the appropriate buttons.
+
+CRITICAL RULES:
+1. Look at the INITIAL state of the Education section
+2. Follow the appropriate scenario based on what you see FIRST
+3. Create exactly the requested number of entry forms
+4. STOP once all entry forms are created`
+  });
+
+  const clicksNeeded = totalEntriesNeeded - 1; // Always need 1 less "Add Another" click than total entries
+
+  const instruction = `Create exactly ${totalEntriesNeeded} education entry forms in the Education section.
+
+Look at the Education section and determine the INITIAL state:
+
+SCENARIO A - If you INITIALLY see "Add" button:
+1. Click the "Add" button once (this creates the first entry form)
+2. Then click "Add Another" button ${clicksNeeded} times (this creates the remaining ${clicksNeeded} entry forms):
+   ${educationEntries.slice(1).map((_, index) => `   - Click "Add Another" → Creates Entry ${index + 2} form`).join('\n')}
+3. Result: ${totalEntriesNeeded} total entry forms
+
+SCENARIO B - If you INITIALLY see "Add Another" button:
+1. Click "Add Another" button ${clicksNeeded} times (this creates ${clicksNeeded} additional entry forms):
+   ${educationEntries.slice(1).map((_, index) => `   - Click "Add Another" → Creates Entry ${index + 2} form`).join('\n')}
+2. Result: 1 existing + ${clicksNeeded} new = ${totalEntriesNeeded} total entry forms
+
+CRITICAL INSTRUCTIONS:
+- Base your decision on what you see FIRST, before clicking anything
+- Wait 1-2 seconds between each click for the page to update
+- STOP immediately once you have created ${totalEntriesNeeded} entry forms
+- Do NOT fill any fields - just create the entry forms
+
+Mathematical precision: Need exactly ${clicksNeeded} "Add Another" clicks to reach ${totalEntriesNeeded} total forms.`;
+
+  try {
+    const result = await agent.execute({
+      instruction,
+      maxSteps: 20, // Standard step limit for entry creation only
+      highlightCursor: false
+    });
+
+    console.log(`\n✅ Agent education entry creation complete:`);
+    console.log(`  Steps taken: ${result.actions ? result.actions.length : 'N/A'}`);
+    console.log(`  Success: ${result.success}`);
+    console.log(`  Target: ${totalEntriesNeeded} entry forms`);
+    
+    // Add cost tracking
+    if (result.usage) {
+      const inputCost = (result.usage.input_tokens / 1000000) * 1.25;
+      const outputCost = (result.usage.output_tokens / 1000000) * 10;
+      const totalCost = (inputCost + outputCost).toFixed(4);
+      console.log(`  💰 Agent cost: $${totalCost}`);
+      console.log(`     Input tokens: ${result.usage.input_tokens.toLocaleString()}`);
+      console.log(`     Output tokens: ${result.usage.output_tokens.toLocaleString()}`);
+    }
+
+    // Wait for page to stabilize after all button clicks
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    return {
+      success: result.success,
+      actions: result.actions || [],
+      usage: result.usage || { input_tokens: 0, output_tokens: 0 },
+      entriesCreated: totalEntriesNeeded
+    };
+  } catch (error) {
+    console.error(`  ❌ Agent education entry creation error:`, error.message);
+    return {
+      success: false,
+      error: error.message,
+      actions: [],
+      usage: { input_tokens: 0, output_tokens: 0 },
+      entriesCreated: 0
+    };
+  }
+}
+
+/**
  * Handle Work Experience Section
  * Uses agent to create entries, then fills them individually
  */
@@ -404,6 +551,8 @@ async function handleWorkExperienceSection(stagehand, workExperiences, jobDescri
   
   let entriesFilled = 0;
   let errors = 0;
+  let totalCost = 0;
+  let totalTokens = { input: 0, output: 0 };
 
   try {
     // Step 1 & 2: Agent creates all work experience entries
@@ -411,7 +560,16 @@ async function handleWorkExperienceSection(stagehand, workExperiences, jobDescri
     console.log(`   User has ${workExperiences.length} work experience(s) in profile`);
     console.log(`   Agent will create all ${workExperiences.length} entry forms`);
 
-    const buttonResult = await agentCreateWorkExperienceEntries(stagehand, workExperiences.length);
+    const buttonResult = await agentCreateWorkExperienceEntries(stagehand, workExperiences.length, workExperiences);
+    
+    // Add agent costs to total
+    if (buttonResult.usage) {
+      const inputCost = (buttonResult.usage.input_tokens / 1000000) * 1.25;
+      const outputCost = (buttonResult.usage.output_tokens / 1000000) * 10;
+      totalCost += inputCost + outputCost;
+      totalTokens.input += buttonResult.usage.input_tokens;
+      totalTokens.output += buttonResult.usage.output_tokens;
+    }
     
     if (!buttonResult.success) {
       console.log('⚠️  Agent button creation had issues, but continuing with form filling...');
@@ -476,6 +634,13 @@ async function handleWorkExperienceSection(stagehand, workExperiences, jobDescri
         console.log(`   ✅ Received ${Object.keys(answersResult.answers).length} answers`);
         console.log(`   💰 Tokens - Input: ${answersResult.inputTokens}, Output: ${answersResult.outputTokens}`);
 
+        // Add ChatGPT costs to total
+        const chatGPTInputCost = (answersResult.inputTokens / 1_000_000) * 0.150;
+        const chatGPTOutputCost = (answersResult.outputTokens / 1_000_000) * 0.600;
+        totalCost += chatGPTInputCost + chatGPTOutputCost;
+        totalTokens.input += answersResult.inputTokens;
+        totalTokens.output += answersResult.outputTokens;
+
         // Step 3c: Fill the fields
         console.log(`\n✍️  Filling fields for Work Experience ${sectionNumber} section...`);
         const fillResult = await fillWorkExperienceFields(stagehand, entryFields, answersResult.answers, sectionNumber);
@@ -498,11 +663,16 @@ async function handleWorkExperienceSection(stagehand, workExperiences, jobDescri
     console.log(`\n=== Work Experience section complete ===`);
     console.log(`   Entries filled: ${entriesFilled}/${workExperiences.length}`);
     console.log(`   Errors: ${errors}`);
+    console.log(`   💰 Section total cost: $${totalCost.toFixed(4)}`);
+    console.log(`   🔢 Section total tokens: ${(totalTokens.input + totalTokens.output).toLocaleString()}`);
 
     return {
       success: entriesFilled > 0,
       entriesFilled: entriesFilled,
-      errors: errors
+      errors: errors,
+      totalCost: totalCost,
+      totalInputTokens: totalTokens.input,
+      totalOutputTokens: totalTokens.output
     };
 
   } catch (error) {
@@ -510,7 +680,10 @@ async function handleWorkExperienceSection(stagehand, workExperiences, jobDescri
     return {
       success: false,
       entriesFilled: entriesFilled,
-      errors: errors + 1
+      errors: errors + 1,
+      totalCost: totalCost,
+      totalInputTokens: totalTokens.input,
+      totalOutputTokens: totalTokens.output
     };
   }
 }
@@ -524,63 +697,100 @@ async function handleEducationSection(stagehand, educationEntries, jobDescriptio
   
   let entriesFilled = 0;
   let errors = 0;
+  let totalCost = 0;
+  let totalTokens = { input: 0, output: 0 };
 
   try {
-    // Step 1: Observe existing education entries
-    console.log('\n🔍 Step 1: Detecting existing education entries...');
-    const existingEntries = await observeEducationEntries(stagehand);
-    const existingCount = existingEntries.length;
-    
-    console.log(`   Found ${existingCount} existing education entry/entries`);
-    console.log(`   User has ${educationEntries.length} total education entry/entries in profile`);
-    console.log(`   Will process all ${educationEntries.length} entries`);
+    // Step 1 & 2: Agent creates all education entries
+    console.log('\n🤖 Step 1 & 2: Agent creating education entries...');
+    console.log(`   User has ${educationEntries.length} education entry/entries in profile`);
+    console.log(`   Agent will create all ${educationEntries.length} entry forms`);
 
-    // Step 2: Process each education entry
+    const buttonResult = await agentCreateEducationEntries(stagehand, educationEntries.length, educationEntries);
+    
+    // Add agent costs to total
+    if (buttonResult.usage) {
+      const inputCost = (buttonResult.usage.input_tokens / 1000000) * 1.25;
+      const outputCost = (buttonResult.usage.output_tokens / 1000000) * 10;
+      totalCost += inputCost + outputCost;
+      totalTokens.input += buttonResult.usage.input_tokens;
+      totalTokens.output += buttonResult.usage.output_tokens;
+    }
+    
+    if (!buttonResult.success) {
+      console.log('⚠️  Agent button creation had issues, but continuing with form filling...');
+    } else {
+      console.log(`✅ Agent successfully created ${educationEntries.length} education entry forms`);
+    }
+
+    // Step 3: Process each education entry individually
     for (let i = 0; i < educationEntries.length; i++) {
-      const entryNumber = i + 1;
-      const entryData = educationEntries[i];
+      const sectionNumber = i + 1; // 1, 2, 3 (matches UI section names)
+      const entryData = educationEntries[i]; // 0, 1, 2 (database index)
       
-      console.log(`\n--- Processing Education Entry #${entryNumber}/${educationEntries.length} ---`);
+      console.log(`\n--- Processing Education ${sectionNumber} Section ---`);
+      console.log(`   Database Entry Index: ${i}`);
       console.log(`   School: ${entryData.school || entryData.institution || 'N/A'}`);
       console.log(`   Degree: ${entryData.degree || 'N/A'}`);
+      console.log(`   Field of Study: ${entryData.fieldOfStudy || entryData.field_of_study || 'N/A'}`);
+      console.log(`   Start Date: ${entryData.startDate || entryData.start_date || 'N/A'}`);
+      console.log(`   End Date: ${entryData.endDate || entryData.end_date || 'N/A'}`);
 
       try {
-        // If this is not the first entry, we need to click "Add" or "Add Another"
-        if (i >= existingCount) {
-          console.log(`\n🔘 Clicking Add button to create entry #${entryNumber}...`);
-          await stagehand.act("click the Add button under Education section");
-          
-          // Wait for fields to appear
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          console.log('✅ Add button clicked, fields should now be visible');
-        } else {
-          console.log(`\n📋 Entry #${entryNumber} already exists, will fill existing fields`);
-        }
+        // Step 3a: Extract fields for this specific section
+        console.log(`\n📋 Extracting fields for Education ${sectionNumber} section...`);
+        
+        const entryFieldsSchema = z.object({
+          fields: z.array(z.object({
+            label: z.string().describe("Field label or question text"),
+            fieldType: z.enum(['text', 'date', 'textarea', 'checkbox', 'dropdown', 'email']).describe("Type of input field"),
+            isRequired: z.boolean().describe("Whether this field is required"),
+            description: z.string().describe("Full description of what this field is for")
+          }))
+        });
 
-        // Step 3: Observe fields for this entry
-        console.log(`\n👀 Observing fields for entry #${entryNumber}...`);
-        const entryFields = await stagehand.observe(
-          `Find all form fields in education entry #${entryNumber} (school, degree, field of study, dates, GPA)`
+        const extractResult = await stagehand.extract(
+          `Extract all form fields in Education ${sectionNumber} section. Get fields like school name, degree, field of study, dates, GPA, and any checkboxes.`,
+          entryFieldsSchema
         );
+
+        // Convert extracted fields to the format expected by getAnswersForEducation
+        const entryFields = extractResult.fields.map(field => ({
+          label: field.label,
+          description: field.description,
+          method: field.fieldType === 'checkbox' ? 'check' : 
+                  field.fieldType === 'dropdown' ? 'selectOption' : 'type',
+          fieldType: field.fieldType,
+          inputType: field.fieldType,
+          isRequired: field.isRequired
+        }));
         
         if (entryFields.length === 0) {
-          console.log(`⚠️  No fields found for entry #${entryNumber}, skipping`);
+          console.log(`⚠️  No fields found for Education ${sectionNumber} section, skipping`);
           errors++;
           continue;
         }
         
         console.log(`   Found ${entryFields.length} fields to fill`);
 
-        // Step 4: Get intelligent answers for this specific entry
-        console.log(`\n🤖 Getting answers from ChatGPT for entry #${entryNumber}...`);
+        // Step 3b: Get intelligent answers for this specific entry
+        console.log(`\n🤖 Getting ChatGPT answers for Education ${sectionNumber} section...`);
+        console.log(`   Using database entry ${i}: ${entryData.school || entryData.institution || 'N/A'}`);
         const answersResult = await getAnswersForEducation(entryFields, entryData, jobDescription);
         
         console.log(`   ✅ Received ${Object.keys(answersResult.answers).length} answers`);
         console.log(`   💰 Tokens - Input: ${answersResult.inputTokens}, Output: ${answersResult.outputTokens}`);
 
-        // Step 5: Fill the fields
-        console.log(`\n✍️  Filling fields for entry #${entryNumber}...`);
-        const fillResult = await fillEducationFields(stagehand, entryFields, answersResult.answers);
+        // Add ChatGPT costs to total
+        const chatGPTInputCost = (answersResult.inputTokens / 1_000_000) * 0.150;
+        const chatGPTOutputCost = (answersResult.outputTokens / 1_000_000) * 0.600;
+        totalCost += chatGPTInputCost + chatGPTOutputCost;
+        totalTokens.input += answersResult.inputTokens;
+        totalTokens.output += answersResult.outputTokens;
+
+        // Step 3c: Fill the fields
+        console.log(`\n✍️  Filling fields for Education ${sectionNumber} section...`);
+        const fillResult = await fillEducationFields(stagehand, entryFields, answersResult.answers, sectionNumber);
         
         console.log(`   ✅ ${fillResult.filledCount} filled, ⏭️  ${fillResult.skippedCount} skipped, ❌ ${fillResult.errorCount} errors`);
         
@@ -592,7 +802,7 @@ async function handleEducationSection(stagehand, educationEntries, jobDescriptio
         }
 
       } catch (entryError) {
-        console.error(`❌ Error processing entry #${entryNumber}:`, entryError.message);
+        console.error(`   ❌ Error processing Education ${sectionNumber}:`, entryError.message);
         errors++;
       }
     }
@@ -600,11 +810,16 @@ async function handleEducationSection(stagehand, educationEntries, jobDescriptio
     console.log(`\n=== Education section complete ===`);
     console.log(`   Entries filled: ${entriesFilled}/${educationEntries.length}`);
     console.log(`   Errors: ${errors}`);
+    console.log(`   💰 Section total cost: $${totalCost.toFixed(4)}`);
+    console.log(`   🔢 Section total tokens: ${(totalTokens.input + totalTokens.output).toLocaleString()}`);
 
     return {
       success: entriesFilled > 0,
       entriesFilled: entriesFilled,
-      errors: errors
+      errors: errors,
+      totalCost: totalCost,
+      totalInputTokens: totalTokens.input,
+      totalOutputTokens: totalTokens.output
     };
 
   } catch (error) {
@@ -612,7 +827,10 @@ async function handleEducationSection(stagehand, educationEntries, jobDescriptio
     return {
       success: false,
       entriesFilled: entriesFilled,
-      errors: errors + 1
+      errors: errors + 1,
+      totalCost: totalCost,
+      totalInputTokens: totalTokens.input,
+      totalOutputTokens: totalTokens.output
     };
   }
 }
@@ -760,7 +978,7 @@ async function fillWorkExperienceFields(stagehand, fields, answers, sectionNumbe
       // Handle checkboxes
       if (labelLower.includes('checkbox') || labelLower.includes('check box') || 
           fieldType === 'checkbox' || field.method === 'check') {
-        if (answer.toLowerCase() === 'true' || answer.toLowerCase() === 'yes') {
+        if (String(answer).toLowerCase() === 'true' || String(answer).toLowerCase() === 'yes') {
           await stagehand.act(`check the ${fieldLabel} under work experience ${sectionNumber}`);
           filledCount++;
           console.log(`      ✅ Checked: ${fieldLabel.substring(0, 40)}... (Work Exp ${sectionNumber})`);
@@ -842,8 +1060,9 @@ Summary: \${jobDescription.summary}
 ` : '';
 
   const fieldDescriptions = fields.map((field, i) =>
-    `\${i + 1}. Question: "\${field.description}"
-   Filling Method: \${field.method}`
+    `${i + 1}. Field: "${field.label}"
+   Type: ${field.fieldType || field.method}
+   Description: ${field.description || 'N/A'}`
   ).join('\n\n');
 
   const prompt = `You are filling out an education entry for a job application.
@@ -872,12 +1091,12 @@ For each field, provide the most appropriate answer based on the education data 
 - For field of study/major fields: Use the Field of Study/Major
 - For start/end date fields: Use the Start/End Date
 - For graduation year fields: Use the Graduation Year
-- For GPA fields: Use the GPA if available
+- For GPA fields: Use the GPA if available or return "N/A" if not available
 - If you don't have the information for a field, return "SKIP"
 
-IMPORTANT: Return JSON where the keys are the EXACT field descriptions.
+IMPORTANT: Return JSON where the keys are the EXACT field labels (copy them exactly, including all punctuation and wording).
 
-Example: { "Input field for school name.": "MIT", "Input field for degree.": "Bachelor of Science" }`;
+Example: { "School Name": "MIT", "Degree": "Bachelor of Science", "Field of Study": "Computer Science", "Start Date": "08/2020", "End Date": "05/2024" }`;
 
   try {
     const response = await openai.chat.completions.create({
@@ -915,53 +1134,60 @@ Example: { "Input field for school name.": "MIT", "Input field for degree.": "Ba
 /**
  * Fill education fields using act() commands
  */
-async function fillEducationFields(stagehand, fields, answers) {
-  console.log(`   ✍️  Filling \${fields.length} fields...`);
+async function fillEducationFields(stagehand, fields, answers, sectionNumber) {
+  console.log(`   ✍️  Filling ${fields.length} fields for Education ${sectionNumber}...`);
   
   let filledCount = 0;
   let skippedCount = 0;
   let errorCount = 0;
 
   for (const field of fields) {
-    const description = field.description || '';
-    const answer = answers[description];
+    const fieldLabel = field.label || '';
+    const answer = answers[fieldLabel];
 
     if (!answer || answer === 'SKIP') {
-      console.log(`      ⏭️  Skipping: \${description.substring(0, 50)}...`);
+      console.log(`      ⏭️  Skipping: ${fieldLabel.substring(0, 50)}...`);
       skippedCount++;
       continue;
     }
 
     try {
-      const descLower = description.toLowerCase();
+      const labelLower = fieldLabel.toLowerCase();
+      const fieldType = field.fieldType || field.method;
 
-      if (descLower.includes('checkbox') || descLower.includes('check box') || field.method === 'check') {
-        if (answer.toLowerCase() === 'true' || answer.toLowerCase() === 'yes') {
-          await stagehand.act(`check the \${description}`);
+      // Handle checkboxes
+      if (labelLower.includes('checkbox') || labelLower.includes('check box') || 
+          fieldType === 'checkbox' || field.method === 'check') {
+        if (String(answer).toLowerCase() === 'true' || String(answer).toLowerCase() === 'yes') {
+          await stagehand.act(`check the ${fieldLabel} under education ${sectionNumber}`);
           filledCount++;
-          console.log(`      ✅ Checked: \${description.substring(0, 40)}...`);
+          console.log(`      ✅ Checked: ${fieldLabel.substring(0, 40)}... (Education ${sectionNumber})`);
         } else {
           skippedCount++;
         }
         continue;
       }
 
-      if (descLower.includes('dropdown') || descLower.includes('select') || field.method === 'selectOption') {
-        await stagehand.act(`select "\${answer}" from the \${description}`);
+      // Handle dropdowns/selects
+      if (labelLower.includes('dropdown') || labelLower.includes('select') || 
+          fieldType === 'dropdown' || field.method === 'selectOption') {
+        await stagehand.act(`select "${answer}" from the ${fieldLabel} field under education ${sectionNumber}`);
         filledCount++;
-        console.log(`      ✅ Selected "\${answer}" in: \${description.substring(0, 40)}...`);
+        console.log(`      ✅ Selected "${answer}" in: ${fieldLabel.substring(0, 40)}... (Education ${sectionNumber})`);
         continue;
       }
 
-      await stagehand.act(`enter "\${answer}" into the \${description}`, {});
+      // Handle text inputs (default)
+      await stagehand.act(`enter "${answer}" into the ${fieldLabel} field under education ${sectionNumber}`, {});
       filledCount++;
-      console.log(`      ✅ Filled: \${description.substring(0, 40)}... = "\${String(answer).substring(0, 30)}..."`);
+      console.log(`      ✅ Filled: ${fieldLabel.substring(0, 40)}... = "${String(answer).substring(0, 30)}..." (Education ${sectionNumber})`);
 
     } catch (fillError) {
-      console.error(`      ❌ Error filling "\${description}":`, fillError.message);
+      console.error(`      ❌ Error filling "${fieldLabel}" in Education ${sectionNumber}: ${fillError.message}`);
       errorCount++;
     }
 
+    // Small delay between fields
     await new Promise(resolve => setTimeout(resolve, 300));
   }
 
@@ -2936,27 +3162,27 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
     if (!accountResult.skipToPhase1) {
       // Use verification result from Phase 0e agent instead of extracting
       const needsVerification = accountResult.verification || false;
-      
-      if (needsVerification) {
+    
+    if (needsVerification) {
         console.log('\n📧 Email verification required (detected by Phase 0e agent)');
         console.log(`   Scenario: ${accountResult.scenario}`);
-        const companyName = jobDescription ? jobDescription.company : 'the company';
-        
-        // Use ORIGINAL userProfile so Gmail login uses WORK EMAIL (not unique email)
-        const verificationResult = await handleEmailVerification(
-          stagehand, 
-          userProfile, 
-          companyName
-        );
-        
-        if (verificationResult.success) {
-          console.log('✅ Email verification completed successfully');
-        } else {
-          console.log('⚠️  Email verification encountered issues, continuing anyway...');
-        }
-        
-        // Small wait after verification
-        await new Promise(resolve => setTimeout(resolve, 2000));
+      const companyName = jobDescription ? jobDescription.company : 'the company';
+      
+      // Use ORIGINAL userProfile so Gmail login uses WORK EMAIL (not unique email)
+      const verificationResult = await handleEmailVerification(
+        stagehand, 
+        userProfile, 
+        companyName
+      );
+      
+      if (verificationResult.success) {
+        console.log('✅ Email verification completed successfully');
+      } else {
+        console.log('⚠️  Email verification encountered issues, continuing anyway...');
+      }
+      
+      // Small wait after verification
+      await new Promise(resolve => setTimeout(resolve, 2000));
       } else {
         console.log('  ℹ️  No email verification required (Phase 0e agent confirmed)');
         console.log(`   Scenario: ${accountResult.scenario}`);
@@ -3056,6 +3282,16 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
           fillResults = await fillFormFields(stagehand, formActions, answersResult.answers);
         } else {
           fillResults = myExpResult;
+          
+          // Add My Experience costs to Phase 1 totals
+          if (myExpResult.totalCost) {
+            phase1Cost += myExpResult.totalCost;
+            phase1Tokens.input += myExpResult.totalInputTokens || 0;
+            phase1Tokens.output += myExpResult.totalOutputTokens || 0;
+            console.log(`  💰 My Experience cost added to Phase 1: $${myExpResult.totalCost.toFixed(4)}`);
+            console.log(`     Input tokens: ${(myExpResult.totalInputTokens || 0).toLocaleString()}`);
+            console.log(`     Output tokens: ${(myExpResult.totalOutputTokens || 0).toLocaleString()}`);
+          }
         }
 
       } else {
