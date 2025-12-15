@@ -1137,8 +1137,8 @@ async function fillWorkExperienceFields(stagehand, fields, answers, sectionNumbe
             console.log(`      Target: ${targetMonthName} ${targetYear} for Work Experience ${sectionNumber}`);
             
             // Step 1: Click calendar picker for this specific work experience entry
-            await stagehand.act(`click the calendar picker icon in the ${fieldLabel} field under work experience ${sectionNumber}`);
-            await new Promise(resolve => setTimeout(resolve, 500));
+            //await stagehand.act(`click the calendar picker icon in the ${fieldLabel} field under work experience ${sectionNumber}`);
+            //await new Promise(resolve => setTimeout(resolve, 500));
             
             // Step 2: Calculate navigation needed (current year 2025)
             const currentYear = 2025;
@@ -1147,21 +1147,19 @@ async function fillWorkExperienceFields(stagehand, fields, answers, sectionNumbe
             
             // Step 3: Navigate to target year with section-specific targeting
             if (leftClicksNeeded > 0) {
-              for (let i = 0; i < leftClicksNeeded; i++) {
-                await stagehand.act(`click the left arrow on the calendar picker for work experience ${sectionNumber}`);
+              
+                await stagehand.act(`click the calendar picker icon in the ${fieldLabel} field, then click the left arrow on the shown on the calendar for work experience ${sectionNumber} ${leftClicksNeeded} times`);
                 await new Promise(resolve => setTimeout(resolve, 300));
-              }
+        
             } else if (leftClicksNeeded < 0) {
               const rightClicksNeeded = Math.abs(leftClicksNeeded);
-              for (let i = 0; i < rightClicksNeeded; i++) {
-                await stagehand.act(`click the right arrow on the calendar picker for work experience ${sectionNumber}`);
-                await new Promise(resolve => setTimeout(resolve, 300));
-              }
+              await stagehand.act(`click the calendar picker icon in the ${fieldLabel} field, then click the right arrow on the shown on the calendar for work experience ${sectionNumber} ${rightClicksNeeded} times`);
+              await new Promise(resolve => setTimeout(resolve, 300));
             }
             
             // Step 4: Select target month with section-specific targeting
             await new Promise(resolve => setTimeout(resolve, 300));
-            await stagehand.act(`click ${targetMonthName} on the calendar picker for work experience ${sectionNumber} to select the month`);
+            await stagehand.act(`click ${targetMonthName} on the calendar shown for work experience ${sectionNumber} to select the month`);
             
             filledCount++;
             console.log(`      ✅ Calendar Navigation Success: ${fieldLabel} = ${targetMonthName} ${targetYear} (Work Exp ${sectionNumber})`);
