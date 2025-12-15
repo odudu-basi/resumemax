@@ -3610,7 +3610,7 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
           }
           // If not first page, might be a confirmation page
           console.log('📋 Checking if this is a confirmation/success page...');
-          const pageContent = await stagehand.context.pages()[0].content();
+          const pageContent = await stagehand.page.content();
           if (pageContent.toLowerCase().includes('thank') ||
               pageContent.toLowerCase().includes('success') ||
               pageContent.toLowerCase().includes('confirm')) {
