@@ -1145,23 +1145,23 @@ async function fillWorkExperienceFields(stagehand, fields, answers, sectionNumbe
             const leftClicksNeeded = currentYear - targetYear;
             console.log(`      Need ${leftClicksNeeded} left clicks to reach ${targetYear}`);
             
-            // Step 3: Navigate to target year with individual arrow clicks
+            // Step 3: Navigate to target year with section-specific targeting
             if (leftClicksNeeded > 0) {
               for (let i = 0; i < leftClicksNeeded; i++) {
-                await stagehand.act(`click the left arrow on the calendar picker shown`);
+                await stagehand.act(`click the left arrow on the calendar picker for work experience ${sectionNumber}`);
                 await new Promise(resolve => setTimeout(resolve, 300));
               }
             } else if (leftClicksNeeded < 0) {
               const rightClicksNeeded = Math.abs(leftClicksNeeded);
               for (let i = 0; i < rightClicksNeeded; i++) {
-                await stagehand.act(`click the right arrow on the calendar picker shown`);
+                await stagehand.act(`click the right arrow on the calendar picker for work experience ${sectionNumber}`);
                 await new Promise(resolve => setTimeout(resolve, 300));
               }
             }
             
-            // Step 4: Select target month
+            // Step 4: Select target month with section-specific targeting
             await new Promise(resolve => setTimeout(resolve, 300));
-            await stagehand.act(`click ${targetMonthName} on the calendar picker shown to select the month `);
+            await stagehand.act(`click ${targetMonthName} on the calendar picker for work experience ${sectionNumber} to select the month`);
             
             filledCount++;
             console.log(`      ✅ Calendar Navigation Success: ${fieldLabel} = ${targetMonthName} ${targetYear} (Work Exp ${sectionNumber})`);
