@@ -1299,7 +1299,7 @@ async function observeEducationEntries(stagehand) {
  * Get intelligent answers from ChatGPT for a specific education entry
  */
 async function getAnswersForEducation(fields, entryData, jobDescription) {
-  console.log(`   🤖 Asking ChatGPT for answers (\${fields.length} fields)...`);
+  console.log(`   🤖 Asking ChatGPT for answers (${fields.length} fields)...`);
   
   const jobContext = jobDescription ? `
 JOB CONTEXT:
@@ -1317,15 +1317,15 @@ Summary: ${jobDescription.summary}
   const prompt = `You are filling out an education entry for a job application.
 
 EDUCATION ENTRY DATA:
-School/Institution: ${entryData.school || entryData.institution || 'N/A'}
-Degree: ${entryData.degree || 'N/A'}
-Field of Study/Major: ${entryData.field || entryData.major || entryData.field_of_study || 'N/A'}
-Start Date: ${entryData.startDate || entryData.start_date || 'N/A'}
-End Date: ${entryData.endDate || entryData.end_date || entryData.current ? 'Present' : 'N/A'}
+School/Institution: ${entryData.school || entryData.institution || 'SKIP'}
+Degree: ${entryData.degree || 'SKIP'}
+Field of Study/Major: ${entryData.field || entryData.major || entryData.field_of_study || 'SKIP'}
+Start Date: ${entryData.startDate || entryData.start_date || 'SKIP'}
+End Date: ${entryData.endDate || entryData.end_date || entryData.current ? 'Present' : 'SKIP'}
 Currently Enrolled: ${entryData.current || false}
-Graduation Year: ${entryData.graduation_year || entryData.year || 'N/A'}
-GPA: ${entryData.gpa || 'N/A'}
-Activities: ${entryData.activities || 'N/A'}
+Graduation Year: ${entryData.graduation_year || entryData.year || 'SKIP'}
+GPA: ${entryData.gpa || 'SKIP'}
+Activities: ${entryData.activities || 'SKIP'}
 
 ${jobContext}
 
@@ -1342,7 +1342,7 @@ For each field, provide the most appropriate answer based on the education data 
   Example: If Start Date is "08/2020" or "2020-08-15", return "2020" for From field
   Example: If End Date is "05/2024" or "2024-05-30", return "2024" for To field
 - For graduation year fields: Use the Graduation Year (YYYY format)
-- For GPA fields: Use the GPA if available or return "N/A" if not available
+- For GPA fields: Use the GPA if available or return "SKIP" if not available
 - If you don't have the information for a field, return "SKIP"
 
 DEGREE FORMATTING EXAMPLES:
@@ -1370,7 +1370,7 @@ Example: { "School Name": "MIT", "Degree": "Bachelor", "Field of Study": "Comput
     const inputTokens = response.usage.prompt_tokens;
     const outputTokens = response.usage.completion_tokens;
 
-    console.log(`   ✅ ChatGPT response received (\${Object.keys(answers).length} answers)`);
+    console.log(`   ✅ ChatGPT response received (${Object.keys(answers).length} answers)`);
 
     return {
       answers: answers,
@@ -1416,7 +1416,7 @@ async function fillEducationFields(stagehand, fields, answers, sectionNumber) {
       if (labelLower.includes('field of study') || labelLower.includes('major') || 
           labelLower.includes('field') && labelLower.includes('study')) {
         await stagehand.act(`select "${answer}" from the ${fieldLabel} dropdown under education ${sectionNumber}`);
-        filledCount++;
+          filledCount++;
         console.log(`      ✅ Selected Field of Study: "${answer}" in ${fieldLabel} (Education ${sectionNumber})`);
         continue;
       }
