@@ -629,9 +629,6 @@ ${index + 1}. ${exp.position || exp.title || 'Position'} at ${exp.company || 'Co
    End Date: ${exp.endDate || exp.end_date || (exp.current || exp.currently_working ? 'Present' : 'N/A')}
    Currently Working: ${exp.current || exp.currently_working ? 'Yes' : 'No'}`).join('\n')}
 
-DATE INFORMATION:
-${dateInstructions}
-
 INSTRUCTIONS:
 1. Go through each work experience entry in order (1, 2, 3, etc.)
 2. For each entry, fill the From date using the user work experience details provided. 
@@ -643,8 +640,6 @@ INSTRUCTIONS:
 STOP once you have filled all the dates for all work experience entries.`;
 
   // Debug logging to see what instructions are being sent to the agent
-  console.log(`\n📋 Agent Date Instructions:`);
-  console.log(dateInstructions);
   console.log(`\n🎯 Full Agent Instruction:`);
   console.log(instruction);
 
