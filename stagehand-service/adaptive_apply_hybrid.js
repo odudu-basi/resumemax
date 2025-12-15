@@ -114,8 +114,8 @@ async function agentFillWorkExperienceDates(stagehand, workExperiences) {
   const agent = stagehand.agent({
     cua: true,
     model: {
-      modelName: "google/gemini-2.5-computer-use-preview-10-2025",
-      apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
+      modelName: "anthropic/claude-haiku-4-5-20251001",
+      apiKey: process.env.ANTHROPIC_API_KEY
     },
     systemPrompt: `You are a date filling specialist for work experience forms.
 
@@ -173,12 +173,12 @@ STOP once you have filled all the dates for all work experience entries.`;
     console.log(`  Steps taken: ${result.actions ? result.actions.length : 'N/A'}`);
     console.log(`  Success: ${result.success}`);
     
-    // Add cost tracking
+    // Add cost tracking (Claude Haiku pricing)
     if (result.usage) {
-      const inputCost = (result.usage.input_tokens / 1000000) * 1.25;
-      const outputCost = (result.usage.output_tokens / 1000000) * 10;
+      const inputCost = (result.usage.input_tokens / 1000000) * 0.25;  // Claude Haiku: $0.25 per 1M input tokens
+      const outputCost = (result.usage.output_tokens / 1000000) * 1.25; // Claude Haiku: $1.25 per 1M output tokens
       const totalCost = (inputCost + outputCost).toFixed(4);
-      console.log(`  💰 Agent date filling cost: $${totalCost}`);
+      console.log(`  💰 Agent date filling cost (Claude Haiku): $${totalCost}`);
       console.log(`     Input tokens: ${result.usage.input_tokens.toLocaleString()}`);
       console.log(`     Output tokens: ${result.usage.output_tokens.toLocaleString()}`);
     }
@@ -821,10 +821,10 @@ async function handleWorkExperienceSection(stagehand, workExperiences, jobDescri
     console.log('\n📅 Step 2.5: Agent filling dates for all work experience entries...');
     const dateResult = await agentFillWorkExperienceDates(stagehand, workExperiences);
     
-    // Add date filling agent costs to total
+    // Add date filling agent costs to total (Claude Haiku pricing)
     if (dateResult.usage) {
-      const inputCost = (dateResult.usage.input_tokens / 1000000) * 1.25;
-      const outputCost = (dateResult.usage.output_tokens / 1000000) * 10;
+      const inputCost = (dateResult.usage.input_tokens / 1000000) * 0.25;  // Claude Haiku: $0.25 per 1M input tokens
+      const outputCost = (dateResult.usage.output_tokens / 1000000) * 1.25; // Claude Haiku: $1.25 per 1M output tokens
       totalCost += inputCost + outputCost;
       totalTokens.input += dateResult.usage.input_tokens;
       totalTokens.output += dateResult.usage.output_tokens;
