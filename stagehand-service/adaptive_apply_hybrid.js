@@ -18,6 +18,93 @@ function getMonthName(monthNumber) {
   return months[monthNumber] || monthNumber;
 }
 
+// Agent to validate My Experience page after Save and Continue
+async function agentMyExperienceValidation(stagehand, userProfile) {
+  console.log('\n🔍 Agent validating My Experience page for errors and missing fields...');
+  
+  const agent = stagehand.agent({
+    cua: true,
+    model: {
+      modelName: "google/gemini-2.5-computer-use-preview-10-2025",
+      apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
+    },
+    systemPrompt: `You are a My Experience page validation specialist.
+
+YOUR MISSION: Check for validation errors and fill ONLY empty required fields after the Save and Continue button was clicked.
+
+CRITICAL RULES:
+1. Look for validation error messages (red text, error icons, required field warnings)
+2. Fill ONLY completely empty required fields - NEVER modify existing field values
+3. For date fields, use the calendar picker navigation method described below
+4. Do NOT proceed to the next page - stay on the current page for validation
+5. STOP once all validation errors are resolved and required fields are filled
+
+DATE PICKER INSTRUCTIONS (if you encounter empty date fields):
+- Click the calendar picker icon for the date field
+- Wait for calendar to open
+- We are currently in 2025, so calculate how many left arrow clicks needed to reach target year. press the left arrow button the number of times needed to go to the correct year at the same time without taking another screenshot. 
+- once you have reached the correct year, use a screenshot to pick the right month. 
+
+DO NOT:
+- Modify fields that already have values (even if they seem incorrect)
+- Navigate to the next page
+- Fill optional fields that are not showing validation errors
+- Spend time on fields that are not required or showing errors`,
+
+    maxSteps: 20
+  });
+
+  const instruction = `Check this My Experience page for validation errors and missing required fields.
+
+USER PROFILE INFORMATION:
+- Name: ${userProfile.firstName} ${userProfile.lastName}
+- Email: ${userProfile.email}
+- Phone: ${userProfile.phone}
+- Location: ${userProfile.location}
+
+WORK EXPERIENCE:
+${userProfile.workExperience ? userProfile.workExperience.map((exp, i) => `
+${i + 1}. ${exp.position || exp.title} at ${exp.company}
+   Start: ${exp.startDate || exp.start_date || 'N/A'}
+   End: ${exp.endDate || exp.end_date || (exp.current ? 'Present' : 'N/A')}
+   Currently working: ${exp.current || exp.currently_working ? 'Yes' : 'No'}`).join('\n') : 'No work experience available'}
+
+EDUCATION:
+${userProfile.education ? userProfile.education.map((edu, i) => `
+${i + 1}. ${edu.degree} in ${edu.field_of_study || edu.fieldOfStudy || edu.major}
+   School: ${edu.school || edu.institution}
+   Graduation: ${edu.graduation_date || edu.graduationDate || 'N/A'}`).join('\n') : 'No education available'}
+
+TASK:
+1. Look for validation error messages (red text, error icons, required field warnings)
+2. Fill ONLY empty required fields that are showing errors
+3. For date fields, use the calendar picker method described in your system prompt
+4. Use the user profile information above to fill fields appropriately
+5. STOP once all validation errors are resolved - do NOT navigate to next page
+
+CRITICAL: Only fill fields that are completely empty AND showing validation errors. Do not modify existing field values.`;
+
+  try {
+    const result = await agent.execute({
+      instruction,
+      maxSteps: 20
+    });
+
+    console.log('✅ My Experience validation agent completed');
+    return {
+      success: true,
+      usage: result.usage
+    };
+  } catch (error) {
+    console.error('❌ My Experience validation agent failed:', error.message);
+    return {
+      success: false,
+      error: error.message,
+      usage: null
+    };
+  }
+}
+
 // Handle date picker fields with direct calendar navigation
 async function handleDatePickerField(stagehand, fieldLabel, targetDate, sectionNumber) {
   console.log(`📅 Handling date picker for ${fieldLabel}: ${targetDate}`);
@@ -41,7 +128,7 @@ async function handleDatePickerField(stagehand, fieldLabel, targetDate, sectionN
     await stagehand.act(`click the calendar picker icon in the ${fieldLabel} field under work experience ${sectionNumber}`);
     
     // Wait for calendar to fully open
-    await stagehand.page.waitForTimeout(500);
+    await new Promise(resolve => setTimeout(resolve, 500));
     
     // 2. Use known current year (2025) - no extract needed
     const currentYear = 2025;
@@ -54,18 +141,18 @@ async function handleDatePickerField(stagehand, fieldLabel, targetDate, sectionN
     if (leftClicksNeeded > 0) {
       for (let i = 0; i < leftClicksNeeded; i++) {
         await stagehand.act(`click the left arrow on the calendar picker`);
-        await stagehand.page.waitForTimeout(300); // Let UI update between clicks
+        await new Promise(resolve => setTimeout(resolve, 300)); // Let UI update between clicks
       }
     } else if (leftClicksNeeded < 0) {
       const rightClicksNeeded = Math.abs(leftClicksNeeded);
       for (let i = 0; i < rightClicksNeeded; i++) {
         await stagehand.act(`click the right arrow on the calendar picker`);
-        await stagehand.page.waitForTimeout(300); // Let UI update between clicks
+        await new Promise(resolve => setTimeout(resolve, 300)); // Let UI update between clicks
       }
     }
     
     // Wait before selecting month
-    await stagehand.page.waitForTimeout(300);
+    await new Promise(resolve => setTimeout(resolve, 300));
     
     // 4. Select target month
     await stagehand.act(`click ${targetMonthName} on the calendar picker to select the month`);
@@ -78,52 +165,8 @@ async function handleDatePickerField(stagehand, fieldLabel, targetDate, sectionN
   }
 }
 
-// Stagehand documentation for login commands
-const STAGEHAND_DOCS = `
-# STAGEHAND DOCUMENTATION
 
-## act() - Execute Actions
-Performs individual web actions using natural language instructions.
 
-**Syntax:**
-await stagehand.act(instruction, { variables })
-
-**Examples:**
-- act("click the Apply button")
-- act("click the Sign In link")
-- act("enter %email% into the email field", { variables: { email: "user@example.com" } })
-- act("enter %password% into the password field", { variables: { password: "secret123" } })
-- act("click the Create Account button")
-- act("click the Submit button")
-- act("click the Continue button")
-
-**Supported Actions:**
-- Click buttons, links, checkboxes, radio buttons
-- Fill text inputs, textareas
-- Select dropdown options
-- Type text with keyboard
-- Scroll to elements
-- Press keys (Enter, Tab, etc)
-
-**Best Practices:**
-1. Use %variableName% for ALL personal data (email, password, name, etc)
-2. Break complex tasks into simple steps
-3. Be specific: "click the blue Apply button" not "click button"
-4. One action per act() call
-5. Use variables parameter to pass sensitive data
-
-## observe() - Discover Elements
-Finds actionable elements without executing them.
-
-**Returns:** Array of actions with { description, method, arguments, selector }
-
-**Use for:** Understanding what's on the page before acting
-
-## extract() - Get Structured Data
-Retrieves structured data from webpages using natural language or Zod schemas.
-
-**Use for:** Getting page context, labels, instructions, current state
-`;
 
 /**
  * Extract job description from the page
@@ -397,6 +440,25 @@ async function handleMyExperiencePage(stagehand, userProfile, jobDescription) {
     await new Promise(resolve => setTimeout(resolve, 3000));
     console.log('✅ Navigation button clicked');
 
+    // Validation agent to check for errors and fill missing fields
+    console.log('\n🔍 Checking for validation errors and missing fields...');
+    const validationResult = await agentMyExperienceValidation(stagehand, userProfile);
+    
+    // Add validation agent costs to total
+    if (validationResult.usage) {
+      const inputCost = (validationResult.usage.input_tokens / 1000000) * 1.25;
+      const outputCost = (validationResult.usage.output_tokens / 1000000) * 10;
+      totalCost += inputCost + outputCost;
+      totalTokens.input += validationResult.usage.input_tokens;
+      totalTokens.output += validationResult.usage.output_tokens;
+    }
+    
+    if (validationResult.success) {
+      console.log('✅ Validation complete - no issues found or all issues resolved');
+    } else {
+      console.log('⚠️  Validation agent encountered issues but continuing...');
+    }
+
     return {
       success: true,
       message: 'My Experience page filled successfully',
@@ -541,37 +603,20 @@ async function agentFillWorkExperienceDates(stagehand, workExperiences) {
 Your mission is to fill From and To dates for all work experience entries using date picker controls.
 
 CRITICAL RULES:
-1. PRIORITIZE date picker controls over other methods (most reliable)
+1. Use the calendar icon to open the date picker controls
 2. For each work experience entry, fill both From and To dates (if applicable)
-3. Use the exact month and year provided in the instructions
+3. Use the exact month and year provided in the work experience details provided. 
 4. If currently working, skip the To date for that entry
 5. STOP once all dates are filled for all entries
 
 DATE ADJUSTMENT RULE:
-- Years before 2015 have been automatically adjusted to 2021 for better compatibility
+- Years before 2015 have been automatically adjusted to 2025 for better compatibility
 - Use the adjusted years provided in the instructions (not the original years)
 
 DATE PICKER USAGE:
-- Look for calendar icons, date input fields, or clickable date areas
-- Click to open the date picker interface
-- Navigate to the correct year first, then select the correct month
-- Select any day within that month (day doesn't matter, only month/year)
-- Close the picker and move to the next date field
-
-DATE CONTROL TYPES:
-- Date pickers: Navigate to correct month/year and select (PREFERRED METHOD)
-- Month/Year dropdowns: Select from dropdown options
-- Spinbuttons: Click to increment/decrement to set values
-- Text inputs: Type the date directly (MM/YYYY format)
-- Segmented fields: Fill month field first, then year field
-
-INTERACTION STRATEGY (IN ORDER OF PREFERENCE):
-1. FIRST: Look for and use date picker controls (calendar icons, date input fields)
-2. If no date picker, look for month/year dropdown selectors
-3. If no dropdowns, use spinbutton controls to increment/decrement
-4. As last resort, try typing the date directly
-5. Be systematic and use the most reliable method available`
-  });
+- click the calendar icon to open the date picker interface
+- click the left arrow button the number of times needed to go to the correct year of the work experience. do this simultanrously without taking more screenshots. for examply, once you have detemined that you need to click it 4 times (for example, if the year is 2021), then you click it 4 times before taking another screen capture. then after that, you select the correct month. `
+});
 
   // Build date instructions for each work experience
   const dateInstructions = workExperiences.map((exp, index) => {
@@ -624,17 +669,23 @@ INTERACTION STRATEGY (IN ORDER OF PREFERENCE):
 
   const instruction = `Fill the From and To dates for all ${workExperiences.length} work experience entries.
 
+WORK EXPERIENCE DETAILS:
+${workExperiences.map((exp, index) => `
+${index + 1}. ${exp.position || exp.title || 'Position'} at ${exp.company || 'Company'}
+   Start Date: ${exp.startDate || exp.start_date || 'N/A'}
+   End Date: ${exp.endDate || exp.end_date || (exp.current || exp.currently_working ? 'Present' : 'N/A')}
+   Currently Working: ${exp.current || exp.currently_working ? 'Yes' : 'No'}`).join('\n')}
+
 DATE INFORMATION:
 ${dateInstructions}
 
 INSTRUCTIONS:
 1. Go through each work experience entry in order (1, 2, 3, etc.)
-2. For each entry, fill the From date using the month and year provided
+2. For each entry, fill the From date using the user work experience details provided. 
 3. Fill the To date only if not marked as "Skip - currently working"
-4. PREFERRED METHOD: Use date picker controls (click calendar icons or date fields to open picker)
-5. Navigate the date picker to the correct month and year, then select the date
-6. If no date picker available, fall back to dropdowns or spinbutton controls
-7. Move systematically through all entries until all dates are filled
+4. PREFERRED METHOD: Use date picker controls (click calendar icons)
+5. click the left arrow button the number of times needed to go to the correct year. do this simultanrously without taking more screenshots. for examply, once you have detemined that you need to click it 4 times (for example, if the year is 2021), then you click it 4 times before taking another screen capture. then after that, you select the correct month. 
+6. Move systematically through all entries until all dates are filled. 
 
 STOP once you have filled all the dates for all work experience entries.`;
 
