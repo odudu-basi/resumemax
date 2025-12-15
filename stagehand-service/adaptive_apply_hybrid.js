@@ -618,54 +618,7 @@ DATE PICKER USAGE:
 - click the left arrow button the number of times needed to go to the correct year of the work experience. do this simultanrously without taking more screenshots. for examply, once you have detemined that you need to click it 4 times (for example, if the year is 2021), then you click it 4 times before taking another screen capture. then after that, you select the correct month. `
 });
 
-  // Build date instructions for each work experience
-  const dateInstructions = workExperiences.map((exp, index) => {
-    const entryNum = index + 1;
-    const fromDate = exp.startDate || exp.start_date || '';
-    const toDate = exp.current ? 'Skip - currently working' : (exp.endDate || exp.end_date || '');
-    
-    // Debug logging to see what dates we're getting
-    console.log(`  📅 Work Experience ${entryNum} raw dates:`);
-    console.log(`     Raw fromDate: "${fromDate}"`);
-    console.log(`     Raw toDate: "${toDate}"`);
-    
-    // Parse date to get month and year with year adjustment
-    const parseDate = (dateStr) => {
-      if (!dateStr) return { month: '', year: '' };
-      
-      let month = '';
-      let year = '';
-      
-      if (dateStr.includes('-')) {
-        const parts = dateStr.split('-');
-        month = parts[1] || '';
-        year = parts[0] || '';
-      } else if (dateStr.includes('/')) {
-        const parts = dateStr.split('/');
-        month = parts[0] || '';
-        year = parts[1] || '';
-      }
-      
-      // Adjust years before 2015 to 2021
-      if (year && parseInt(year) < 2015) {
-        console.log(`    📅 Adjusting year ${year} to 2021 (was before 2015)`);
-        year = '2021';
-      }
-      
-      return { month, year };
-    };
 
-    const fromParsed = parseDate(fromDate);
-    const toParsed = toDate.includes('Skip') ? { month: 'Skip', year: 'Skip' } : parseDate(toDate);
-    
-    // Debug logging to see parsed results
-    console.log(`     Parsed fromDate: Month="${fromParsed.month}", Year="${fromParsed.year}"`);
-    console.log(`     Parsed toDate: Month="${toParsed.month}", Year="${toParsed.year}"`);
-    
-    return `WORK EXPERIENCE ${entryNum}:
-- From Date: Month="${fromParsed.month}", Year="${fromParsed.year}"
-- To Date: ${toDate.includes('Skip') ? 'Skip - currently working' : `Month="${toParsed.month}", Year="${toParsed.year}"`}`;
-  }).join('\n\n');
 
   const instruction = `Fill the From and To dates for all ${workExperiences.length} work experience entries.
 
@@ -2776,34 +2729,40 @@ async function agentReviewAndContinue(stagehand, userProfile, jobDescription, pa
       modelName: "google/gemini-2.5-computer-use-preview-10-2025",
       apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
     },
-    systemPrompt: `You are a job application completion specialist. Phase 1 has already filled most fields on this page.
+    systemPrompt: `You are a job application validation specialist. Phase 1 has already filled most fields on this page.
 
 YOUR TASK (IN ORDER):
-1. Review the current page for any missing or incorrectly filled fields
-2. Fill ONLY empty required fields or fields with validation errors
-3. Click "Next", "Continue", or "Save and Continue" button
-4. STOP IMMEDIATELY after clicking the button
+1. FIRST: Click "Next", "Continue", or "Save and Continue" button to trigger validation
+2. Look for validation errors that appear (red text, error messages, required field warnings)
+3. Fill ONLY fields that show validation errors. the only field you are allowed to review and change is dropdown fields.
+4. FINAL: Click "Next", "Continue", or "Save and Continue" button again to proceed
+5. STOP IMMEDIATELY after the final button click
 
-CRITICAL FIELD HANDLING RULES:
-- NEVER modify text fields that already have values entered
-- ONLY fill completely empty required fields (marked with * or red borders)
-- ONLY fix fields that show validation error messages
-- You CAN change dropdown selections if they appear incorrect or inappropriate
-- If a text field already has content (even if it looks wrong), leave it alone
-- Preserve all existing form data from Phase 1, except for incorrect dropdown selections
+CRITICAL VALIDATION-ONLY RULES:
+- ONLY interact with fields that show validation errors after the first button click. ther only other field you can interact with is dropdwon fields that might have wrong information according to the user profile/information
+- Do NOT review or modify fields that are not showing validation errors
+- Do NOT fill fields just because they are empty - only if they show validation errors
+- You CAN change dropdown selections if they show validation errors
+- Ignore fields that are working fine - focus ONLY on validation errors
 
-SPECIAL INSTRUCTIONS:
-- For empty "How did you hear about us?" fields: Answer "LinkedIn" and press Enter
-- For empty referral fields: Use "LinkedIn" as the source
-- For empty text questions: Provide brief, professional responses based on user profile
-- Focus on missing required information AND incorrect dropdown selections
+VALIDATION ERROR INDICATORS:
+- Red text or error messages near fields
+- Required field warnings that appear after button click
+- Fields highlighted in red or with error borders
+- "This field is required" or similar error messages
 
-DROPDOWN CORRECTION EXAMPLES:
-- Experience level dropdowns: Ensure it matches the user's actual experience
-- Education level: Verify it matches the user's degree/education background
-- Skills/expertise dropdowns: Select options that align with user's work experience
-- Location preferences: Ensure they make sense for the user's location
-- Work authorization: Must match the user's actual authorization status
+FIELD FILLING FOR VALIDATION ERRORS ONLY:
+- For "How did you hear about us?" validation errors: Answer "LinkedIn"
+- For referral field validation errors: Use "LinkedIn" as the source
+- For text field validation errors: Provide brief, professional responses
+- For dropdown validation errors: Select appropriate option based on user profile
+
+DROPDOWN CORRECTIONS (ONLY IF SHOWING VALIDATION ERRORS):
+- Experience level: Match user's actual experience
+- Education level: Match user's degree/education background
+- Skills/expertise: Select options aligned with user's work experience
+- Location preferences: Match user's location
+- Work authorization: Match user's actual status
 
 USER PROFILE:
 - Name: ${userProfile.fullName}
@@ -2817,23 +2776,29 @@ ${jobDescription ? `Job Description: ${jobDescription.title} at ${jobDescription
 CRITICAL: After clicking Continue/Next/Save and Continue, STOP immediately. Do not wait for the next page to load.`
   });
 
-  const instruction = `Review this job application page for any missing fields or validation errors. Fill empty required fields and fix incorrect dropdown selections.
+  const instruction = `Handle validation errors on this job application page using a two-step process.
 
-FIELD HANDLING RULES:
-- Fill completely empty required fields (marked with * or red borders)
-- Fix fields showing validation error messages
-- You CAN change dropdown selections if they appear incorrect or inappropriate for the job/user
-- DO NOT modify text fields that already have content
-- Leave existing text field values untouched
+STEP 1: TRIGGER VALIDATION
+- FIRST: Click the "Continue", "Next", or "Save and Continue" button to trigger form validation
+- This will reveal any validation errors that need to be addressed
 
-DROPDOWN CORRECTIONS:
-- Review dropdown selections to ensure they make sense for the user profile and job
-- Change dropdowns if the current selection is clearly wrong or inappropriate
-- For example: Wrong experience level, incorrect degree type, inappropriate skills, etc.
+STEP 2: HANDLE VALIDATION ERRORS ONLY
+- Look for validation error messages that appear after clicking the button
+- Fill ONLY fields that show validation errors (red text, error messages, required warnings)
+- Do NOT review or modify fields that are not showing validation errors
+- Do NOT fill fields just because they are empty - only if they have validation errors
 
-For empty "How did you hear about us" or referral questions, use "LinkedIn".
+VALIDATION ERROR HANDLING:
+- For "How did you hear about us" validation errors: Answer "LinkedIn"
+- For referral field validation errors: Use "LinkedIn" as source
+- For text field validation errors: Provide brief, professional responses based on user profile
+- For dropdown validation errors: Select appropriate option for user profile and job
 
-Once all required fields have appropriate values, click the Continue, Next, or Save and Continue button and stop immediately. If you see a submit button click that, wait for a confirmation page or message and then stop immediately.`;
+STEP 3: FINAL SUBMISSION
+- Once all validation errors are resolved, click "Continue", "Next", or "Save and Continue" again
+- STOP IMMEDIATELY after the final button click
+
+CRITICAL: Only interact with fields showing validation errors. Do not review the entire form.`;
 
   try {
     const result = await agent.execute({
