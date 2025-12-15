@@ -105,6 +105,98 @@ CRITICAL: Only fill fields that are completely empty AND showing validation erro
   }
 }
 
+/**
+ * Agent fills work experience dates using intelligent date control handling
+ */
+async function agentFillWorkExperienceDates(stagehand, workExperiences) {
+  console.log(`\n📅 Agent filling dates for ${workExperiences.length} work experience entries...`);
+
+  const agent = stagehand.agent({
+    cua: true,
+    model: {
+      modelName: "google/gemini-2.5-computer-use-preview-10-2025",
+      apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
+    },
+    systemPrompt: `You are a date filling specialist for work experience forms.
+
+Your mission is to fill From and To dates for all work experience entries using date picker controls.
+
+CRITICAL RULES:
+1. Use the calendar icon to open the date picker controls
+2. For each work experience entry, fill both From and To dates (if applicable)
+3. Use the exact month and year provided in the work experience details provided. 
+4. If currently working, skip the To date for that entry
+5. STOP once all dates are filled for all entries
+6. for the simultaneous clicking, do not take more screenshots than necessary. for example, if you need to click the left arrow button 4 times, then you click it 4 times before taking another screen capture. then after that, you select the correct month.
+7. the goal is to accomplish this with minimal screenshots. do not take more screenshots than necessary.
+
+DATE ADJUSTMENT RULE:
+- Years before 2015 have been automatically adjusted to 2021 for better compatibility
+- Use the adjusted years provided in the instructions (not the original years)
+
+DATE PICKER USAGE:
+- click the calendar icon to open the date picker interface
+- click the left arrow button the number of times needed to go to the correct year of the work experience. do this simultaneously without taking more screenshots. for example, once you have determined that you need to click it 4 times (for example, if the year is 2021), then you click it 4 times before taking another screen capture. then after that, you select the correct month. `
+  });
+
+  const instruction = `Fill the From and To dates for all ${workExperiences.length} work experience entries.
+
+WORK EXPERIENCE DETAILS:
+${workExperiences.map((exp, index) => `
+${index + 1}. ${exp.position || exp.title || 'Position'} at ${exp.company || 'Company'}
+   Start Date: ${exp.startDate || exp.start_date || 'N/A'}
+   End Date: ${exp.endDate || exp.end_date || (exp.current || exp.currently_working ? 'Present' : 'N/A')}
+   Currently Working: ${exp.current || exp.currently_working ? 'Yes' : 'No'}`).join('\n')}
+
+INSTRUCTIONS:
+1. Go through each work experience entry in order (1, 2, 3, etc.)
+2. For each entry, fill the From date using the user work experience details provided. 
+3. Fill the To date only if not marked as "Skip - currently working"
+4. PREFERRED METHOD: Use date picker controls (click calendar icons)
+5. click the left arrow button the number of times needed to go to the correct year. do this simultaneously without taking more screenshots. for example, once you have determined that you need to click it 4 times (for example, if the year is 2021), then you click it 4 times before taking another screen capture. then after that, you select the correct month. 
+6. Move systematically through all entries until all dates are filled. 
+
+STOP once you have filled all the dates for all work experience entries.`;
+
+  // Debug logging to see what instructions are being sent to the agent
+  console.log(`\n🎯 Full Agent Instruction:`);
+  console.log(instruction);
+
+  try {
+    const result = await agent.execute({
+      instruction,
+      maxSteps: 40, // More steps needed for date filling across multiple entries
+      highlightCursor: false
+    });
+
+    console.log(`\n✅ Agent date filling complete:`);
+    console.log(`  Steps taken: ${result.actions ? result.actions.length : 'N/A'}`);
+    console.log(`  Success: ${result.success}`);
+    
+    // Add cost tracking
+    if (result.usage) {
+      const inputCost = (result.usage.input_tokens / 1000000) * 1.25;
+      const outputCost = (result.usage.output_tokens / 1000000) * 10;
+      const totalCost = (inputCost + outputCost).toFixed(4);
+      console.log(`  💰 Agent date filling cost: $${totalCost}`);
+      console.log(`     Input tokens: ${result.usage.input_tokens.toLocaleString()}`);
+      console.log(`     Output tokens: ${result.usage.output_tokens.toLocaleString()}`);
+    }
+
+    return {
+      success: result.success,
+      usage: result.usage || { input_tokens: 0, output_tokens: 0 }
+    };
+  } catch (error) {
+    console.error(`  ❌ Agent date filling error:`, error.message);
+    return {
+      success: false,
+      error: error.message,
+      usage: { input_tokens: 0, output_tokens: 0 }
+    };
+  }
+}
+
 // Handle date picker fields with direct calendar navigation
 async function handleDatePickerField(stagehand, fieldLabel, targetDate, sectionNumber) {
   console.log(`📅 Handling date picker for ${fieldLabel}: ${targetDate}`);
@@ -725,7 +817,24 @@ async function handleWorkExperienceSection(stagehand, workExperiences, jobDescri
       console.log(`✅ Agent successfully created ${workExperiences.length} work experience entry forms`);
     }
 
-    // Note: Date filling is now integrated into the field filling loop below
+    // Step 2.5: Fill dates using agent approach for complex date controls
+    console.log('\n📅 Step 2.5: Agent filling dates for all work experience entries...');
+    const dateResult = await agentFillWorkExperienceDates(stagehand, workExperiences);
+    
+    // Add date filling agent costs to total
+    if (dateResult.usage) {
+      const inputCost = (dateResult.usage.input_tokens / 1000000) * 1.25;
+      const outputCost = (dateResult.usage.output_tokens / 1000000) * 10;
+      totalCost += inputCost + outputCost;
+      totalTokens.input += dateResult.usage.input_tokens;
+      totalTokens.output += dateResult.usage.output_tokens;
+    }
+    
+    if (dateResult.success) {
+      console.log(`✅ Agent successfully filled dates for ${workExperiences.length} work experience entries`);
+    } else {
+      console.log(`⚠️  Agent date filling had issues, continuing with field extraction...`);
+    }
 
     // Step 3: Process each work experience entry individually
     for (let i = 0; i < workExperiences.length; i++) {
@@ -1096,6 +1205,17 @@ async function fillWorkExperienceFields(stagehand, fields, answers, sectionNumbe
     const fieldLabel = field.label || '';
     const answer = answers[fieldLabel];
 
+    // Skip date-related fields - these are handled by the agent
+    const labelLower = fieldLabel.toLowerCase();
+    if (fieldLabel === 'From' || fieldLabel === 'To' || 
+        labelLower.includes('currently work here') || 
+        labelLower.includes('i currently work here') ||
+        labelLower.includes('current') && labelLower.includes('work')) {
+      console.log(`      ⏭️  Skipping date/current work field (handled by agent): ${fieldLabel}`);
+      skippedCount++;
+      continue;
+    }
+
     if (!answer || answer === 'SKIP') {
       console.log(`      ⏭️  Skipping: ${fieldLabel.substring(0, 50)}...`);
       skippedCount++;
@@ -1103,84 +1223,7 @@ async function fillWorkExperienceFields(stagehand, fields, answers, sectionNumbe
     }
 
     try {
-      const labelLower = fieldLabel.toLowerCase();
       const fieldType = field.fieldType || field.method;
-
-      // Handle date picker fields (From/To dates) with step-by-step calendar navigation
-      if ((fieldLabel === 'From' || fieldLabel === 'To') && entryData) {
-        const targetDate = fieldLabel === 'From' 
-          ? (entryData.startDate || entryData.start_date)
-          : (entryData.endDate || entryData.end_date);
-        
-        // Only handle To field if not currently working
-        if (fieldLabel === 'To' && (entryData.current || entryData.currently_working)) {
-          console.log(`      ⏭️  Skipping To date - currently working (Work Exp ${sectionNumber})`);
-          skippedCount++;
-          continue;
-        }
-        
-        if (targetDate) {
-          console.log(`      🎯 Using step-by-step calendar navigation for ${fieldLabel}: ${targetDate}`);
-          
-          try {
-            // Parse MM/DD/YYYY format
-            const [month, day, year] = targetDate.split('/');
-            let targetYear = parseInt(year);
-            
-            // Apply year adjustment for dates before 2015
-            if (targetYear < 2015) {
-              console.log(`      📅 Adjusting year ${targetYear} to 2021 (was before 2015)`);
-              targetYear = 2021;
-            }
-            
-            const targetMonthName = getMonthName(month);
-            console.log(`      Target: ${targetMonthName} ${targetYear} for Work Experience ${sectionNumber}`);
-            
-            // Step 1: Click calendar picker for this specific work experience entry
-            //await stagehand.act(`click the calendar picker icon in the ${fieldLabel} field under work experience ${sectionNumber}`);
-            //await new Promise(resolve => setTimeout(resolve, 500));
-            
-            // Step 2: Calculate navigation needed (current year 2025)
-            const currentYear = 2025;
-            const leftClicksNeeded = currentYear - targetYear;
-            console.log(`      Need ${leftClicksNeeded} left clicks to reach ${targetYear}`);
-            
-            // Step 3: Navigate to target year with section-specific targeting
-            if (leftClicksNeeded > 0) {
-              
-                await stagehand.act(`click the calendar picker icon in the ${fieldLabel} field, then click the left arrow on the shown on the calendar for work experience ${sectionNumber} ${leftClicksNeeded} times`);
-                await new Promise(resolve => setTimeout(resolve, 300));
-        
-            } else if (leftClicksNeeded < 0) {
-              const rightClicksNeeded = Math.abs(leftClicksNeeded);
-              await stagehand.act(`click the calendar picker icon in the ${fieldLabel} field, then click the right arrow on the shown on the calendar for work experience ${sectionNumber} ${rightClicksNeeded} times`);
-              await new Promise(resolve => setTimeout(resolve, 300));
-            }
-            
-            // Step 4: Select target month with section-specific targeting
-            await new Promise(resolve => setTimeout(resolve, 300));
-            await stagehand.act(`click ${targetMonthName} on the calendar shown for work experience ${sectionNumber} to select the month`);
-            
-            filledCount++;
-            console.log(`      ✅ Calendar Navigation Success: ${fieldLabel} = ${targetMonthName} ${targetYear} (Work Exp ${sectionNumber})`);
-            
-          } catch (error) {
-            // Fallback to regular act() if calendar navigation fails
-            console.log(`      ⚠️  Calendar navigation failed, falling back to regular input: ${error.message}`);
-            await stagehand.act(`enter "${answer}" into the ${fieldLabel} field under work experience ${sectionNumber}`);
-            filledCount++;
-            console.log(`      ✅ Fallback Fill: ${fieldLabel} = ${answer} (Work Exp ${sectionNumber})`);
-          }
-        } else {
-          // No date data available, use ChatGPT answer
-          await stagehand.act(`enter "${answer}" into the ${fieldLabel} field under work experience ${sectionNumber}`);
-          filledCount++;
-          console.log(`      ✅ Regular Fill: ${fieldLabel} = ${answer} (Work Exp ${sectionNumber})`);
-        }
-        continue;
-      }
-
-
       // Handle checkboxes
       if (labelLower.includes('checkbox') || labelLower.includes('check box') || 
           fieldType === 'checkbox' || field.method === 'check') {
@@ -1295,7 +1338,9 @@ For each field, provide the most appropriate answer based on the education data 
 - For school/institution fields: Use the School/Institution name
 - For degree fields: Use ONLY the degree level (Bachelor, Master, PhD, Associate, etc.) - NOT the full degree name
 - For field of study/major fields: Use the specific major/field (e.g., "Mechanical Engineering", "Computer Science", "Business Administration")
-- For start/end date fields: Use the Start/End Date in MM/YYYY format
+- For start/end date fields (From/To): Extract ONLY the YEAR from the Start Date/End Date above (YYYY format only)
+  Example: If Start Date is "08/2020" or "2020-08-15", return "2020" for From field
+  Example: If End Date is "05/2024" or "2024-05-30", return "2024" for To field
 - For graduation year fields: Use the Graduation Year (YYYY format)
 - For GPA fields: Use the GPA if available or return "N/A" if not available
 - If you don't have the information for a field, return "SKIP"
@@ -1308,7 +1353,7 @@ DEGREE FORMATTING EXAMPLES:
 
 IMPORTANT: Return JSON where the keys are the EXACT field labels (copy them exactly, including all punctuation and wording).
 
-Example: { "School Name": "MIT", "Degree": "Bachelor", "Field of Study": "Computer Science", "Major": "Mechanical Engineering", "Start Date": "08/2020", "End Date": "05/2024" }`;
+Example: { "School Name": "MIT", "Degree": "Bachelor", "Field of Study": "Computer Science", "Major": "Mechanical Engineering", "From": "2020", "To": "2024" }`;
 
   try {
     const response = await openai.chat.completions.create({
@@ -1366,6 +1411,15 @@ async function fillEducationFields(stagehand, fields, answers, sectionNumber) {
     try {
       const labelLower = fieldLabel.toLowerCase();
       const fieldType = field.fieldType || field.method;
+
+      // Handle field of study as dropdown (special case)
+      if (labelLower.includes('field of study') || labelLower.includes('major') || 
+          labelLower.includes('field') && labelLower.includes('study')) {
+        await stagehand.act(`select "${answer}" from the ${fieldLabel} dropdown under education ${sectionNumber}`);
+        filledCount++;
+        console.log(`      ✅ Selected Field of Study: "${answer}" in ${fieldLabel} (Education ${sectionNumber})`);
+        continue;
+      }
 
       // Handle checkboxes
       if (labelLower.includes('checkbox') || labelLower.includes('check box') || 
