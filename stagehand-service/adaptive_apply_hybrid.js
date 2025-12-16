@@ -1570,6 +1570,15 @@ async function fillFormFields(stagehand, actions, answers) {
   for (const action of actions) {
     const description = action.description || '';
     const answer = answers[description];
+    
+    // Skip start date questions in Phase 1 - these will be handled by agent in Phase 2
+    const descLower = description.toLowerCase();
+    if (descLower.includes('start date') || descLower.includes('available start') || descLower.includes('when can you start')) {
+      console.log(`  ⏭️  Skipping start date question (handled by agent): ${description.substring(0, 50)}...`);
+      skippedCount++;
+      continue;
+    }
+    
     if (!answer || answer === 'SKIP') {
       console.log(`  ⏭️  Skipping: ${description}`);
       skippedCount++;
@@ -2727,6 +2736,30 @@ DROPDOWN CORRECTIONS (ONLY IF SHOWING VALIDATION ERRORS):
 - Skills/expertise: Select options aligned with user's work experience
 - Location preferences: Match user's location
 - Work authorization: Match user's actual status
+
+START DATE CALENDAR PICKER HANDLING:
+For any start date questions with calendar pickers, ALWAYS select 2 weeks from today's date.
+- Today's date: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+- Target date: ${new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+
+CALENDAR NAVIGATION INSTRUCTIONS:
+1. Click the calendar icon or date field to open the date picker
+2. Look at the current year displayed in the calendar
+3. If the target year is different from current year:
+   - Use the left/right arrows to navigate to the correct year
+   - Click the left arrow to go to previous years
+   - Click the right arrow to go to future years
+4. Once in the correct year, look at the current month displayed
+5. If the target month is different from current month:
+   - Use the left/right arrows to navigate to the correct month
+   - Or click on the month name if it's a dropdown
+6. Once in the correct month and year, click on the target day number
+7. The date should be selected and the calendar should close
+
+EXAMPLE: If today is November 1, 2025, select November 15, 2025
+- Navigate to year 2025 (if not already there)
+- Navigate to November (if not already there)  
+- Click on day "15"
 
 USER PROFILE:
 - Full Name: ${userProfile.fullName || `${userProfile.firstName || ''} ${userProfile.lastName || ''}`.trim()}
