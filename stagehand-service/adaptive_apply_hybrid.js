@@ -2804,7 +2804,7 @@ CRITICAL: Only interact with fields showing validation errors. Do not review the
   try {
     const result = await agent.execute({
       instruction,
-      maxSteps: 20,  // Standard step limit for all agents
+      maxSteps: 40,  // Standard step limit for all agents
       highlightCursor: false
     });
 
