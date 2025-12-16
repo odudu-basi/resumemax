@@ -25,8 +25,8 @@ async function agentMyExperienceValidation(stagehand, userProfile) {
   const agent = stagehand.agent({
     cua: true,
     model: {
-      modelName: "google/gemini-2.5-computer-use-preview-10-2025",
-      apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
+      modelName: "anthropic/claude-haiku-4-5-20251001",
+      apiKey: process.env.ANTHROPIC_API_KEY
     },
     systemPrompt: `You are a My Experience page validation specialist.
 
@@ -586,8 +586,8 @@ async function agentCreateWorkExperienceEntries(stagehand, totalEntriesNeeded, w
   const agent = stagehand.agent({
     cua: true,
     model: {
-      modelName: "google/gemini-2.5-computer-use-preview-10-2025",
-      apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
+      modelName: "anthropic/claude-haiku-4-5-20251001",
+      apiKey: process.env.ANTHROPIC_API_KEY
     },
     systemPrompt: `You are a work experience form creation specialist.
 
@@ -691,8 +691,8 @@ async function agentCreateEducationEntries(stagehand, totalEntriesNeeded, educat
   const agent = stagehand.agent({
     cua: true,
     model: {
-      modelName: "google/gemini-2.5-computer-use-preview-10-2025",
-      apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
+      modelName: "anthropic/claude-haiku-4-5-20251001",
+      apiKey: process.env.ANTHROPIC_API_KEY
     },
     systemPrompt: `You are an education form creation specialist.
 
@@ -1821,8 +1821,8 @@ async function agentVerificationFallback(stagehand, userProfile, existingGmailPa
     const agent = stagehand.agent({
       cua: true,
       model: {
-        modelName: "google/gemini-2.5-computer-use-preview-10-2025",
-        apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
+        modelName: "anthropic/claude-haiku-4-5-20251001",
+        apiKey: process.env.ANTHROPIC_API_KEY
       },
       systemPrompt: `You are a verification code assistant. Your task is to check if verification is needed, get the code from Gmail, and complete the verification process.`
     });
@@ -2002,8 +2002,8 @@ async function handleEmailVerification(stagehand, userProfile, companyName) {
     const agent = stagehand.agent({
       cua: true,
       model: {
-        modelName: "google/gemini-2.5-computer-use-preview-10-2025",
-        apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
+        modelName: "anthropic/claude-haiku-4-5-20251001",
+        apiKey: process.env.ANTHROPIC_API_KEY
       }
     });
     
@@ -2074,8 +2074,8 @@ async function agentNavigateToAccountCreation(stagehand, userProfile) {
   const agent = stagehand.agent({
     cua: true,
     model: {
-      modelName: "google/gemini-2.5-computer-use-preview-10-2025",
-      apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
+      modelName: "anthropic/claude-haiku-4-5-20251001",
+      apiKey: process.env.ANTHROPIC_API_KEY
     },
     systemPrompt: `You are a navigation and detection specialist for Workday job applications.
 
@@ -2412,8 +2412,8 @@ async function agentReviewAndSubmitAccountCreation(stagehand, userProfile) {
   const agent = stagehand.agent({
     cua: true,
     model: {
-      modelName: "google/gemini-2.5-computer-use-preview-10-2025",
-      apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
+      modelName: "anthropic/claude-haiku-4-5-20251001",
+      apiKey: process.env.ANTHROPIC_API_KEY
     },
     systemPrompt: `You are an account creation completion and verification detection specialist.
 
@@ -2690,8 +2690,8 @@ async function agentReviewAndContinue(stagehand, userProfile, jobDescription, pa
   const agent = stagehand.agent({
     cua: true,
     model: {
-      modelName: "google/gemini-2.5-computer-use-preview-10-2025",
-      apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
+      modelName: "anthropic/claude-haiku-4-5-20251001",
+      apiKey: process.env.ANTHROPIC_API_KEY
     },
     systemPrompt: `You are a job application validation specialist. Phase 1 has already filled most fields on this page.
 
@@ -2805,8 +2805,8 @@ async function agentReviewAndComplete(stagehand, userProfile, jobDescription) {
   const agent = stagehand.agent({
     cua: true,
     model: {
-      modelName: "google/gemini-2.5-computer-use-preview-10-2025",
-      apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
+      modelName: "anthropic/claude-haiku-4-5-20251001",
+      apiKey: process.env.ANTHROPIC_API_KEY
     },
     systemPrompt: `You are an error correction assistant for job application forms.
 
