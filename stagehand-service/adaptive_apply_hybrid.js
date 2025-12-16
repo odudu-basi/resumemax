@@ -2699,7 +2699,7 @@ YOUR TASK (IN ORDER):
 1. FIRST: Click "Next", "Continue", or "Save and Continue" button to trigger validation
 2. Look for validation errors that appear (red text, error messages, required field warnings)
 3. Fill ONLY fields that show validation errors. the only field you are allowed to review and change is dropdown fields.
-4. FINAL: Click "Next", "Continue", or "Save and Continue" button again to proceed
+4. FINAL: Click "Next", "Continue", or "Save and Continue" button again to proceed to the next page. 
 5. STOP IMMEDIATELY after the final button click
 
 CRITICAL VALIDATION-ONLY RULES:
@@ -2729,10 +2729,47 @@ DROPDOWN CORRECTIONS (ONLY IF SHOWING VALIDATION ERRORS):
 - Work authorization: Match user's actual status
 
 USER PROFILE:
-- Name: ${userProfile.fullName}
+- Full Name: ${userProfile.fullName || `${userProfile.firstName || ''} ${userProfile.lastName || ''}`.trim()}
 - Email: ${userProfile.workEmail}
 - Phone: ${userProfile.phone}
 - Location: ${userProfile.location}
+- LinkedIn: ${userProfile.linkedinUrl || 'N/A'}
+- Portfolio: ${userProfile.portfolioUrl || 'N/A'}
+- Website: ${userProfile.websiteUrl || 'N/A'}
+
+DEMOGRAPHICS:
+- Gender: ${userProfile.demographics?.gender || userProfile.gender || 'N/A'}
+- Race: ${userProfile.demographics?.race || userProfile.race || 'N/A'}
+- Ethnicity: ${userProfile.demographics?.ethnicity || userProfile.ethnicity || 'N/A'}
+- Veteran Status: ${userProfile.demographics?.veteranStatus || userProfile.veteranStatus || userProfile.veteran_status || 'N/A'}
+- Disability Status: ${userProfile.demographics?.disabilityStatus || userProfile.disabilityStatus || userProfile.disability_status || 'N/A'}
+- Preferred Name: ${userProfile.demographics?.preferredName || userProfile.preferredName || 'N/A'}
+- Pronouns: ${userProfile.demographics?.pronouns || userProfile.pronouns || 'N/A'}
+
+WORK AUTHORIZATION:
+- Authorized to Work: ${userProfile.workAuthorization?.authorizedToWork || userProfile.workAuthorized ? 'Yes' : 'No'}
+- Requires Sponsorship: ${userProfile.workAuthorization?.requiresSponsorship || userProfile.requiresSponsorship ? 'Yes' : 'No'}
+- Visa Status: ${userProfile.workAuthorization?.visaStatus || userProfile.visaStatus || 'N/A'}
+- Available Start Date: ${userProfile.workAuthorization?.availableStartDate || userProfile.availableStartDate || 'N/A'}
+
+EXPERIENCE:
+- Years of Experience: ${userProfile.experience?.yearsOfExperience || userProfile.yearsOfExperience || 'N/A'}
+- Current Company: ${userProfile.experience?.currentCompany || userProfile.currentCompany || 'N/A'}
+- Current Title: ${userProfile.experience?.currentTitle || userProfile.currentTitle || 'N/A'}
+
+
+
+SKILLS:
+- Technical: ${Array.isArray(userProfile.skills?.technical) ? userProfile.skills.technical.join(', ') : userProfile.skills?.technical || 'N/A'}
+- Languages: ${Array.isArray(userProfile.skills?.languages) ? userProfile.skills.languages.join(', ') : userProfile.skills?.languages || 'N/A'}
+
+APPLICATION DATA:
+- Career Highlight: ${userProfile.applicationData?.careerHighlight || 'N/A'}
+- Salary Expectation: ${userProfile.applicationData?.salaryExpectation || 'N/A'}
+- Notice Period: ${userProfile.applicationData?.noticePeriod || 'N/A'}
+- Referral Source: ${userProfile.applicationData?.referralSource || 'LinkedIn'}
+- Why Join: ${userProfile.applicationData?.whyJoin || 'N/A'}
+- Cover Letter: ${userProfile.coverLetter ? 'Available' : 'N/A'}
 
 JOB CONTEXT:
 ${jobDescription ? `Job Description: ${jobDescription.title} at ${jobDescription.company}. ${jobDescription.summary && typeof jobDescription.summary === 'string' ? jobDescription.summary.substring(0, 300) + "..." : ""}...` : 'No job description available'}
