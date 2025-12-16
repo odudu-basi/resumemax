@@ -36,22 +36,22 @@ CRITICAL RULES:
 1. Look for validation error messages (red text, error icons, required field warnings)
 2. Fill ONLY completely empty required fields - NEVER modify existing field values
 3. For date fields, use the calendar picker navigation method described below
-4. Do NOT proceed to the next page - stay on the current page for validation
-5. STOP once all validation errors are resolved and required fields are filled
+4. proceed to the next page by pressing the next or save and continue or continue button. once on the next page, that is the page title is not my expeirnce, or it seems like a different content, stop. 
+5. STOP once you are on the next page. 
 
 DATE PICKER INSTRUCTIONS (if you encounter empty date fields):
 - Click the calendar picker icon for the date field
 - Wait for calendar to open
-- We are currently in 2025, so calculate how many left arrow clicks needed to reach target year. press the left arrow button the number of times needed to go to the correct year at the same time without taking another screenshot. 
+- you know our current year(the actual year int he real world, not in the form), so calculate how many left arrow clicks needed to reach target year. press the left arrow button the number of times needed to go to the correct year at the same time without taking another screenshot. 
 - once you have reached the correct year, use a screenshot to pick the right month. 
 
 DO NOT:
 - Modify fields that already have values (even if they seem incorrect)
-- Navigate to the next page
+
 - Fill optional fields that are not showing validation errors
 - Spend time on fields that are not required or showing errors`,
 
-    maxSteps: 20
+    maxSteps: 30
   });
 
   const instruction = `Check this My Experience page for validation errors and missing required fields.
@@ -538,8 +538,8 @@ async function handleMyExperiencePage(stagehand, userProfile, jobDescription) {
     
     // Add validation agent costs to total
     if (validationResult.usage) {
-      const inputCost = (validationResult.usage.input_tokens / 1000000) * 1.25;
-      const outputCost = (validationResult.usage.output_tokens / 1000000) * 10;
+      const inputCost = (validationResult.usage.input_tokens / 1000000) * 0.25;  // Claude Haiku: $0.25 per 1M input tokens
+      const outputCost = (validationResult.usage.output_tokens / 1000000) * 1.25; // Claude Haiku: $1.25 per 1M output tokens
       totalCost += inputCost + outputCost;
       totalTokens.input += validationResult.usage.input_tokens;
       totalTokens.output += validationResult.usage.output_tokens;
@@ -649,8 +649,8 @@ Mathematical precision: Need exactly ${clicksNeeded} "Add Another" clicks to rea
     
     // Add cost tracking
     if (result.usage) {
-      const inputCost = (result.usage.input_tokens / 1000000) * 1.25;
-      const outputCost = (result.usage.output_tokens / 1000000) * 10;
+      const inputCost = (result.usage.input_tokens / 1000000) * 0.25;  // Claude Haiku: $0.25 per 1M input tokens
+      const outputCost = (result.usage.output_tokens / 1000000) * 1.25; // Claude Haiku: $1.25 per 1M output tokens
       const totalCost = (inputCost + outputCost).toFixed(4);
       console.log(`  💰 Agent cost: $${totalCost}`);
       console.log(`     Input tokens: ${result.usage.input_tokens.toLocaleString()}`);
@@ -753,8 +753,8 @@ Mathematical precision: Need exactly ${clicksNeeded} "Add Another" clicks to rea
     
     // Add cost tracking
     if (result.usage) {
-      const inputCost = (result.usage.input_tokens / 1000000) * 1.25;
-      const outputCost = (result.usage.output_tokens / 1000000) * 10;
+      const inputCost = (result.usage.input_tokens / 1000000) * 0.25;  // Claude Haiku: $0.25 per 1M input tokens
+      const outputCost = (result.usage.output_tokens / 1000000) * 1.25; // Claude Haiku: $1.25 per 1M output tokens
       const totalCost = (inputCost + outputCost).toFixed(4);
       console.log(`  💰 Agent cost: $${totalCost}`);
       console.log(`     Input tokens: ${result.usage.input_tokens.toLocaleString()}`);
@@ -804,8 +804,8 @@ async function handleWorkExperienceSection(stagehand, workExperiences, jobDescri
     
     // Add agent costs to total
     if (buttonResult.usage) {
-      const inputCost = (buttonResult.usage.input_tokens / 1000000) * 1.25;
-      const outputCost = (buttonResult.usage.output_tokens / 1000000) * 10;
+      const inputCost = (buttonResult.usage.input_tokens / 1000000) * 0.25;  // Claude Haiku: $0.25 per 1M input tokens
+      const outputCost = (buttonResult.usage.output_tokens / 1000000) * 1.25; // Claude Haiku: $1.25 per 1M output tokens
       totalCost += inputCost + outputCost;
       totalTokens.input += buttonResult.usage.input_tokens;
       totalTokens.output += buttonResult.usage.output_tokens;
@@ -969,8 +969,8 @@ async function handleEducationSection(stagehand, educationEntries, jobDescriptio
     
     // Add agent costs to total
     if (buttonResult.usage) {
-      const inputCost = (buttonResult.usage.input_tokens / 1000000) * 1.25;
-      const outputCost = (buttonResult.usage.output_tokens / 1000000) * 10;
+      const inputCost = (buttonResult.usage.input_tokens / 1000000) * 0.25;  // Claude Haiku: $0.25 per 1M input tokens
+      const outputCost = (buttonResult.usage.output_tokens / 1000000) * 1.25; // Claude Haiku: $1.25 per 1M output tokens
       totalCost += inputCost + outputCost;
       totalTokens.input += buttonResult.usage.input_tokens;
       totalTokens.output += buttonResult.usage.output_tokens;
@@ -1895,8 +1895,8 @@ IMPORTANT:
     if (result.usage) {
       const inputTokens = result.usage.input_tokens || 0;
       const outputTokens = result.usage.output_tokens || 0;
-      const inputCost = (inputTokens / 1000000) * 1.25;
-      const outputCost = (outputTokens / 1000000) * 10;
+      const inputCost = (inputTokens / 1000000) * 0.25;  // Claude Haiku: $0.25 per 1M input tokens
+      const outputCost = (outputTokens / 1000000) * 1.25; // Claude Haiku: $1.25 per 1M output tokens
       const totalCost = inputCost + outputCost;
 
       console.log(`  💰 Agent verification cost: $${totalCost.toFixed(4)}`);
@@ -2564,8 +2564,8 @@ async function agentAccountCreation(stagehand, userProfile) {
     const navigationResult = await agentNavigateToAccountCreation(stagehand, userProfile);
     
     if (navigationResult.usage) {
-      const inputCost = (navigationResult.usage.input_tokens / 1000000) * 1.25;
-      const outputCost = (navigationResult.usage.output_tokens / 1000000) * 10;
+      const inputCost = (navigationResult.usage.input_tokens / 1000000) * 0.25;  // Claude Haiku: $0.25 per 1M input tokens
+      const outputCost = (navigationResult.usage.output_tokens / 1000000) * 1.25; // Claude Haiku: $1.25 per 1M output tokens
       totalCost += inputCost + outputCost;
       totalTokens.input += navigationResult.usage.input_tokens;
       totalTokens.output += navigationResult.usage.output_tokens;
@@ -2631,8 +2631,8 @@ async function agentAccountCreation(stagehand, userProfile) {
     
     // Add Phase 0e cost to total
     if (submitResult.usage) {
-      const inputCost = (submitResult.usage.input_tokens / 1000000) * 1.25;
-      const outputCost = (submitResult.usage.output_tokens / 1000000) * 10;
+      const inputCost = (submitResult.usage.input_tokens / 1000000) * 0.25;  // Claude Haiku: $0.25 per 1M input tokens
+      const outputCost = (submitResult.usage.output_tokens / 1000000) * 1.25; // Claude Haiku: $1.25 per 1M output tokens
       totalCost += inputCost + outputCost;
       totalTokens.input += submitResult.usage.input_tokens;
       totalTokens.output += submitResult.usage.output_tokens;
@@ -2778,8 +2778,8 @@ CRITICAL: Only interact with fields showing validation errors. Do not review the
     if (result.usage) {
       const inputTokens = result.usage.input_tokens || 0;
       const outputTokens = result.usage.output_tokens || 0;
-      const inputCost = (inputTokens / 1000000) * 1.25;
-      const outputCost = (outputTokens / 1000000) * 10;
+      const inputCost = (inputTokens / 1000000) * 0.25;  // Claude Haiku: $0.25 per 1M input tokens
+      const outputCost = (outputTokens / 1000000) * 1.25; // Claude Haiku: $1.25 per 1M output tokens
       const totalCost = (inputCost + outputCost).toFixed(4);
       console.log(`  💰 Page ${pageNumber} Agent cost: $${totalCost}`);
       console.log(`     Input tokens: ${inputTokens.toLocaleString()}`);
@@ -2899,8 +2899,8 @@ Your job ends when you click the Continue/Next button.`;
     if (result.usage) {
       const inputTokens = result.usage.input_tokens || 0;
       const outputTokens = result.usage.output_tokens || 0;
-      const inputCost = (inputTokens / 1000000) * 1.25;
-      const outputCost = (outputTokens / 1000000) * 10;
+      const inputCost = (inputTokens / 1000000) * 0.25;  // Claude Haiku: $0.25 per 1M input tokens
+      const outputCost = (outputTokens / 1000000) * 1.25; // Claude Haiku: $1.25 per 1M output tokens
       const totalCost = (inputCost + outputCost).toFixed(4);
       console.log(`  💰 Phase 2 cost: $${totalCost}`);
       console.log(`     Input tokens: ${inputTokens.toLocaleString()}`);
@@ -3425,8 +3425,8 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
     if (accountResult.usage) {
       const inputTokens = accountResult.usage.input_tokens || 0;
       const outputTokens = accountResult.usage.output_tokens || 0;
-      const inputCost = (inputTokens / 1000000) * 1.25;  // Gemini pricing (same as Phase 2)
-      const outputCost = (outputTokens / 1000000) * 10;
+      const inputCost = (inputTokens / 1000000) * 0.25;  // Claude Haiku: $0.25 per 1M input tokens
+      const outputCost = (outputTokens / 1000000) * 1.25; // Claude Haiku: $1.25 per 1M output tokens
       phase0Cost = inputCost + outputCost;
     } else {
       phase0Cost = 0.02; // Fallback estimate
@@ -3658,8 +3658,8 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
           if (agentResult.usage) {
             const inputTokens = agentResult.usage.input_tokens || 0;
             const outputTokens = agentResult.usage.output_tokens || 0;
-            const inputCost = (inputTokens / 1000000) * 1.25;
-            const outputCost = (outputTokens / 1000000) * 10;
+            const inputCost = (inputTokens / 1000000) * 0.25;  // Claude Haiku: $0.25 per 1M input tokens
+            const outputCost = (outputTokens / 1000000) * 1.25; // Claude Haiku: $1.25 per 1M output tokens
             const pageCost = inputCost + outputCost;
             phase2Cost += pageCost;
             phase2Tokens.input += inputTokens;
@@ -3740,8 +3740,8 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
         verificationResult = fallbackResult;
         // Track verification cost
         if (fallbackResult.usage) {
-          const inputCost = (fallbackResult.usage.input_tokens / 1000000) * 1.25;
-          const outputCost = (fallbackResult.usage.output_tokens / 1000000) * 10;
+          const inputCost = (fallbackResult.usage.input_tokens / 1000000) * 0.25;  // Claude Haiku: $0.25 per 1M input tokens
+          const outputCost = (fallbackResult.usage.output_tokens / 1000000) * 1.25; // Claude Haiku: $1.25 per 1M output tokens
           verificationCost = inputCost + outputCost;
         }
       } else {
