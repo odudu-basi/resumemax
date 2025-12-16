@@ -33,11 +33,12 @@ async function agentMyExperienceValidation(stagehand, userProfile) {
 YOUR MISSION: Check for validation errors and fill ONLY empty required fields after the Save and Continue button was clicked.
 
 CRITICAL RULES:
-1. Look for validation error messages (red text, error icons, required field warnings)
-2. Fill ONLY completely empty required fields - NEVER modify existing field values
-3. For date fields, use the calendar picker navigation method described below
-4. proceed to the next page by pressing the next or save and continue or continue button. once on the next page, that is the page title is not my expeirnce, or it seems like a different content, stop. 
-5. STOP once you are on the next page. 
+1. first of all, look at the page title. if it is not my experience, or it seems like a different content, stop. 
+2. Look for validation error messages (red text, error icons, required field warnings)
+3. Fill ONLY completely empty required fields - NEVER modify existing field values
+4. For date fields, use the calendar picker navigation method described below
+5. proceed to the next page by pressing the next or save and continue or continue button. once on the next page, that is the page title is not my expeirnce, or it seems like a different content, stop. 
+6. STOP once you are on the next page. 
 
 DATE PICKER INSTRUCTIONS (if you encounter empty date fields):
 - Click the calendar picker icon for the date field
@@ -51,7 +52,7 @@ DO NOT:
 - Fill optional fields that are not showing validation errors
 - Spend time on fields that are not required or showing errors`,
 
-    maxSteps: 30
+    maxSteps: 40
   });
 
   const instruction = `Check this My Experience page for validation errors and missing required fields.
