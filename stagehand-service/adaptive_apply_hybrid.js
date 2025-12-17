@@ -28,34 +28,46 @@ async function agentMyExperienceValidation(stagehand, userProfile) {
       modelName: "anthropic/claude-haiku-4-5-20251001",
       apiKey: process.env.ANTHROPIC_API_KEY
     },
-    systemPrompt: `You are a My Experience page validation specialist.
+    systemPrompt: `You are a My Experience page validation specialist and date filler.
 
-YOUR MISSION: Check for validation errors and fill ONLY empty required fields after the Save and Continue button was clicked.
+YOUR MISSION: Check for validation errors, fill ONLY empty required fields, and handle ALL date fields after the Save and Continue button was clicked.
 
 CRITICAL RULES:
-1. first of all, look at the page title. if it is not my experience, or it seems like a different content, stop. 
+1. First of all, look at the page title. If it is not "My Experience", or it seems like different content, stop.
 2. Look for validation error messages (red text, error icons, required field warnings)
 3. Fill ONLY completely empty required fields - NEVER modify existing field values
-4. For date fields, use the calendar picker navigation method described below
-5. proceed to the next page by pressing the next or save and continue or continue button. once on the next page, that is the page title is not my expeirnce, or it seems like a different content, stop. 
-6. STOP once you are on the next page. 
+4. Handle ALL date fields (work experience AND education dates) using the calendar picker method
+5. Proceed to the next page by pressing the next or save and continue or continue button
+6. STOP once you are on the next page (when page title is not "My Experience")
 
-DATE PICKER INSTRUCTIONS (if you encounter empty date fields):
+DATE PICKER INSTRUCTIONS (for ALL empty date fields):
 - Click the calendar picker icon for the date field
 - Wait for calendar to open
-- you know our current year(the actual year int he real world, not in the form), so calculate how many left arrow clicks needed to reach target year. press the left arrow button the number of times needed to go to the correct year at the same time without taking another screenshot. 
-- once you have reached the correct year, use a screenshot to pick the right month. 
+- Calculate how many left arrow clicks needed to reach target year from current year
+- Click the left arrow button the required number of times simultaneously without taking another screenshot
+- Once you have reached the correct year, use a screenshot to pick the right month
+- For simultaneous clicking: if you need to click 4 times, click it 4 times before taking another screen capture
+- Goal is to accomplish this with minimal screenshots
+
+WORK EXPERIENCE DATE HANDLING:
+- Fill From and To dates for each work experience entry
+- If currently working, skip the To date for that entry
+- Use exact month and year from work experience details
+- Go through entries systematically (1, 2, 3, etc.)
+
+EDUCATION DATE HANDLING:
+- Fill From and To dates for education entries
+- Use graduation dates and calculate start dates appropriately
 
 DO NOT:
 - Modify fields that already have values (even if they seem incorrect)
-
 - Fill optional fields that are not showing validation errors
 - Spend time on fields that are not required or showing errors`,
 
     maxSteps: 40
   });
 
-  const instruction = `Check this My Experience page for validation errors and missing required fields.
+  const instruction = `Check this My Experience page for validation errors, missing required fields, and handle ALL date filling.
 
 USER PROFILE INFORMATION:
 - Name: ${userProfile.firstName} ${userProfile.lastName}
@@ -63,32 +75,41 @@ USER PROFILE INFORMATION:
 - Phone: ${userProfile.phone}
 - Location: ${userProfile.location}
 
-WORK EXPERIENCE:
+WORK EXPERIENCE (fill ALL empty date fields):
 ${userProfile.workExperience ? userProfile.workExperience.map((exp, i) => `
 ${i + 1}. ${exp.position || exp.title} at ${exp.company}
    Start: ${exp.startDate || exp.start_date || 'N/A'}
    End: ${exp.endDate || exp.end_date || (exp.current ? 'Present' : 'N/A')}
    Currently working: ${exp.current || exp.currently_working ? 'Yes' : 'No'}`).join('\n') : 'No work experience available'}
 
-EDUCATION:
-${userProfile.education ? userProfile.education.map((edu, i) => `
-${i + 1}. ${edu.degree} in ${edu.field_of_study || edu.fieldOfStudy || edu.major}
+EDUCATION (fill ALL empty date fields):
+${Array.isArray(userProfile.education) ? userProfile.education.map((edu, i) => `
+${i + 1}. ${edu.degree} in ${edu.field || edu.fieldOfStudy || edu.major}
    School: ${edu.school || edu.institution}
-   Graduation: ${edu.graduation_date || edu.graduationDate || 'N/A'}`).join('\n') : 'No education available'}
+   Start Year: ${edu.startYear || 'N/A'}
+   End Year: ${edu.endYear || edu.year || 'N/A'}`).join('\n') : 
+   userProfile.education ? `1. ${userProfile.education.degree} in ${userProfile.education.field || userProfile.education.fieldOfStudy}
+   School: ${userProfile.education.school || userProfile.education.institution}
+   Start Year: ${userProfile.education.startYear || 'N/A'}
+   End Year: ${userProfile.education.endYear || userProfile.education.year || 'N/A'}` : 'No education available'}
 
 TASK:
 1. Look for validation error messages (red text, error icons, required field warnings)
 2. Fill ONLY empty required fields that are showing errors
-3. For date fields, use the calendar picker method described in your system prompt
+3. Handle ALL empty date fields (work experience AND education) using calendar picker method
 4. Use the user profile information above to fill fields appropriately
-5. STOP once all validation errors are resolved - do NOT navigate to next page
+5. For date fields: use calendar pickers, navigate to correct year with left arrows, select correct month
+6. Move through all work experience entries systematically (1, 2, 3, etc.)
+7. Handle education date fields after work experience
+8. Click Save and Continue when all validation errors are resolved
+9. STOP once you reach the next page
 
-CRITICAL: Only fill fields that are completely empty AND showing validation errors. Do not modify existing field values.`;
+CRITICAL: Only fill fields that are completely empty AND showing validation errors OR are date fields that need to be filled. Do not modify existing field values.`;
 
   try {
     const result = await agent.execute({
       instruction,
-      maxSteps: 20
+      maxSteps: 40
     });
 
     console.log('✅ My Experience validation agent completed');
@@ -106,97 +127,6 @@ CRITICAL: Only fill fields that are completely empty AND showing validation erro
   }
 }
 
-/**
- * Agent fills work experience dates using intelligent date control handling
- */
-async function agentFillWorkExperienceDates(stagehand, workExperiences) {
-  console.log(`\n📅 Agent filling dates for ${workExperiences.length} work experience entries...`);
-
-  const agent = stagehand.agent({
-    cua: true,
-    model: {
-      modelName: "anthropic/claude-haiku-4-5-20251001",
-      apiKey: process.env.ANTHROPIC_API_KEY
-    },
-    systemPrompt: `You are a date filling specialist for work experience forms.
-
-Your mission is to fill From and To dates for all work experience entries using date picker controls.
-
-CRITICAL RULES:
-1. Use the calendar icon to open the date picker controls
-2. For each work experience entry, fill both From and To dates (if applicable)
-3. Use the exact month and year provided in the work experience details provided. 
-4. If currently working, skip the To date for that entry
-5. STOP once all dates are filled for all entries
-6. for the simultaneous clicking, do not take more screenshots than necessary. for example, if you need to click the left arrow button 4 times, then you click it 4 times before taking another screen capture. then after that, you select the correct month.
-7. the goal is to accomplish this with minimal screenshots. do not take more screenshots than necessary.
-
-DATE ADJUSTMENT RULE:
-- Years before 2015 have been automatically adjusted to 2021 for better compatibility
-- Use the adjusted years provided in the instructions (not the original years)
-
-DATE PICKER USAGE:
-- click the calendar icon to open the date picker interface
-- click the left arrow button the number of times needed to go to the correct year of the work experience. do this simultaneously without taking more screenshots. for example, once you have determined that you need to click it 4 times (for example, if the year is 2021), then you click it 4 times before taking another screen capture. then after that, you select the correct month. `
-  });
-
-  const instruction = `Fill the From and To dates for all ${workExperiences.length} work experience entries.
-
-WORK EXPERIENCE DETAILS:
-${workExperiences.map((exp, index) => `
-${index + 1}. ${exp.position || exp.title || 'Position'} at ${exp.company || 'Company'}
-   Start Date: ${exp.startDate || exp.start_date || 'N/A'}
-   End Date: ${exp.endDate || exp.end_date || (exp.current || exp.currently_working ? 'Present' : 'N/A')}
-   Currently Working: ${exp.current || exp.currently_working ? 'Yes' : 'No'}`).join('\n')}
-
-INSTRUCTIONS:
-1. Go through each work experience entry in order (1, 2, 3, etc.)
-2. For each entry, fill the From date using the user work experience details provided. 
-3. Fill the To date only if not marked as "Skip - currently working"
-4. PREFERRED METHOD: Use date picker controls (click calendar icons)
-5. click the left arrow button the number of times needed to go to the correct year. do this simultaneously without taking more screenshots. for example, once you have determined that you need to click it 4 times (for example, if the year is 2021), then you click it 4 times before taking another screen capture. then after that, you select the correct month. 
-6. Move systematically through all entries until all dates are filled. 
-
-STOP once you have filled all the dates for all work experience entries.`;
-
-  // Debug logging to see what instructions are being sent to the agent
-  console.log(`\n🎯 Full Agent Instruction:`);
-  console.log(instruction);
-
-  try {
-    const result = await agent.execute({
-      instruction,
-      maxSteps: 40, // More steps needed for date filling across multiple entries
-      highlightCursor: false
-    });
-
-    console.log(`\n✅ Agent date filling complete:`);
-    console.log(`  Steps taken: ${result.actions ? result.actions.length : 'N/A'}`);
-    console.log(`  Success: ${result.success}`);
-    
-    // Add cost tracking (Claude Haiku pricing)
-    if (result.usage) {
-      const inputCost = (result.usage.input_tokens / 1000000) * 0.25;  // Claude Haiku: $0.25 per 1M input tokens
-      const outputCost = (result.usage.output_tokens / 1000000) * 1.25; // Claude Haiku: $1.25 per 1M output tokens
-      const totalCost = (inputCost + outputCost).toFixed(4);
-      console.log(`  💰 Agent date filling cost (Claude Haiku): $${totalCost}`);
-      console.log(`     Input tokens: ${result.usage.input_tokens.toLocaleString()}`);
-      console.log(`     Output tokens: ${result.usage.output_tokens.toLocaleString()}`);
-    }
-
-    return {
-      success: result.success,
-      usage: result.usage || { input_tokens: 0, output_tokens: 0 }
-    };
-  } catch (error) {
-    console.error(`  ❌ Agent date filling error:`, error.message);
-    return {
-      success: false,
-      error: error.message,
-      usage: { input_tokens: 0, output_tokens: 0 }
-    };
-  }
-}
 
 // Handle date picker fields with direct calendar navigation
 async function handleDatePickerField(stagehand, fieldLabel, targetDate, sectionNumber) {
@@ -818,24 +748,6 @@ async function handleWorkExperienceSection(stagehand, workExperiences, jobDescri
       console.log(`✅ Agent successfully created ${workExperiences.length} work experience entry forms`);
     }
 
-    // Step 2.5: Fill dates using agent approach for complex date controls
-    console.log('\n📅 Step 2.5: Agent filling dates for all work experience entries...');
-    const dateResult = await agentFillWorkExperienceDates(stagehand, workExperiences);
-    
-    // Add date filling agent costs to total (Claude Haiku pricing)
-    if (dateResult.usage) {
-      const inputCost = (dateResult.usage.input_tokens / 1000000) * 0.25;  // Claude Haiku: $0.25 per 1M input tokens
-      const outputCost = (dateResult.usage.output_tokens / 1000000) * 1.25; // Claude Haiku: $1.25 per 1M output tokens
-      totalCost += inputCost + outputCost;
-      totalTokens.input += dateResult.usage.input_tokens;
-      totalTokens.output += dateResult.usage.output_tokens;
-    }
-    
-    if (dateResult.success) {
-      console.log(`✅ Agent successfully filled dates for ${workExperiences.length} work experience entries`);
-    } else {
-      console.log(`⚠️  Agent date filling had issues, continuing with field extraction...`);
-    }
 
     // Step 3: Process each work experience entry individually
     for (let i = 0; i < workExperiences.length; i++) {
@@ -1141,12 +1053,16 @@ Fill each field using ONLY the work experience data above. Be precise and accura
 - For job title/position fields: Use EXACTLY "${entryData.position || entryData.title || 'N/A'}"
 - For company name fields: Use EXACTLY "${entryData.company || 'N/A'}"
 - For location fields: Use EXACTLY "${entryData.location || 'N/A'}"
-- For start date fields: Use "${entryData.startDate || entryData.start_date || 'N/A'}" formatted as MM/YYYY (e.g., "01/2022")
-- For end date fields: Use "${entryData.endDate || entryData.end_date || (entryData.current ? 'Present' : 'N/A')}" formatted as MM/YYYY (e.g., "12/2023") or "Present" if currently working
 - For description/responsibilities fields: Use "${entryData.description || 'N/A'}"
-- For "currently working here" checkboxes: Answer "${entryData.current || false}"
 - For any other fields: Use the most relevant data from THIS SPECIFIC entry above
 - If you don't have the information for a field, return "SKIP"
+
+CRITICAL: SKIP ALL DATE FIELDS - Return "SKIP" for any fields related to:
+- Start dates, From dates, Begin dates
+- End dates, To dates, Until dates  
+- "Currently working here" or similar checkboxes
+- Any date-related questions
+These will be handled by a specialized agent later.
 
 CRITICAL RULES:
 1. Use ONLY the data provided above for THIS specific work experience entry
