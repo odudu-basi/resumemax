@@ -127,6 +127,105 @@ CRITICAL: Only fill fields that are completely empty AND showing validation erro
   }
 }
 
+/**
+ * Agent handles Self-Identify page with demographics and EEO information
+ */
+async function agentSelfIdentify(stagehand, userProfile) {
+  console.log('\n🏷️ Agent handling Self-Identify page...');
+  
+  const agent = stagehand.agent({
+    cua: true,
+    model: {
+      modelName: "anthropic/claude-haiku-4-5-20251001",
+      apiKey: process.env.ANTHROPIC_API_KEY
+    },
+    systemPrompt: `You are a Self-Identify page specialist for job applications.
+
+YOUR MISSION: Fill out the entire Self-Identify page with demographic and EEO information, then navigate to the next page.
+
+CRITICAL RULES:
+1. First, check the page title. If it is not "Self-Identify" or similar demographic content, stop immediately.
+2. Fill out ALL fields on the page using the user's demographic information
+3. For date fields: Try typing the current date first (MM/DD/YYYY format)
+4. If typing doesn't work for dates: Open calendar picker and select current date
+5. Navigate to next page by clicking "Next", "Continue", or "Save and Continue" button
+6. STOP immediately once you are no longer on the Self-Identify page
+
+DATE HANDLING STRATEGY:
+- First attempt: Type current date directly in MM/DD/YYYY format
+- If that fails: Click calendar picker icon, navigate to current month/year, select today's date
+- Current date to use: ${new Date().toLocaleDateString('en-US')}
+
+FIELD FILLING APPROACH:
+- Use dropdown selections when available
+- Fill text fields with appropriate demographic information
+- Check boxes as needed based on user profile
+- Skip any fields that are optional and you don't have information for
+
+NAVIGATION:
+- After filling all fields, look for "Next", "Continue", "Save and Continue" buttons
+- Click the appropriate button to proceed
+- Monitor page title/content to detect when you've left the Self-Identify page
+- STOP as soon as page content changes from Self-Identify
+
+DO NOT:
+- Fill fields with made-up information
+- Spend excessive time on optional fields
+- Continue working after leaving the Self-Identify page`,
+
+    maxSteps: 30
+  });
+
+  const currentDate = new Date().toLocaleDateString('en-US');
+
+  const instruction = `Fill out this Self-Identify page completely and navigate to the next page.
+
+USER DEMOGRAPHIC INFORMATION:
+- Name: ${userProfile.firstName} ${userProfile.lastName}
+- Email: ${userProfile.email}
+- Phone: ${userProfile.phone}
+- Location: ${userProfile.location}
+
+DEMOGRAPHICS (use if available):
+${userProfile.demographics ? `
+- Gender: ${userProfile.demographics.gender || 'Prefer not to say'}
+- Race/Ethnicity: ${userProfile.demographics.race || 'Prefer not to say'}
+- Veteran Status: ${userProfile.demographics.veteran_status || 'No'}
+- Disability Status: ${userProfile.demographics.disability_status || 'No'}
+` : '- No demographic information available - use "Prefer not to say" options'}
+
+TASK SEQUENCE:
+1. Verify this is the Self-Identify page (check page title/content)
+2. Fill out all demographic and EEO fields using the information above
+3. For any date fields, use current date: ${currentDate}
+   - Try typing first: ${currentDate}
+   - If typing fails: Use calendar picker to select today's date
+4. Complete all required fields and any optional fields you have information for
+5. Click "Next", "Continue", or "Save and Continue" to proceed
+6. STOP immediately when you reach the next page
+
+CRITICAL: Stop as soon as the page title or content indicates you are no longer on the Self-Identify page.`;
+
+  try {
+    const result = await agent.execute({
+      instruction,
+      maxSteps: 30
+    });
+
+    console.log('✅ Self-Identify agent completed');
+    return {
+      success: true,
+      usage: result.usage
+    };
+  } catch (error) {
+    console.error('❌ Self-Identify agent failed:', error.message);
+    return {
+      success: false,
+      error: error.message,
+      usage: null
+    };
+  }
+}
 
 // Handle date picker fields with direct calendar navigation
 async function handleDatePickerField(stagehand, fieldLabel, targetDate, sectionNumber) {
@@ -3583,8 +3682,51 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
           }
         }
 
+      }
+      // Self-Identify page detection and handling
+      else if (pageTitle.toLowerCase().includes("self-identify") || 
+               pageTitle.toLowerCase().includes("self identify") ||
+               pageTitle.toLowerCase().includes("demographics") ||
+               pageTitle.toLowerCase().includes("equal opportunity")) {
+        console.log('🏷️ Detected "Self-Identify" page - using specialized agent handler');
+
+        const selfIdentifyResult = await agentSelfIdentify(stagehand, workdayUserProfile);
+        
+        // Add Self-Identify costs to Phase 1 totals
+        if (selfIdentifyResult.usage) {
+          const inputCost = (selfIdentifyResult.usage.input_tokens / 1000000) * 0.25;  // Claude Haiku: $0.25 per 1M input tokens
+          const outputCost = (selfIdentifyResult.usage.output_tokens / 1000000) * 1.25; // Claude Haiku: $1.25 per 1M output tokens
+          const agentCost = inputCost + outputCost;
+          
+          phase1Cost += agentCost;
+          phase1Tokens.input += selfIdentifyResult.usage.input_tokens || 0;
+          phase1Tokens.output += selfIdentifyResult.usage.output_tokens || 0;
+          
+          console.log(`  💰 Self-Identify agent cost: $${agentCost.toFixed(4)}`);
+          console.log(`     Input tokens: ${(selfIdentifyResult.usage.input_tokens || 0).toLocaleString()}`);
+          console.log(`     Output tokens: ${(selfIdentifyResult.usage.output_tokens || 0).toLocaleString()}`);
+        }
+        
+        if (selfIdentifyResult.success) {
+          console.log('✅ Self-Identify page completed successfully');
+          // Set fillResults to indicate successful completion
+          fillResults = { 
+            filledCount: 1, 
+            skippedCount: 0, 
+            errorCount: 0, 
+            success: true,
+            message: "Self-Identify page completed by agent"
+          };
+        } else {
+          console.log('⚠️ Self-Identify agent failed, falling back to standard flow...');
+          // Fall back to standard flow
+          const formActions = await observeFormFieldsEnhanced(stagehand);
+          answersResult = await getIntelligentAnswers(formActions, workdayUserProfile, jobDescription);
+          fillResults = await fillFormFields(stagehand, formActions, answersResult.answers);
+        }
+
       } else {
-        // Standard flow for all other pages (not "My Experience")
+        // Standard flow for all other pages (not "My Experience" or "Self-Identify")
         console.log('📝 Using standard flow for this page');
 
         // Enhanced observation: extract questions + observe fields
