@@ -2885,6 +2885,31 @@ CRITICAL: Only interact with fields showing validation errors. Do not review the
 }
 
 /**
+ * Check if URL is a Workday job application
+ */
+function isWorkdayJobUrl(url) {
+  const workdayPatterns = [
+    /\.myworkdayjobs\.com/,           // Standard Workday pattern
+    /workday/i,                      // Contains "workday" anywhere
+    /myworkdayjobs/i                 // Contains "myworkdayjobs"
+  ];
+  
+  return workdayPatterns.some(pattern => pattern.test(url));
+}
+
+/**
+ * Generate unique email for job applications using plus addressing
+ */
+function generateJobEmail(baseEmail) {
+  const [username, domain] = baseEmail.split('@');
+  
+  // Generate two random numbers (10-99)
+  const randomNumbers = Math.floor(Math.random() * 90) + 10;
+  
+  return `${username}+${randomNumbers}@${domain}`;
+}
+
+/**
  * Predefined Workday application steps
  */
 const WORKDAY_STEPS = [

@@ -900,6 +900,13 @@ function HomeSection() {
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {/* Workday Support Notice */}
+          <div className="flex justify-center mb-6">
+            <p className="text-2xl sm:text-3xl font-pacifico italic text-transparent bg-clip-text bg-gradient-to-r from-gray-600 via-gray-800 to-black text-center">
+              Currently we only support Workday job applications. Other integrations coming in the future
+            </p>
+          </div>
+          
           <div className="flex flex-col sm:flex-row gap-4 items-center justify-center max-w-3xl mx-auto py-8">
             <div className="flex-1 w-full">
               <Input
