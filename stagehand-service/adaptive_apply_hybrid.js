@@ -2722,13 +2722,13 @@ async function agentReviewAndContinue(stagehand, userProfile, jobDescription, pa
 
 YOUR TASK (IN ORDER):
 1. FIRST: Click "Next", "Continue", or "Save and Continue" button to trigger validation
-2. Look for validation errors that appear (red text, error messages, required field warnings)
-3. Fill ONLY fields that show validation errors. the only field you are allowed to review and change is dropdown fields.
-4. FINAL: Click "Next", "Continue", or "Save and Continue" button again to proceed to the next page. 
+2. look at the validationn error message that appears at the top of the page, and then only fill the fields it mentioned have valdiation errors(red text, error messages, required field warnings)
+3. Fill ONLY those fields. the only field you are allowed to review and change is dropdown fields.
+4. FINAL: Click "Next", "Continue", or "Save and Continue" button again to proceed to the next page. once you clickt his button the second time, your job is complete. 
 5. STOP IMMEDIATELY after the final button click
 
 CRITICAL VALIDATION-ONLY RULES:
-- ONLY interact with fields that show validation errors after the first button click. ther only other field you can interact with is dropdwon fields that might have wrong information according to the user profile/information
+- ONLY interact with fields that show validation errors after the first button click. The only other field you can interact with is dropdwon fields that might have wrong information according to the user profile/information
 - Do NOT review or modify fields that are not showing validation errors
 - Do NOT fill fields just because they are empty - only if they show validation errors
 - You CAN change dropdown selections if they show validation errors
@@ -2830,10 +2830,9 @@ CRITICAL: After clicking Continue/Next/Save and Continue, STOP immediately. Do n
 
 STEP 1: TRIGGER VALIDATION
 - FIRST: Click the "Continue", "Next", or "Save and Continue" button to trigger form validation
-- This will reveal any validation errors that need to be addressed
+- This will reveal any validation errors at the top of the page. look at the fields they say need to filled, and only fill those fields. 
 
 STEP 2: HANDLE VALIDATION ERRORS ONLY
-- Look for validation error messages that appear after clicking the button
 - Fill ONLY fields that show validation errors (red text, error messages, required warnings)
 - Do NOT review or modify fields that are not showing validation errors
 - Do NOT fill fields just because they are empty - only if they have validation errors
@@ -2846,14 +2845,14 @@ VALIDATION ERROR HANDLING:
 
 STEP 3: FINAL SUBMISSION
 - Once all validation errors are resolved, click "Continue", "Next", or "Save and Continue" again
-- STOP IMMEDIATELY after the final button click
+- once you have clikced the button, you job is complete. do not conintue again. 
 
 CRITICAL: Only interact with fields showing validation errors. Do not review the entire form.`;
 
   try {
     const result = await agent.execute({
       instruction,
-      maxSteps: 40,  // Standard step limit for all agents
+      maxSteps: 20,  // Standard step limit for all agents
       highlightCursor: false
     });
 
@@ -2883,172 +2882,6 @@ CRITICAL: Only interact with fields showing validation errors. Do not review the
       partialSuccess: true
     };
   }
-}
-
-async function agentReviewAndComplete(stagehand, userProfile, jobDescription) {
-  console.log('\n🤖 Phase 2: Agent review and completion...');
-
-  const agent = stagehand.agent({
-    cua: true,
-    model: {
-      modelName: "anthropic/claude-haiku-4-5-20251001",
-      apiKey: process.env.ANTHROPIC_API_KEY
-    },
-    systemPrompt: `You are an error correction assistant for job application forms.
-
-IMPORTANT: Phase 1 has already filled the form. You are ONLY called when validation errors persist.
-
-YOUR TASK (IN ORDER):
-1. Look for fields with validation errors or error messages
-2. Fill ONLY those error fields with appropriate information
-3. Click the "Next", "Continue", or "Save and Continue" button
-4. STOP IMMEDIATELY after clicking - do not evaluate the next page
-
-CRITICAL RULES:
-- DO NOT review or evaluate fields after clicking Continue/Next
-- DO NOT scroll down on the next page
-- DO NOT verify if fields are filled on the next page
-- Your job ends the moment you click Continue/Next
-- Maximum 5-8 steps: find errors → fill errors → click button → STOP`
-  });
-
-  const firstName = userProfile.fullName.split(' ')[0] || '';
-  const lastName = userProfile.fullName.split(' ').slice(1).join(' ') || '';
-
-  // Add job context if available
-  const jobContextText = jobDescription ? `
-JOB YOU'RE APPLYING FOR:
-- Position: ${jobDescription.title}
-- Company: ${jobDescription.company}
-- Summary: ${jobDescription.summary}
-
-Use this job context and users information to answer questions like:
-- "Why do you want to work here?" - Reference the company and role
-- "Why are you interested in this position?" - Mention relevant aspects of the role
-- "What interests you about this opportunity?" - Connect your experience to the job
-` : '';
-
-  const instruction = `You are fixing validation errors on a job application form that Phase 1 could not resolve.
-
-USER INFORMATION:
-- Full Name: ${userProfile.fullName}
-- Email: ${userProfile.workEmail}
-- Phone: ${userProfile.phone}
-- Location: ${userProfile.location}
-
-YOUR TASK:
-1. Find fields with validation errors (red text, error messages, required field warnings)
-2. Fill ONLY those error fields with the appropriate information above
-3. Click the "Next", "Continue", or "Save and Continue" button
-4. STOP IMMEDIATELY - do not evaluate or scroll on the next page
-
-DO NOT:
-- Fill fields that do not have errors
-- Review the entire form
-- Evaluate the next page after clicking Continue
-- Scroll down on the next page
-- Spend more than 5-8 steps total
-
-
-Your job ends when you click the Continue/Next button.`;
-
-  try {
-    const result = await agent.execute({
-      instruction,
-      maxSteps: 20,  // Standard step limit for all agents
-      highlightCursor: false
-    });
-
-    console.log('\n✅ Phase 2 Complete:');
-    console.log(`  Steps taken: ${result.actions ? result.actions.length : 'N/A'}`);
-    console.log(`  Success: ${result.success}`);
-
-    // Detect what button was clicked by analyzing the last few actions
-    let navigationAction = 'unknown';
-    if (result.actions && result.actions.length > 0) {
-      // Check last 3 actions for navigation keywords
-      const recentActions = result.actions.slice(-3).map(a =>
-        typeof a === 'string' ? a.toLowerCase() : (a.action || a.description || '').toLowerCase()
-      ).join(' ');
-
-      if (recentActions.includes('next') || recentActions.includes('continue') ||
-          recentActions.includes('proceed') || recentActions.includes('next step')) {
-        navigationAction = 'next';
-        console.log(`  🔄 Detected: NEXT/CONTINUE button clicked`);
-      } else if (recentActions.includes('submit') || recentActions.includes('apply') ||
-                 recentActions.includes('send application')) {
-        navigationAction = 'submit';
-        console.log(`  ✅ Detected: SUBMIT button clicked`);
-      }
-    }
-
-    if (result.usage) {
-      const inputTokens = result.usage.input_tokens || 0;
-      const outputTokens = result.usage.output_tokens || 0;
-      const inputCost = (inputTokens / 1000000) * 0.25;  // Claude Haiku: $0.25 per 1M input tokens
-      const outputCost = (outputTokens / 1000000) * 1.25; // Claude Haiku: $1.25 per 1M output tokens
-      const totalCost = (inputCost + outputCost).toFixed(4);
-      console.log(`  💰 Phase 2 cost: $${totalCost}`);
-      console.log(`     Input tokens: ${inputTokens.toLocaleString()}`);
-      console.log(`     Output tokens: ${outputTokens.toLocaleString()}`);
-    }
-
-    // Add navigation action to result
-    result.navigationAction = navigationAction;
-    return result;
-  } catch (error) {
-    console.error('  ❌ Phase 2 error:', error.message);
-    
-    // Check if this is an intermediate validation error that should be suppressed
-    const isIntermediateError = error.message && (
-      error.message.includes('string did not match') ||
-      error.message.includes('expected pattern') ||
-      error.message.includes('validation') ||
-      error.message.includes('invalid format') ||
-      error.message.includes('does not match pattern')
-    );
-    
-    if (isIntermediateError) {
-      console.log('  ⚠️  Intermediate validation error detected - treating as partial success');
-      console.log('     This error will not be shown to user until process completes');
-      
-      // Return partial success instead of failure for intermediate errors
-      return { 
-        success: true, 
-        partialSuccess: true,
-        intermediateError: error.message,
-        message: 'Form filling in progress with validation adjustments'
-      };
-    }
-    
-    // For non-intermediate errors, return failure as before
-    return { success: false, error: error.message };
-  }
-}
-
-/**
- * Check if URL is a Workday job application
- */
-function isWorkdayJobUrl(url) {
-  const workdayPatterns = [
-    /\.myworkdayjobs\.com/,           // Standard Workday pattern
-    /workday/i,                      // Contains "workday" anywhere
-    /myworkdayjobs/i                 // Contains "myworkdayjobs"
-  ];
-  
-  return workdayPatterns.some(pattern => pattern.test(url));
-}
-
-/**
- * Generate unique email for job applications using plus addressing
- */
-function generateJobEmail(baseEmail) {
-  const [username, domain] = baseEmail.split('@');
-  
-  // Generate two random numbers (10-99)
-  const randomNumbers = Math.floor(Math.random() * 90) + 10;
-  
-  return `${username}+${randomNumbers}@${domain}`;
 }
 
 /**
@@ -4119,6 +3952,5 @@ module.exports = {
   hybridFormFill,
   getIntelligentAnswers,
   fillFormFields,
-  agentReviewAndComplete,
   agentVerificationFallback
 };

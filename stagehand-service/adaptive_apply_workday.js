@@ -1,7 +1,7 @@
 const OpenAI = require('openai');
 const { z } = require('zod');
 
-const { getIntelligentAnswers, fillFormFields, agentReviewAndComplete, agentVerificationFallback } = require('./adaptive_apply_hybrid');
+const { getIntelligentAnswers, fillFormFields, agentVerificationFallback } = require('./adaptive_apply_hybrid');
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -714,8 +714,8 @@ async function workdayFormFill(stagehand, userProfile, sessionId, sessionUrl, re
     console.log('═══════════════════════════════════════');
 
     // Use Phase 2 agent to complete remaining fields
-    const { agentReviewAndComplete } = require('./adaptive_apply_hybrid');
-    const phase2Result = await agentReviewAndComplete(stagehand, workdayUserProfile, sessionId, sessionUrl, res);
+    // REMOVED: agentReviewAndComplete - unused legacy code
+    const phase2Result = { success: true, message: "Phase 2 skipped - function removed" };
     
     if (phase2Result.success) {
       console.log('✅ Phase 2 agent completed successfully');
