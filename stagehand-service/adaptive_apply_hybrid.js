@@ -64,7 +64,7 @@ DO NOT:
 - Fill optional fields that are not showing validation errors
 - Spend time on fields that are not required or showing errors`,
 
-    maxSteps: 40
+    maxSteps: 60
   });
 
   const instruction = `Check this My Experience page for validation errors, missing required fields, and handle ALL date filling.
@@ -109,7 +109,7 @@ CRITICAL: Only fill fields that are completely empty AND showing validation erro
   try {
     const result = await agent.execute({
       instruction,
-      maxSteps: 40
+      maxSteps: 60
     });
 
     console.log('✅ My Experience validation agent completed');

@@ -902,7 +902,7 @@ function HomeSection() {
         <CardContent>
           {/* Workday Support Notice */}
           <div className="flex justify-center mb-6">
-            <p className="text-2xl sm:text-3xl font-pacifico italic text-transparent bg-clip-text bg-gradient-to-r from-gray-600 via-gray-800 to-black text-center">
+            <p className="text-sm text-gray-600 text-center max-w-2xl">
               Currently we only support Workday job applications. Other integrations coming in the future
             </p>
           </div>
