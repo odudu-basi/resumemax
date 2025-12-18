@@ -291,6 +291,269 @@ async function handleDatePickerField(stagehand, fieldLabel, targetDate, sectionN
 
 
 /**
+ * Handle My Information page with extract-based approach
+ */
+async function handleMyInformationPage(stagehand, userProfile, jobDescription) {
+  console.log('\n📋 Starting My Information page handler...');
+  
+  let totalCost = 0;
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  let filledCount = 0;
+  let errorCount = 0;
+
+  try {
+    // Step 1: Extract empty fields
+    console.log('🔍 Step 1: Extracting empty fields...');
+    
+    const emptyFieldsSchema = z.array(z.object({
+      label: z.string().describe("The field label/question text"),
+      method: z.string().describe("The interaction method: fill, select, check"),
+      isEmpty: z.boolean().describe("Whether the field is empty/unselected")
+    }));
+
+    const emptyFields = await stagehand.extract(
+      "Find all form fields that are currently empty, unselected, or have no value. Include text inputs with no text, dropdowns showing 'Select one' or similar placeholder text, and unchecked checkboxes. Return the field label, interaction method, and confirm they are empty.",
+      emptyFieldsSchema
+    );
+
+    // Filter to only truly empty fields
+    const fieldsToFill = emptyFields.filter(field => field.isEmpty);
+    console.log(`  Found ${fieldsToFill.length} empty fields to fill`);
+
+    if (fieldsToFill.length === 0) {
+      console.log('  ℹ️  No empty fields found, proceeding to navigation');
+    } else {
+      // Step 2: Get intelligent answers from ChatGPT
+      console.log('🧠 Step 2: Getting intelligent answers...');
+      
+      const answersResult = await getMyInformationAnswers(fieldsToFill, userProfile, jobDescription);
+      totalInputTokens += answersResult.inputTokens;
+      totalOutputTokens += answersResult.outputTokens;
+      
+      // Calculate ChatGPT cost
+      const chatGPTInputCost = (answersResult.inputTokens / 1_000_000) * 0.150;
+      const chatGPTOutputCost = (answersResult.outputTokens / 1_000_000) * 0.600;
+      totalCost += chatGPTInputCost + chatGPTOutputCost;
+
+      // Step 3: Fill fields using act()
+      console.log('📝 Step 3: Filling fields...');
+      
+      for (const field of fieldsToFill) {
+        const answer = answersResult.answers[field.label];
+        
+        if (!answer || answer === "SKIP") {
+          console.log(`  ⏭️  Skipping: ${field.label}`);
+          continue;
+        }
+
+        console.log(`  📝 Processing: ${field.label} (${field.method})`);
+
+        try {
+          // Handle different field types
+          if (field.method === "fill") {
+            await stagehand.act(`type "${answer}" into ${field.label}`);
+            console.log(`    ✅ Filled: ${field.label}`);
+            filledCount++;
+            
+          } else if (field.method === "select") {
+            // Check for hardcoded patterns first
+            if (field.label.toLowerCase().includes("how did you hear about us")) {
+              console.log(`    🎯 Using hardcoded pattern for: ${field.label}`);
+              await stagehand.act(`select "Social Media" from ${field.label}`);
+              await new Promise(resolve => setTimeout(resolve, 500));
+              await stagehand.act(`select "LinkedIn" from Social Media options`);
+              console.log(`    ✅ Selected: Social Media → LinkedIn`);
+              filledCount++;
+            } else {
+              await stagehand.act(`select "${answer}" from ${field.label}`);
+              console.log(`    ✅ Selected: ${answer}`);
+              filledCount++;
+            }
+            
+          } else if (field.method === "check") {
+            if (answer === true || answer === "true") {
+              await stagehand.act(`check the ${field.label} checkbox`);
+              console.log(`    ✅ Checked: ${field.label}`);
+              filledCount++;
+            } else {
+              console.log(`    ⏭️  Not checking: ${field.label} (answer: ${answer})`);
+            }
+          }
+
+          // Wait between fields
+          await new Promise(resolve => setTimeout(resolve, 300));
+
+        } catch (error) {
+          console.log(`    ❌ Failed to fill ${field.label}: ${error.message}`);
+          
+          // Retry once
+          try {
+            console.log(`    🔄 Retrying: ${field.label}`);
+            if (field.method === "fill") {
+              await stagehand.act(`enter "${answer}" in the ${field.label} field`);
+            } else if (field.method === "select") {
+              await stagehand.act(`choose "${answer}" from the ${field.label} dropdown`);
+            } else if (field.method === "check") {
+              if (answer === true || answer === "true") {
+                await stagehand.act(`click the ${field.label} checkbox`);
+              }
+            }
+            console.log(`    ✅ Retry successful: ${field.label}`);
+            filledCount++;
+          } catch (retryError) {
+            console.log(`    ❌ Retry failed: ${retryError.message}`);
+            errorCount++;
+          }
+        }
+      }
+    }
+
+    // Step 4: Navigate to next page
+    console.log('🔄 Step 4: Navigating to next page...');
+    
+    const navigationButtons = await stagehand.observe("find the button with the name next, or continue, or save and continue");
+    
+    if (navigationButtons.length > 0) {
+      await stagehand.act(navigationButtons[0]);
+      console.log('  ✅ Navigation button clicked');
+    } else {
+      console.log('  ⚠️  No navigation button found, trying generic approach');
+      await stagehand.act("click the next button");
+    }
+
+    // Add Stagehand costs (extract + observe + acts)
+    const stagehandCost = 0.10; // Updated for new Haiku pricing
+    totalCost += stagehandCost;
+
+    console.log('\n📊 My Information Page Summary:');
+    console.log(`  ✅ Filled: ${filledCount} fields`);
+    console.log(`  ❌ Errors: ${errorCount} fields`);
+    console.log(`  💰 Total cost: $${totalCost.toFixed(4)}`);
+
+    return {
+      success: true,
+      filledCount,
+      errorCount,
+      totalCost,
+      totalInputTokens,
+      totalOutputTokens,
+      message: "My Information page completed"
+    };
+
+  } catch (error) {
+    console.error('❌ My Information page handler failed:', error.message);
+    return {
+      success: false,
+      error: error.message,
+      filledCount,
+      errorCount,
+      totalCost,
+      totalInputTokens,
+      totalOutputTokens
+    };
+  }
+}
+
+/**
+ * Get intelligent answers for My Information fields
+ */
+async function getMyInformationAnswers(fields, userProfile, jobDescription) {
+  console.log(`🧠 Getting answers for ${fields.length} My Information fields...`);
+
+  const fieldsList = fields.map(field => 
+    `- ${field.label} (Method: ${field.method})`
+  ).join('\n');
+
+  const prompt = `You are filling out a "My Information" or "Personal Information" section of a job application.
+
+FIELDS TO FILL:
+${fieldsList}
+
+USER PROFILE:
+- Name: ${userProfile.firstName} ${userProfile.lastName}
+- Email: ${userProfile.workEmail}
+- Phone: ${userProfile.phone}
+- Address: ${userProfile.address}
+- City: ${userProfile.city}
+- State: ${userProfile.state}
+- Zip: ${userProfile.zipCode}
+- Country: ${userProfile.country || 'United States'}
+
+JOB CONTEXT:
+${jobDescription ? `Position: ${jobDescription.title} at ${jobDescription.company}` : 'No job description available'}
+
+INSTRUCTIONS:
+- For text fields (Method: fill): Provide the appropriate text value
+- For dropdowns (Method: select): Provide the option to select
+- For checkboxes (Method: check): Return true/false
+- For "How did you hear about us" questions: Return "SKIP" (we handle this with hardcoded pattern)
+- If you don't have information for a field: Return "SKIP"
+
+RETURN FORMAT:
+Return a JSON object with field labels as keys and answers as values, plus the method for each field:
+
+{
+  "First Name": "John",
+  "Email Address": "john@example.com",
+  "Subscribe to newsletter": true,
+  "How did you hear about us": "SKIP"
+}`;
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        temperature: 0.1,
+        max_tokens: 1000
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`OpenAI API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices[0].message.content.trim();
+    
+    // Parse JSON response
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('No valid JSON found in response');
+    }
+    
+    const answers = JSON.parse(jsonMatch[0]);
+    
+    console.log(`  ✅ Generated ${Object.keys(answers).length} answers`);
+    
+    return {
+      answers,
+      inputTokens: data.usage.prompt_tokens,
+      outputTokens: data.usage.completion_tokens
+    };
+
+  } catch (error) {
+    console.error('❌ Failed to get intelligent answers:', error.message);
+    return {
+      answers: {},
+      inputTokens: 0,
+      outputTokens: 0
+    };
+  }
+}
+
+/**
  * Extract job description from the page
  */
 async function extractJobDescription(stagehand) {
@@ -568,8 +831,8 @@ async function handleMyExperiencePage(stagehand, userProfile, jobDescription) {
     
     // Add validation agent costs to total
     if (validationResult.usage) {
-      const inputCost = (validationResult.usage.input_tokens / 1000000) * 0.25;  // Claude Haiku: $0.25 per 1M input tokens
-      const outputCost = (validationResult.usage.output_tokens / 1000000) * 1.25; // Claude Haiku: $1.25 per 1M output tokens
+      const inputCost = (validationResult.usage.input_tokens / 1000000) * 1.0;  // Claude Haiku: $1.00 per 1M input tokens
+      const outputCost = (validationResult.usage.output_tokens / 1000000) * 5.0; // Claude Haiku: $5.00 per 1M output tokens
       totalCost += inputCost + outputCost;
       totalTokens.input += validationResult.usage.input_tokens;
       totalTokens.output += validationResult.usage.output_tokens;
@@ -679,8 +942,8 @@ Mathematical precision: Need exactly ${clicksNeeded} "Add Another" clicks to rea
     
     // Add cost tracking
     if (result.usage) {
-      const inputCost = (result.usage.input_tokens / 1000000) * 0.25;  // Claude Haiku: $0.25 per 1M input tokens
-      const outputCost = (result.usage.output_tokens / 1000000) * 1.25; // Claude Haiku: $1.25 per 1M output tokens
+      const inputCost = (result.usage.input_tokens / 1000000) * 1.0;  // Claude Haiku: $1.00 per 1M input tokens
+      const outputCost = (result.usage.output_tokens / 1000000) * 5.0; // Claude Haiku: $5.00 per 1M output tokens
       const totalCost = (inputCost + outputCost).toFixed(4);
       console.log(`  💰 Agent cost: $${totalCost}`);
       console.log(`     Input tokens: ${result.usage.input_tokens.toLocaleString()}`);
@@ -783,8 +1046,8 @@ Mathematical precision: Need exactly ${clicksNeeded} "Add Another" clicks to rea
     
     // Add cost tracking
     if (result.usage) {
-      const inputCost = (result.usage.input_tokens / 1000000) * 0.25;  // Claude Haiku: $0.25 per 1M input tokens
-      const outputCost = (result.usage.output_tokens / 1000000) * 1.25; // Claude Haiku: $1.25 per 1M output tokens
+      const inputCost = (result.usage.input_tokens / 1000000) * 1.0;  // Claude Haiku: $1.00 per 1M input tokens
+      const outputCost = (result.usage.output_tokens / 1000000) * 5.0; // Claude Haiku: $5.00 per 1M output tokens
       const totalCost = (inputCost + outputCost).toFixed(4);
       console.log(`  💰 Agent cost: $${totalCost}`);
       console.log(`     Input tokens: ${result.usage.input_tokens.toLocaleString()}`);
@@ -834,8 +1097,8 @@ async function handleWorkExperienceSection(stagehand, workExperiences, jobDescri
     
     // Add agent costs to total
     if (buttonResult.usage) {
-      const inputCost = (buttonResult.usage.input_tokens / 1000000) * 0.25;  // Claude Haiku: $0.25 per 1M input tokens
-      const outputCost = (buttonResult.usage.output_tokens / 1000000) * 1.25; // Claude Haiku: $1.25 per 1M output tokens
+      const inputCost = (buttonResult.usage.input_tokens / 1000000) * 1.0;  // Claude Haiku: $1.00 per 1M input tokens
+      const outputCost = (buttonResult.usage.output_tokens / 1000000) * 5.0; // Claude Haiku: $5.00 per 1M output tokens
       totalCost += inputCost + outputCost;
       totalTokens.input += buttonResult.usage.input_tokens;
       totalTokens.output += buttonResult.usage.output_tokens;
@@ -981,8 +1244,8 @@ async function handleEducationSection(stagehand, educationEntries, jobDescriptio
     
     // Add agent costs to total
     if (buttonResult.usage) {
-      const inputCost = (buttonResult.usage.input_tokens / 1000000) * 0.25;  // Claude Haiku: $0.25 per 1M input tokens
-      const outputCost = (buttonResult.usage.output_tokens / 1000000) * 1.25; // Claude Haiku: $1.25 per 1M output tokens
+      const inputCost = (buttonResult.usage.input_tokens / 1000000) * 1.0;  // Claude Haiku: $1.00 per 1M input tokens
+      const outputCost = (buttonResult.usage.output_tokens / 1000000) * 5.0; // Claude Haiku: $5.00 per 1M output tokens
       totalCost += inputCost + outputCost;
       totalTokens.input += buttonResult.usage.input_tokens;
       totalTokens.output += buttonResult.usage.output_tokens;
@@ -1920,8 +2183,8 @@ IMPORTANT:
     if (result.usage) {
       const inputTokens = result.usage.input_tokens || 0;
       const outputTokens = result.usage.output_tokens || 0;
-      const inputCost = (inputTokens / 1000000) * 0.25;  // Claude Haiku: $0.25 per 1M input tokens
-      const outputCost = (outputTokens / 1000000) * 1.25; // Claude Haiku: $1.25 per 1M output tokens
+      const inputCost = (inputTokens / 1000000) * 1.0;  // Claude Haiku: $1.00 per 1M input tokens
+      const outputCost = (outputTokens / 1000000) * 5.0; // Claude Haiku: $5.00 per 1M output tokens
       const totalCost = inputCost + outputCost;
 
       console.log(`  💰 Agent verification cost: $${totalCost.toFixed(4)}`);
@@ -2589,8 +2852,8 @@ async function agentAccountCreation(stagehand, userProfile) {
     const navigationResult = await agentNavigateToAccountCreation(stagehand, userProfile);
     
     if (navigationResult.usage) {
-      const inputCost = (navigationResult.usage.input_tokens / 1000000) * 0.25;  // Claude Haiku: $0.25 per 1M input tokens
-      const outputCost = (navigationResult.usage.output_tokens / 1000000) * 1.25; // Claude Haiku: $1.25 per 1M output tokens
+      const inputCost = (navigationResult.usage.input_tokens / 1000000) * 1.0;  // Claude Haiku: $1.00 per 1M input tokens
+      const outputCost = (navigationResult.usage.output_tokens / 1000000) * 5.0; // Claude Haiku: $5.00 per 1M output tokens
       totalCost += inputCost + outputCost;
       totalTokens.input += navigationResult.usage.input_tokens;
       totalTokens.output += navigationResult.usage.output_tokens;
@@ -2656,8 +2919,8 @@ async function agentAccountCreation(stagehand, userProfile) {
     
     // Add Phase 0e cost to total
     if (submitResult.usage) {
-      const inputCost = (submitResult.usage.input_tokens / 1000000) * 0.25;  // Claude Haiku: $0.25 per 1M input tokens
-      const outputCost = (submitResult.usage.output_tokens / 1000000) * 1.25; // Claude Haiku: $1.25 per 1M output tokens
+      const inputCost = (submitResult.usage.input_tokens / 1000000) * 1.0;  // Claude Haiku: $1.00 per 1M input tokens
+      const outputCost = (submitResult.usage.output_tokens / 1000000) * 5.0; // Claude Haiku: $5.00 per 1M output tokens
       totalCost += inputCost + outputCost;
       totalTokens.input += submitResult.usage.input_tokens;
       totalTokens.output += submitResult.usage.output_tokens;
@@ -2863,8 +3126,8 @@ CRITICAL: Only interact with fields showing validation errors. Do not review the
     if (result.usage) {
       const inputTokens = result.usage.input_tokens || 0;
       const outputTokens = result.usage.output_tokens || 0;
-      const inputCost = (inputTokens / 1000000) * 0.25;  // Claude Haiku: $0.25 per 1M input tokens
-      const outputCost = (outputTokens / 1000000) * 1.25; // Claude Haiku: $1.25 per 1M output tokens
+      const inputCost = (inputTokens / 1000000) * 1.0;  // Claude Haiku: $1.00 per 1M input tokens
+      const outputCost = (outputTokens / 1000000) * 5.0; // Claude Haiku: $5.00 per 1M output tokens
       const totalCost = (inputCost + outputCost).toFixed(4);
       console.log(`  💰 Page ${pageNumber} Agent cost: $${totalCost}`);
       console.log(`     Input tokens: ${inputTokens.toLocaleString()}`);
@@ -2876,7 +3139,7 @@ CRITICAL: Only interact with fields showing validation errors. Do not review the
     console.error(`  ❌ Page ${pageNumber} Agent error:`, error.message);
     
     // Return partial success to allow continuation
-    return {
+      return { 
       success: false,
       error: error.message,
       partialSuccess: true
@@ -3369,11 +3632,11 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
     if (accountResult.usage) {
       const inputTokens = accountResult.usage.input_tokens || 0;
       const outputTokens = accountResult.usage.output_tokens || 0;
-      const inputCost = (inputTokens / 1000000) * 0.25;  // Claude Haiku: $0.25 per 1M input tokens
-      const outputCost = (outputTokens / 1000000) * 1.25; // Claude Haiku: $1.25 per 1M output tokens
+      const inputCost = (inputTokens / 1000000) * 1.0;  // Claude Haiku: $1.00 per 1M input tokens
+      const outputCost = (outputTokens / 1000000) * 5.0; // Claude Haiku: $5.00 per 1M output tokens
       phase0Cost = inputCost + outputCost;
     } else {
-      phase0Cost = 0.02; // Fallback estimate
+      phase0Cost = 0.10; // Fallback estimate (updated for new Haiku pricing)
     }
 
     // Check if we should skip to Phase 1 (no account creation needed)
@@ -3519,7 +3782,7 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
           const chatGPTCost = chatGPTInputCost + chatGPTOutputCost;
           const pageObserveTokens = 2000;
           const pageActTokens = formActions.length * 500;
-          const stagehandCost = 0.02;
+          const stagehandCost = 0.10; // Updated for new Haiku pricing
           phase1Tokens.input += answersResult.inputTokens + pageObserveTokens + pageActTokens;
           phase1Tokens.output += answersResult.outputTokens;
           phase1Cost += chatGPTCost + stagehandCost;
@@ -3552,8 +3815,8 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
         
         // Add Self-Identify costs to Phase 1 totals
         if (selfIdentifyResult.usage) {
-          const inputCost = (selfIdentifyResult.usage.input_tokens / 1000000) * 0.25;  // Claude Haiku: $0.25 per 1M input tokens
-          const outputCost = (selfIdentifyResult.usage.output_tokens / 1000000) * 1.25; // Claude Haiku: $1.25 per 1M output tokens
+          const inputCost = (selfIdentifyResult.usage.input_tokens / 1000000) * 1.0;  // Claude Haiku: $1.00 per 1M input tokens
+          const outputCost = (selfIdentifyResult.usage.output_tokens / 1000000) * 5.0; // Claude Haiku: $5.00 per 1M output tokens
           const agentCost = inputCost + outputCost;
           
           phase1Cost += agentCost;
@@ -3575,7 +3838,7 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
             success: true,
             message: "Self-Identify page completed by agent"
           };
-        } else {
+      } else {
           console.log('⚠️ Self-Identify agent failed, falling back to standard flow...');
           // Fall back to standard flow
           const formActions = await observeFormFieldsEnhanced(stagehand);
@@ -3583,8 +3846,36 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
           fillResults = await fillFormFields(stagehand, formActions, answersResult.answers);
         }
 
+      }
+      // My Information page detection and handling
+      else if (pageTitle && (pageTitle.toLowerCase().includes("my information") || 
+                            pageTitle.toLowerCase().includes("personal information") ||
+                            pageTitle.toLowerCase().includes("personal details"))) {
+        console.log('📋 Detected "My Information" page - using specialized handler');
+        
+        const myInfoResult = await handleMyInformationPage(stagehand, workdayUserProfile, jobDescription);
+        
+        if (myInfoResult.success) {
+          console.log('✅ My Information page completed successfully');
+          fillResults = myInfoResult;
+          
+          // Add costs to Phase 1 totals
+          if (myInfoResult.totalCost) {
+            phase1Cost += myInfoResult.totalCost;
+            phase1Tokens.input += myInfoResult.totalInputTokens || 0;
+            phase1Tokens.output += myInfoResult.totalOutputTokens || 0;
+            console.log(`  💰 My Information cost added to Phase 1: $${myInfoResult.totalCost.toFixed(4)}`);
+          }
+        } else {
+          console.log('⚠️ My Information handler failed, falling back to standard flow...');
+          // Fall back to standard flow
+          const formActions = await observeFormFieldsEnhanced(stagehand);
+          answersResult = await getIntelligentAnswers(formActions, workdayUserProfile, jobDescription);
+          fillResults = await fillFormFields(stagehand, formActions, answersResult.answers);
+        }
+        
       } else {
-        // Standard flow for all other pages (not "My Experience" or "Self-Identify")
+        // Standard flow for all other pages (not "My Experience", "Self-Identify", or "My Information")
         console.log('📝 Using standard flow for this page');
 
         // Enhanced observation: extract questions + observe fields
@@ -3645,8 +3936,8 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
           if (agentResult.usage) {
             const inputTokens = agentResult.usage.input_tokens || 0;
             const outputTokens = agentResult.usage.output_tokens || 0;
-            const inputCost = (inputTokens / 1000000) * 0.25;  // Claude Haiku: $0.25 per 1M input tokens
-            const outputCost = (outputTokens / 1000000) * 1.25; // Claude Haiku: $1.25 per 1M output tokens
+            const inputCost = (inputTokens / 1000000) * 1.0;  // Claude Haiku: $1.00 per 1M input tokens
+            const outputCost = (outputTokens / 1000000) * 5.0; // Claude Haiku: $5.00 per 1M output tokens
             const pageCost = inputCost + outputCost;
             phase2Cost += pageCost;
             phase2Tokens.input += inputTokens;
@@ -3727,8 +4018,8 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
         verificationResult = fallbackResult;
         // Track verification cost
         if (fallbackResult.usage) {
-          const inputCost = (fallbackResult.usage.input_tokens / 1000000) * 0.25;  // Claude Haiku: $0.25 per 1M input tokens
-          const outputCost = (fallbackResult.usage.output_tokens / 1000000) * 1.25; // Claude Haiku: $1.25 per 1M output tokens
+          const inputCost = (fallbackResult.usage.input_tokens / 1000000) * 1.0;  // Claude Haiku: $1.00 per 1M input tokens
+          const outputCost = (fallbackResult.usage.output_tokens / 1000000) * 5.0; // Claude Haiku: $5.00 per 1M output tokens
           verificationCost = inputCost + outputCost;
         }
       } else {
