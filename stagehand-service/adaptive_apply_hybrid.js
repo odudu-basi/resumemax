@@ -25,7 +25,7 @@ async function agentMyExperienceValidation(stagehand, userProfile) {
   const agent = stagehand.agent({
     cua: true,
     model: {
-      modelName: "anthropic/claude-haiku-4-5-20251001",
+      modelName: "anthropic/claude-3-5-haiku-20241022",
       apiKey: process.env.ANTHROPIC_API_KEY
     },
     systemPrompt: `You are a My Experience page validation specialist and date filler.
@@ -136,7 +136,7 @@ async function agentSelfIdentify(stagehand, userProfile) {
   const agent = stagehand.agent({
     cua: true,
     model: {
-      modelName: "anthropic/claude-haiku-4-5-20251001",
+      modelName: "anthropic/claude-3-5-haiku-20241022",
       apiKey: process.env.ANTHROPIC_API_KEY
     },
     systemPrompt: `You are a Self-Identify page specialist for job applications.
@@ -324,10 +324,17 @@ async function handleMyInformationPage(stagehand, userProfile, jobDescription) {
     if (fieldsToFill.length === 0) {
       console.log('  ℹ️  No empty fields found, proceeding to navigation');
     } else {
-      // Step 2: Get intelligent answers from ChatGPT
-      console.log('🧠 Step 2: Getting intelligent answers...');
+      // Step 2: Convert extracted fields to actions format for getIntelligentAnswers
+      console.log('🧠 Step 2: Converting fields to actions and getting intelligent answers...');
       
-      const answersResult = await getMyInformationAnswers(fieldsToFill, userProfile, jobDescription);
+      const formActions = fieldsToFill.map(field => ({
+        description: field.label,
+        method: field.method,
+        arguments: [],
+        selector: `field_${field.label.replace(/\s+/g, '_').toLowerCase()}`
+      }));
+      
+      const answersResult = await getIntelligentAnswers(formActions, userProfile, jobDescription);
       totalInputTokens += answersResult.inputTokens;
       totalOutputTokens += answersResult.outputTokens;
       
@@ -455,103 +462,6 @@ async function handleMyInformationPage(stagehand, userProfile, jobDescription) {
   }
 }
 
-/**
- * Get intelligent answers for My Information fields
- */
-async function getMyInformationAnswers(fields, userProfile, jobDescription) {
-  console.log(`🧠 Getting answers for ${fields.length} My Information fields...`);
-
-  const fieldsList = fields.map(field => 
-    `- ${field.label} (Method: ${field.method})`
-  ).join('\n');
-
-  const prompt = `You are filling out a "My Information" or "Personal Information" section of a job application.
-
-FIELDS TO FILL:
-${fieldsList}
-
-USER PROFILE:
-- Name: ${userProfile.firstName} ${userProfile.lastName}
-- Email: ${userProfile.workEmail}
-- Phone: ${userProfile.phone}
-- Address: ${userProfile.address}
-- City: ${userProfile.city}
-- State: ${userProfile.state}
-- Zip: ${userProfile.zipCode}
-- Country: ${userProfile.country || 'United States'}
-
-JOB CONTEXT:
-${jobDescription ? `Position: ${jobDescription.title} at ${jobDescription.company}` : 'No job description available'}
-
-INSTRUCTIONS:
-- For text fields (Method: fill): Provide the appropriate text value
-- For dropdowns (Method: select): Provide the option to select
-- For checkboxes (Method: check): Return true/false
-- For "How did you hear about us" questions: Return "SKIP" (we handle this with hardcoded pattern)
-- If you don't have information for a field: Return "SKIP"
-
-RETURN FORMAT:
-Return a JSON object with field labels as keys and answers as values, plus the method for each field:
-
-{
-  "First Name": "John",
-  "Email Address": "john@example.com",
-  "Subscribe to newsletter": true,
-  "How did you hear about us": "SKIP"
-}`;
-
-  try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        temperature: 0.1,
-        max_tokens: 1000
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const content = data.choices[0].message.content.trim();
-    
-    // Parse JSON response
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('No valid JSON found in response');
-    }
-    
-    const answers = JSON.parse(jsonMatch[0]);
-    
-    console.log(`  ✅ Generated ${Object.keys(answers).length} answers`);
-    
-    return {
-      answers,
-      inputTokens: data.usage.prompt_tokens,
-      outputTokens: data.usage.completion_tokens
-    };
-
-  } catch (error) {
-    console.error('❌ Failed to get intelligent answers:', error.message);
-    return {
-      answers: {},
-      inputTokens: 0,
-      outputTokens: 0
-    };
-  }
-}
 
 /**
  * Extract job description from the page
@@ -831,8 +741,8 @@ async function handleMyExperiencePage(stagehand, userProfile, jobDescription) {
     
     // Add validation agent costs to total
     if (validationResult.usage) {
-      const inputCost = (validationResult.usage.input_tokens / 1000000) * 1.0;  // Claude Haiku: $1.00 per 1M input tokens
-      const outputCost = (validationResult.usage.output_tokens / 1000000) * 5.0; // Claude Haiku: $5.00 per 1M output tokens
+      const inputCost = (validationResult.usage.input_tokens / 1000000) * 0.8;  // Claude Haiku 3.5: $0.80 per 1M input tokens
+      const outputCost = (validationResult.usage.output_tokens / 1000000) * 4.0; // Claude Haiku 3.5: $4.00 per 1M output tokens
       totalCost += inputCost + outputCost;
       totalTokens.input += validationResult.usage.input_tokens;
       totalTokens.output += validationResult.usage.output_tokens;
@@ -879,7 +789,7 @@ async function agentCreateWorkExperienceEntries(stagehand, totalEntriesNeeded, w
   const agent = stagehand.agent({
     cua: true,
     model: {
-      modelName: "anthropic/claude-haiku-4-5-20251001",
+      modelName: "anthropic/claude-3-5-haiku-20241022",
       apiKey: process.env.ANTHROPIC_API_KEY
     },
     systemPrompt: `You are a work experience form creation specialist.
@@ -942,8 +852,8 @@ Mathematical precision: Need exactly ${clicksNeeded} "Add Another" clicks to rea
     
     // Add cost tracking
     if (result.usage) {
-      const inputCost = (result.usage.input_tokens / 1000000) * 1.0;  // Claude Haiku: $1.00 per 1M input tokens
-      const outputCost = (result.usage.output_tokens / 1000000) * 5.0; // Claude Haiku: $5.00 per 1M output tokens
+      const inputCost = (result.usage.input_tokens / 1000000) * 0.8;  // Claude Haiku 3.5: $0.80 per 1M input tokens
+      const outputCost = (result.usage.output_tokens / 1000000) * 4.0; // Claude Haiku 3.5: $4.00 per 1M output tokens
       const totalCost = (inputCost + outputCost).toFixed(4);
       console.log(`  💰 Agent cost: $${totalCost}`);
       console.log(`     Input tokens: ${result.usage.input_tokens.toLocaleString()}`);
@@ -984,7 +894,7 @@ async function agentCreateEducationEntries(stagehand, totalEntriesNeeded, educat
   const agent = stagehand.agent({
     cua: true,
     model: {
-      modelName: "anthropic/claude-haiku-4-5-20251001",
+      modelName: "anthropic/claude-3-5-haiku-20241022",
       apiKey: process.env.ANTHROPIC_API_KEY
     },
     systemPrompt: `You are an education form creation specialist.
@@ -1046,8 +956,8 @@ Mathematical precision: Need exactly ${clicksNeeded} "Add Another" clicks to rea
     
     // Add cost tracking
     if (result.usage) {
-      const inputCost = (result.usage.input_tokens / 1000000) * 1.0;  // Claude Haiku: $1.00 per 1M input tokens
-      const outputCost = (result.usage.output_tokens / 1000000) * 5.0; // Claude Haiku: $5.00 per 1M output tokens
+      const inputCost = (result.usage.input_tokens / 1000000) * 0.8;  // Claude Haiku 3.5: $0.80 per 1M input tokens
+      const outputCost = (result.usage.output_tokens / 1000000) * 4.0; // Claude Haiku 3.5: $4.00 per 1M output tokens
       const totalCost = (inputCost + outputCost).toFixed(4);
       console.log(`  💰 Agent cost: $${totalCost}`);
       console.log(`     Input tokens: ${result.usage.input_tokens.toLocaleString()}`);
@@ -1097,8 +1007,8 @@ async function handleWorkExperienceSection(stagehand, workExperiences, jobDescri
     
     // Add agent costs to total
     if (buttonResult.usage) {
-      const inputCost = (buttonResult.usage.input_tokens / 1000000) * 1.0;  // Claude Haiku: $1.00 per 1M input tokens
-      const outputCost = (buttonResult.usage.output_tokens / 1000000) * 5.0; // Claude Haiku: $5.00 per 1M output tokens
+      const inputCost = (buttonResult.usage.input_tokens / 1000000) * 0.8;  // Claude Haiku 3.5: $0.80 per 1M input tokens
+      const outputCost = (buttonResult.usage.output_tokens / 1000000) * 4.0; // Claude Haiku 3.5: $4.00 per 1M output tokens
       totalCost += inputCost + outputCost;
       totalTokens.input += buttonResult.usage.input_tokens;
       totalTokens.output += buttonResult.usage.output_tokens;
@@ -1244,8 +1154,8 @@ async function handleEducationSection(stagehand, educationEntries, jobDescriptio
     
     // Add agent costs to total
     if (buttonResult.usage) {
-      const inputCost = (buttonResult.usage.input_tokens / 1000000) * 1.0;  // Claude Haiku: $1.00 per 1M input tokens
-      const outputCost = (buttonResult.usage.output_tokens / 1000000) * 5.0; // Claude Haiku: $5.00 per 1M output tokens
+      const inputCost = (buttonResult.usage.input_tokens / 1000000) * 0.8;  // Claude Haiku 3.5: $0.80 per 1M input tokens
+      const outputCost = (buttonResult.usage.output_tokens / 1000000) * 4.0; // Claude Haiku 3.5: $4.00 per 1M output tokens
       totalCost += inputCost + outputCost;
       totalTokens.input += buttonResult.usage.input_tokens;
       totalTokens.output += buttonResult.usage.output_tokens;
@@ -2109,7 +2019,7 @@ async function agentVerificationFallback(stagehand, userProfile, existingGmailPa
     const agent = stagehand.agent({
       cua: true,
       model: {
-        modelName: "anthropic/claude-haiku-4-5-20251001",
+        modelName: "anthropic/claude-3-5-haiku-20241022",
         apiKey: process.env.ANTHROPIC_API_KEY
       },
       systemPrompt: `You are a verification code assistant. Your task is to check if verification is needed, get the code from Gmail, and complete the verification process.`
@@ -2183,8 +2093,8 @@ IMPORTANT:
     if (result.usage) {
       const inputTokens = result.usage.input_tokens || 0;
       const outputTokens = result.usage.output_tokens || 0;
-      const inputCost = (inputTokens / 1000000) * 1.0;  // Claude Haiku: $1.00 per 1M input tokens
-      const outputCost = (outputTokens / 1000000) * 5.0; // Claude Haiku: $5.00 per 1M output tokens
+      const inputCost = (inputTokens / 1000000) * 0.8;  // Claude Haiku 3.5: $0.80 per 1M input tokens
+      const outputCost = (outputTokens / 1000000) * 4.0; // Claude Haiku 3.5: $4.00 per 1M output tokens
       const totalCost = inputCost + outputCost;
 
       console.log(`  💰 Agent verification cost: $${totalCost.toFixed(4)}`);
@@ -2290,7 +2200,7 @@ async function handleEmailVerification(stagehand, userProfile, companyName) {
     const agent = stagehand.agent({
       cua: true,
       model: {
-        modelName: "anthropic/claude-haiku-4-5-20251001",
+        modelName: "anthropic/claude-3-5-haiku-20241022",
         apiKey: process.env.ANTHROPIC_API_KEY
       }
     });
@@ -2362,7 +2272,7 @@ async function agentNavigateToAccountCreation(stagehand, userProfile) {
   const agent = stagehand.agent({
     cua: true,
     model: {
-      modelName: "anthropic/claude-haiku-4-5-20251001",
+      modelName: "anthropic/claude-3-5-haiku-20241022",
       apiKey: process.env.ANTHROPIC_API_KEY
     },
     systemPrompt: `You are a navigation and detection specialist for Workday job applications.
@@ -2700,7 +2610,7 @@ async function agentReviewAndSubmitAccountCreation(stagehand, userProfile) {
   const agent = stagehand.agent({
     cua: true,
     model: {
-      modelName: "anthropic/claude-haiku-4-5-20251001",
+      modelName: "anthropic/claude-3-5-haiku-20241022",
       apiKey: process.env.ANTHROPIC_API_KEY
     },
     systemPrompt: `You are an account creation completion and verification detection specialist.
@@ -2852,8 +2762,8 @@ async function agentAccountCreation(stagehand, userProfile) {
     const navigationResult = await agentNavigateToAccountCreation(stagehand, userProfile);
     
     if (navigationResult.usage) {
-      const inputCost = (navigationResult.usage.input_tokens / 1000000) * 1.0;  // Claude Haiku: $1.00 per 1M input tokens
-      const outputCost = (navigationResult.usage.output_tokens / 1000000) * 5.0; // Claude Haiku: $5.00 per 1M output tokens
+      const inputCost = (navigationResult.usage.input_tokens / 1000000) * 0.8;  // Claude Haiku 3.5: $0.80 per 1M input tokens
+      const outputCost = (navigationResult.usage.output_tokens / 1000000) * 4.0; // Claude Haiku 3.5: $4.00 per 1M output tokens
       totalCost += inputCost + outputCost;
       totalTokens.input += navigationResult.usage.input_tokens;
       totalTokens.output += navigationResult.usage.output_tokens;
@@ -2919,8 +2829,8 @@ async function agentAccountCreation(stagehand, userProfile) {
     
     // Add Phase 0e cost to total
     if (submitResult.usage) {
-      const inputCost = (submitResult.usage.input_tokens / 1000000) * 1.0;  // Claude Haiku: $1.00 per 1M input tokens
-      const outputCost = (submitResult.usage.output_tokens / 1000000) * 5.0; // Claude Haiku: $5.00 per 1M output tokens
+      const inputCost = (submitResult.usage.input_tokens / 1000000) * 0.8;  // Claude Haiku 3.5: $0.80 per 1M input tokens
+      const outputCost = (submitResult.usage.output_tokens / 1000000) * 4.0; // Claude Haiku 3.5: $4.00 per 1M output tokens
       totalCost += inputCost + outputCost;
       totalTokens.input += submitResult.usage.input_tokens;
       totalTokens.output += submitResult.usage.output_tokens;
@@ -2978,7 +2888,7 @@ async function agentReviewAndContinue(stagehand, userProfile, jobDescription, pa
   const agent = stagehand.agent({
     cua: true,
     model: {
-      modelName: "anthropic/claude-haiku-4-5-20251001",
+      modelName: "anthropic/claude-3-5-haiku-20241022",
       apiKey: process.env.ANTHROPIC_API_KEY
     },
     systemPrompt: `You are a job application validation specialist. Phase 1 has already filled most fields on this page.
@@ -3126,8 +3036,8 @@ CRITICAL: Only interact with fields showing validation errors. Do not review the
     if (result.usage) {
       const inputTokens = result.usage.input_tokens || 0;
       const outputTokens = result.usage.output_tokens || 0;
-      const inputCost = (inputTokens / 1000000) * 1.0;  // Claude Haiku: $1.00 per 1M input tokens
-      const outputCost = (outputTokens / 1000000) * 5.0; // Claude Haiku: $5.00 per 1M output tokens
+      const inputCost = (inputTokens / 1000000) * 0.8;  // Claude Haiku 3.5: $0.80 per 1M input tokens
+      const outputCost = (outputTokens / 1000000) * 4.0; // Claude Haiku 3.5: $4.00 per 1M output tokens
       const totalCost = (inputCost + outputCost).toFixed(4);
       console.log(`  💰 Page ${pageNumber} Agent cost: $${totalCost}`);
       console.log(`     Input tokens: ${inputTokens.toLocaleString()}`);
@@ -3632,11 +3542,11 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
     if (accountResult.usage) {
       const inputTokens = accountResult.usage.input_tokens || 0;
       const outputTokens = accountResult.usage.output_tokens || 0;
-      const inputCost = (inputTokens / 1000000) * 1.0;  // Claude Haiku: $1.00 per 1M input tokens
-      const outputCost = (outputTokens / 1000000) * 5.0; // Claude Haiku: $5.00 per 1M output tokens
+      const inputCost = (inputTokens / 1000000) * 0.8;  // Claude Haiku 3.5: $0.80 per 1M input tokens
+      const outputCost = (outputTokens / 1000000) * 4.0; // Claude Haiku 3.5: $4.00 per 1M output tokens
       phase0Cost = inputCost + outputCost;
     } else {
-      phase0Cost = 0.10; // Fallback estimate (updated for new Haiku pricing)
+      phase0Cost = 0.08; // Fallback estimate (updated for Haiku 3.5 pricing)
     }
 
     // Check if we should skip to Phase 1 (no account creation needed)
@@ -3782,7 +3692,7 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
           const chatGPTCost = chatGPTInputCost + chatGPTOutputCost;
           const pageObserveTokens = 2000;
           const pageActTokens = formActions.length * 500;
-          const stagehandCost = 0.10; // Updated for new Haiku pricing
+          const stagehandCost = 0.08; // Updated for Haiku 3.5 pricing
           phase1Tokens.input += answersResult.inputTokens + pageObserveTokens + pageActTokens;
           phase1Tokens.output += answersResult.outputTokens;
           phase1Cost += chatGPTCost + stagehandCost;
@@ -3815,8 +3725,8 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
         
         // Add Self-Identify costs to Phase 1 totals
         if (selfIdentifyResult.usage) {
-          const inputCost = (selfIdentifyResult.usage.input_tokens / 1000000) * 1.0;  // Claude Haiku: $1.00 per 1M input tokens
-          const outputCost = (selfIdentifyResult.usage.output_tokens / 1000000) * 5.0; // Claude Haiku: $5.00 per 1M output tokens
+          const inputCost = (selfIdentifyResult.usage.input_tokens / 1000000) * 0.8;  // Claude Haiku 3.5: $0.80 per 1M input tokens
+          const outputCost = (selfIdentifyResult.usage.output_tokens / 1000000) * 4.0; // Claude Haiku 3.5: $4.00 per 1M output tokens
           const agentCost = inputCost + outputCost;
           
           phase1Cost += agentCost;
@@ -3936,8 +3846,8 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
           if (agentResult.usage) {
             const inputTokens = agentResult.usage.input_tokens || 0;
             const outputTokens = agentResult.usage.output_tokens || 0;
-            const inputCost = (inputTokens / 1000000) * 1.0;  // Claude Haiku: $1.00 per 1M input tokens
-            const outputCost = (outputTokens / 1000000) * 5.0; // Claude Haiku: $5.00 per 1M output tokens
+            const inputCost = (inputTokens / 1000000) * 0.8;  // Claude Haiku 3.5: $0.80 per 1M input tokens
+            const outputCost = (outputTokens / 1000000) * 4.0; // Claude Haiku 3.5: $4.00 per 1M output tokens
             const pageCost = inputCost + outputCost;
             phase2Cost += pageCost;
             phase2Tokens.input += inputTokens;
@@ -4018,8 +3928,8 @@ async function hybridFormFill(stagehand, userProfile, sessionId, sessionUrl, liv
         verificationResult = fallbackResult;
         // Track verification cost
         if (fallbackResult.usage) {
-          const inputCost = (fallbackResult.usage.input_tokens / 1000000) * 1.0;  // Claude Haiku: $1.00 per 1M input tokens
-          const outputCost = (fallbackResult.usage.output_tokens / 1000000) * 5.0; // Claude Haiku: $5.00 per 1M output tokens
+          const inputCost = (fallbackResult.usage.input_tokens / 1000000) * 0.8;  // Claude Haiku 3.5: $0.80 per 1M input tokens
+          const outputCost = (fallbackResult.usage.output_tokens / 1000000) * 4.0; // Claude Haiku 3.5: $4.00 per 1M output tokens
           verificationCost = inputCost + outputCost;
         }
       } else {
